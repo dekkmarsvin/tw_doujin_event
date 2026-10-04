@@ -107,11 +107,12 @@ export function nearestEvent<T extends EventDefinition>(events: readonly T[], to
   return eventsByProximity(events, today)[0]?.event;
 }
 
+/**
+ * The chooser's groups, each in the control surfaces' order: the soonest
+ * current event first, so the next one to attend is not left at the bottom of
+ * its group, and the most recently ended first among the past ones.
+ */
 export function groupCalendarEvents(events: readonly EventDefinition[], today: string) {
-  const entries = events.map((event) => {
-    const calendar = eventCalendar(event);
-    const group = today > calendar.end ? "past" : !calendar.start ? "undated" : today < calendar.start ? "upcoming" : "ongoing";
-    return { event, ...calendar, group };
-  }).sort((a, b) => (b.start ?? "").localeCompare(a.start ?? "") || a.event.id.localeCompare(b.event.id));
+  const entries = eventsByProximity(events, today);
   return EVENT_GROUPS.map((group) => ({ ...group, entries: entries.filter((entry) => entry.group === group.id) })).filter((group) => group.entries.length > 0);
 }

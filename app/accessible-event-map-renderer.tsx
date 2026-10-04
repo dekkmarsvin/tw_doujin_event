@@ -146,7 +146,8 @@ export default function AccessibleEventMapRenderer({ eventName, layout, slots, s
     <g aria-label="一般攤位排">{layout.rows.map((row) => <g key={row.label} data-row={row.label} data-orientation={row.orientation}>
       {row.slots.filter((slot) => !slots[slot.code]?.selected).map(renderSlot)}
     </g>)}<g data-layer="selected-slots">{selectedSlots.map(renderSlot)}</g></g>
-    <g aria-label="場內柱子">{layout.pillars.map((pillar) => <rect key={pillar.id} className={styles.pillar} x={pillar.x} y={pillar.y} width={pillar.width} height={pillar.height} rx="1" />)}</g>
+    {/* Unnamed shapes with nothing to select: a label on a role-less group is not read, so the group is hidden instead. */}
+    <g aria-hidden="true">{layout.pillars.map((pillar) => <rect key={pillar.id} className={styles.pillar} x={pillar.x} y={pillar.y} width={pillar.width} height={pillar.height} rx="1" />)}</g>
     {showAreaRegions && <g className={styles.areaRegions} aria-hidden="true">{layout.areaRegions?.map((region) => {
       const x = region.points.reduce((sum, point) => sum + point.x, 0) / region.points.length;
       const y = region.points.reduce((sum, point) => sum + point.y, 0) / region.points.length;

@@ -22,7 +22,7 @@ try {
   const organizer = await signIn(journey, ADMIN, "organizer", { viewport: { width: 1440, height: 900 } });
   assert.equal(new URL(organizer.url()).pathname, "/organizer", "an organizer link opens the authoring entry");
   const workspace = organizer.locator("body");
-  assert.match(await workspace.innerText(), /主辦單位工作區/, "the workspace mounts on a desktop width");
+  assert.match(await workspace.innerText(), /主辦工作區/, "the workspace mounts on a desktop width");
   await organizer.getByRole("button", { name: "建立新活動", exact: true }).waitFor();
   await journey.capture(organizer, "organizer-desktop");
 
@@ -147,7 +147,7 @@ try {
   await applicationEntry.getByLabel("Email", { exact: true }).fill("reviewer@example.test");
   await applicationEntry.waitForFunction(() => [...document.querySelectorAll("button")].some(button => button.textContent === "寄出登入連結" && !button.disabled));
   await applicationEntry.getByRole("button", { name: "寄出登入連結", exact: true }).click();
-  await applicationEntry.getByText("若帳號可使用，登入連結已寄出。", { exact: true }).waitFor();
+  await applicationEntry.getByText("若這個 email 可以使用，登入連結已寄出。請一併檢查垃圾郵件匣。", { exact: true }).waitFor();
   assert.equal(applicationRequested.audience, "organizer");
   assert.deepEqual(applicationRequested.destination, { application: "" });
   await applicationEntry.goto(`${base}/organizer?${new URLSearchParams({ ...applicationRequested.destination, login: "application-login-token" })}`);
@@ -201,7 +201,7 @@ try {
   const send = outsider.getByRole("button", { name: "寄出登入連結", exact: true });
   await outsider.waitForFunction(() => [...document.querySelectorAll("button")].some((button) => button.textContent === "寄出登入連結" && !button.disabled));
   await send.click();
-  await outsider.getByText("若帳號可使用，登入連結已寄出。", { exact: true }).waitFor();
+  await outsider.getByText("若這個 email 可以使用，登入連結已寄出。請一併檢查垃圾郵件匣。", { exact: true }).waitFor();
   assert.deepEqual([requested?.email, requested?.audience], ["circle@example.test", "organizer"], "an organizer link for the signed-in address");
   await journey.capture(outsider, "organizer-no-access-link-sent-390");
   await outsider.close();

@@ -173,7 +173,7 @@ try {
     await members.getByLabel("Email", { exact: true }).fill("member-manager@example.test");
     await members.waitForFunction(() => [...document.querySelectorAll("button")].some(button => button.textContent === "寄出登入連結" && !button.disabled));
     await members.getByRole("button", { name: "寄出登入連結", exact: true }).click();
-    await members.getByText("若帳號可使用，登入連結已寄出。", { exact: true }).waitFor();
+    await members.getByText("若這個 email 可以使用，登入連結已寄出。請一併檢查垃圾郵件匣。", { exact: true }).waitFor();
     assert.equal(requestedLink.audience, "organizer");
     assert.deepEqual(requestedLink.destination, { candidate: "invitation-fixture", section: "members" });
     await members.goto(`${base}/organizer?${new URLSearchParams({ ...requestedLink.destination, login: "member-login-token" })}`);

@@ -159,11 +159,7 @@
 .takedownSelection { border-top: 1px solid var(--line); padding-top: 18px; }
 .takedownSelection h3 { margin-top: 0; }
 .takedownSelection textarea { min-height: 88px; }
-/* The workspace entries sit in the sign-in card's column, just above it. */
-.entryNav { max-width: 720px; margin: 18px auto 0; }
-.entryNav + .card { margin-top: 12px; }
-/* Signed in, every section spans the same column as the masthead; only the
-   lone sign-in card stays narrow and centred. */
+/* Signed in, every section spans the same column as the masthead. */
 .workspace .card { max-width: none; margin-right: 0; margin-left: 0; }
 .claimRow, .claimSolo { display: grid; gap: 18px; margin-top: 18px; }
 :is(.claimRow, .claimSolo, .claimColumn) > .card { margin-top: 0; }
@@ -342,10 +338,6 @@
    add some 7px below it. */
 .turnstile { margin-top: 12px; min-height: 65px; line-height: 0; }
 .turnstile[data-size="compact"] { min-height: 140px; }
-
-.policyLink { margin-top: 10px; color: var(--muted); font-size: 12px; line-height: 1.7; }
-.policyLink a { color: var(--ink); }
-.policyLink code { font-family: "Geist Mono", ui-monospace, monospace; font-size: 12px; }
 
 .notice, .error { margin-top: 12px; padding: 9px 11px; border-radius: 8px; font-size: 12px; }
 .notice { border: 1px solid #cfe4da; background: #edf8f3; color: var(--success); }

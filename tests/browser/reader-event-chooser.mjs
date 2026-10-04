@@ -120,6 +120,7 @@ try {
       await page.keyboard.press("Enter");
       await page.waitForURL((url) => url.pathname === "/circle");
       await page.getByRole("heading", { name: "登入", exact: true }).waitFor();
+      assert.doesNotMatch(await page.getByRole("banner").innerText(), /\d{4}\.\d{2}/, "signed out, the sign-in names no event of its own");
       assert.equal(await page.getByRole("navigation", { name: "工作區" }).getByRole("link", { name: /^主辦工作區/ }).getAttribute("href"), "/organizer",
         "the sign-in names the organizer workspace before asking for an email");
     }

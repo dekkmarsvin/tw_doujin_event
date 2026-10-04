@@ -13,8 +13,13 @@ async function organizerSource() {
 test("the organizer login form requests its own audience", async () => {
   const app = await organizerSource();
   // The browser journey mints its login link through an API helper, so it
-  // does not exercise the audience sent by this form.
-  assert.match(app, /requestLoginLink\([^\n]+"organizer"\)/);
+  // does not exercise the audience sent by this form. The form is shared with
+  // `/circle`, so both the organizer's uses and the pass-through are checked.
+  assert.match(app, /<SignInScreen[^>]*current="organizer"/);
+  assert.match(app, /<LoginLinkForm audience="organizer"/);
+  const form = await readFile(new URL("../app/portal-sign-in.tsx", import.meta.url), "utf8");
+  assert.match(form, /<LoginLinkForm audience=\{current\}/);
+  assert.match(form, /requestLoginLink\(email, humanToken, audience,/);
 });
 
 

@@ -36,12 +36,12 @@ test("calendar labels cover single days, month/year changes and legacy dates", (
   ]) assert.equal(eventCalendar(dated("test", dates, end)).label, expected);
 });
 
-test("lifecycle groups and descending start dates are independent of publication order", () => {
+test("lifecycle groups put the soonest current and the latest ended event first, whatever the publication order", () => {
   const source = [dated("old", ["2025-09-01"]), events[0], dated("ongoing", ["2026-09-14", "2026-09-16"]), events[1], dated("recent", ["2026-09-13"])];
   const ids = source.map((event) => event.id);
   const groups = groupCalendarEvents(source, "2026-09-15");
   assert.deepEqual(groups.map((group) => [group.id, group.entries.map((entry) => entry.event.id)]), [
-    ["upcoming", ["event-b", "event-a"]], ["ongoing", ["ongoing"]], ["past", ["recent", "old"]],
+    ["upcoming", ["event-a", "event-b"]], ["ongoing", ["ongoing"]], ["past", ["recent", "old"]],
   ]);
   assert.deepEqual(source.map((event) => event.id), ids, "source collection is unchanged");
 });
