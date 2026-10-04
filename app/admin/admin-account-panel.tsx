@@ -103,7 +103,7 @@ export function AdminAccountPanel({ initialEmail, onSearchChange }: { initialEma
     {queried && !loading && !readError && !detail && <p role="status">查無此帳號。</p>}
     {detail && <div aria-label="帳號明細">
       <div className={ui.detailSection}><div className={ui.detailHeading}><h3>{detail.email}</h3>
-        <button type="button" disabled={loading || pending} onClick={() => void load(detail.email, true)}>重新整理</button></div>
+        <button type="button" className={styles.secondaryButton} disabled={loading || pending} onClick={() => void load(detail.email, true)}>重新整理</button></div>
         <dl className={ui.detailFacts}><div><dt>帳號狀態</dt><dd>{accountStatus[detail.status]}</dd></div></dl>
       </div>
       <section className={ui.detailSection} aria-labelledby="account-admin-heading"><h4 id="account-admin-heading">網站管理者</h4>

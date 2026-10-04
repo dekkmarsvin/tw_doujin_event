@@ -1,7 +1,3 @@
-.workspace.workspace { max-width: 1487px; }
-.workspace .panel.panel { max-width: none; }
-/* The section nav spans the wide workspace too, not the 960px admin column. */
-.workspace.workspace > nav { max-width: none; }
 .panel.panel { min-width: 0; padding: 26px 28px; font-size: 16px; }
 .panel h2 { font-size: 24px; }
 /* Source links read as the page's links, not the browser's default blue. */
@@ -29,9 +25,12 @@
 .form fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .form label { display: block; margin-top: 12px; }
 .form select { width: 100%; padding: 10px; }
-.catalogTable { margin-top: 16px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+/* Sized by its own width, not the viewport: beside the admin nav it is too
+   narrow for five columns well above the 760px breakpoint. */
+.catalogTable { margin-top: 16px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; container-type: inline-size; }
 .tableHead, .catalogRow { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.6fr) .7fr .8fr minmax(170px, 1.1fr); gap: 16px; align-items: center; padding: 22px; }
-.tableHead { background: #f0f2ed; color: var(--muted); font-size: 14px; }
+.tableHead { background: #f0f2ed; color: var(--muted); font-size: 14px; white-space: nowrap; }
+.catalogRow > span:not(:nth-child(2)) { white-space: nowrap; }
 .catalogGroup { border-top: 1px solid var(--line); }
 .catalogRow { min-height: 82px; overflow-wrap: anywhere; }
 .panel .disclosure { display: flex; align-items: center; gap: 12px; padding: 8px 0; color: inherit; background: transparent; border: 0; text-align: left; font-size: 16px; letter-spacing: normal; }
@@ -61,11 +60,13 @@
   .panel.panel { padding: 18px 14px; }
   .columns { grid-template-columns: minmax(0, 1fr); }
   .tabs button, .filters button, .list button, .detail button, .actions button { min-height: 44px; }
-  .tableHead { display: none; }
-  .catalogRow { grid-template-columns: minmax(0, 1fr) auto; padding: 16px; gap: 10px; }
-  .catalogRow > button, .catalogRow > span:nth-child(2), .catalogRow > .actions { grid-column: 1 / -1; }
   .version { padding: 14px; margin: 0 8px 8px; }
   .versionHeader, .organizerRow { align-items: flex-start; flex-direction: column; }
   .categoryList { grid-template-columns: minmax(0, 1fr); }
   .dialog { padding: 20px; }
+}
+@container (max-width: 640px) {
+  .tableHead { display: none; }
+  .catalogRow { grid-template-columns: minmax(0, 1fr) auto; padding: 16px; gap: 10px; }
+  .catalogRow > button, .catalogRow > span:nth-child(2), .catalogRow > .actions { grid-column: 1 / -1; }
 }

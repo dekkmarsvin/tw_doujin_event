@@ -598,6 +598,13 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 .reviewSummary dd { margin: 0; overflow-wrap: anywhere; font-size: 12px; }
 .reviewActions { display: flex; gap: 8px; margin-top: 14px; }
 .reviewActions button { flex: 1; margin-top: 0; }
+/* The admin column is ~960px: a label column that grows with it parks the
+   values halfway across, and stretched buttons read as one bar. */
+.admin .reviewSummary > div { grid-template-columns: 120px minmax(0, 1fr); }
+@media (min-width: 761px) {
+  .admin .reviewActions { justify-content: flex-start; }
+  .admin .reviewActions button { flex: 0 1 auto; min-width: 112px; }
+}
 .problemList a { color: inherit; text-underline-offset: 2px; }
 
 @media (max-width: 760px) {
@@ -631,6 +638,10 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 
 @media (max-width: 520px) {
   .claimList li { flex-wrap: wrap; }
+  /* Name on its own line; status and the button share the next. */
+  .takedownResults li { flex-wrap: wrap; row-gap: 8px; }
+  .takedownResults li div { flex-basis: 100%; }
+  .takedownResults li span { flex: 1; }
 }
 
 .editorHint { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
@@ -731,6 +742,9 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 
 .queueHeading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
 .card .queueHeading button { min-height: 32px; margin-top: 0; padding: 4px 12px; }
+/* Heading and refresh share the first line; the event filter gets its own,
+   so refresh stays at the right edge instead of floating between them. */
+.queueHeading .filterChips { flex-basis: 100%; }
 
 .overviewGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin-top: 12px; }
 .overviewCard { display: flex; flex-direction: column; gap: 8px; padding: 14px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
@@ -792,8 +806,11 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 .selectionCount { display: flex; flex-wrap: wrap; gap: 0 8px; color: var(--muted); font-size: 12px; }
 .selectionCount b { color: var(--ink); font-size: 14px; }
 
+/* The header's action cell is empty, so an `auto` last column collapsed there
+   and every column label drifted right of its cells; a floor that fits the
+   two row buttons keeps both grids on the same lines. */
 .queueHeader, .queueRow {
-  display: grid; grid-template-columns: 22px minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1.4fr) 76px auto;
+  display: grid; grid-template-columns: 22px minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1.4fr) 76px minmax(112px, auto);
   gap: 12px; align-items: center;
 }
 .queueHeader { margin-top: 12px; padding: 0 12px; color: var(--muted); font-size: 12px; font-weight: 800; letter-spacing: .06em; }
@@ -840,6 +857,7 @@ a.inlineButton { display: inline-block; text-decoration: none; }
   .card .queueRow input[type="checkbox"] { width: 20px; height: 20px; margin-top: 2px; }
   .queueRowActions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .card .queueRowActions button, .card .queueActions button:not(:where(.inlineButton)) { min-height: 44px; }
+  .card .queueHeading button, .card .filterChip { min-height: 44px; }
   .queueActions { width: 100%; }
 }
 

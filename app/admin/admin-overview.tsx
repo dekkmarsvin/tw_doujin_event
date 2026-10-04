@@ -39,7 +39,8 @@ function AdminDashboard({ queueState }: { queueState?: ReturnType<typeof useAdmi
   const { data } = operations;
   const knownEvents = eventsByProximity(PUBLISHED_EVENTS, today);
   return <>
-    <div className={ui.title}><h2 id={overview ? "overview-heading" : "publication-heading"}>{overview ? "管理總覽" : "審核與發布"}</h2>
+    {/* Under 活動管理 the 審核與發布 tab already names this view; only the overview titles itself. */}
+    <div className={ui.title}>{overview && <h2 id="overview-heading">管理總覽</h2>}
       <button type="button" className={styles.secondaryButton} onClick={refresh} disabled={queueState?.loading}>重新整理</button></div>
     {overview && <div className={ui.summary} aria-label="待審工作">
       <a href="/organizer?application">活動申請<strong>{queue ? queue.organizer.applications : "—"}</strong></a>
@@ -74,8 +75,9 @@ function AdminDashboard({ queueState }: { queueState?: ReturnType<typeof useAdmi
           </>}
         </section>
         {overview && <section className={styles.card} aria-labelledby="published-heading"><h3 id="published-heading">已公開活動</h3>
-          <ul className={ui.rows}>{knownEvents.map(({ event, label }) => <li key={event.id}><div><strong>{event.name}</strong><small>{label} · 已公開</small></div>
-            <a href={`/events/${encodeURIComponent(event.id)}/`}>查看公開頁</a></li>)}</ul>
+          <PublishedEvents entries={knownEvents.filter(entry => entry.group !== "past")} />
+          {knownEvents.some(entry => entry.group === "past") && knownEvents.some(entry => entry.group !== "past") && <p className={ui.groupDivider}>已結束</p>}
+          <PublishedEvents entries={knownEvents.filter(entry => entry.group === "past")} />
         </section>}
       </div>
       <div>
@@ -98,4 +100,10 @@ function AdminDashboard({ queueState }: { queueState?: ReturnType<typeof useAdmi
       </div>
     </div>
   </>;
+}
+
+function PublishedEvents({ entries }: { entries: ReturnType<typeof eventsByProximity> }) {
+  if (!entries.length) return null;
+  return <ul className={ui.rows}>{entries.map(({ event, label }) => <li key={event.id}><div><strong>{event.name}</strong><small>{label} · 已公開</small></div>
+    <a href={`/events/${encodeURIComponent(event.id)}/`}>查看公開頁</a></li>)}</ul>;
 }

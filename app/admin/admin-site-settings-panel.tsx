@@ -40,7 +40,6 @@ export function AdminSiteSettingsPanel() {
   if (!data || !form) return <section className={styles.card}><h2>網站設定</h2>{error ? <><p className={styles.error} role="alert">{error}</p><button type="button" onClick={() => void load()}>重新載入</button></> : <p>載入中…</p>}</section>;
   const patch = (change: Partial<SiteSettingsInput>) => setForm(current => current ? { ...current, ...change } : current);
   return <form className={settingsStyles.workspace} onSubmit={event => void submit(event)}>
-    <div className={settingsStyles.title}><h2>網站設定</h2><span>管理活動申請、聯絡方式、通知與發布作業</span></div>
     <fieldset disabled={busy} className={settingsStyles.fields}>
       <section className={`${styles.card} ${settingsStyles.card}`}><h3>活動申請</h3><p>決定誰可以送出活動建置申請。</p>
         <fieldset className={settingsStyles.modes}><legend>申請開放對象</legend>
