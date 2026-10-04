@@ -16,9 +16,12 @@ export function useAdminSiteStatus(onLoaded?: (answer: AdminSiteSettings) => voi
     setData(answer); setUpdatedAt(Date.now()); setError("");
     // A saved request remains pending across navigation; resume its existing
     // bounded, read-only wait rather than presenting it as never checked.
-    // Background re-reads skip this, or each one would restart a wait that
-    // has already timed out.
-    if (!diagnosticInFlight.current && resumeCheck) setChecking(answer.services?.checkedAt === null);
+    // Background re-reads may end a wait (a finished result also stops the
+    // poll) but never start one, or each would restart a timed-out wait.
+    if (!diagnosticInFlight.current) {
+      if (answer.services?.checkedAt !== null) setChecking(false);
+      else if (resumeCheck) setChecking(true);
+    }
     onLoaded?.(answer);
   }, [onLoaded]);
   const load = useCallback(async (background = false) => {

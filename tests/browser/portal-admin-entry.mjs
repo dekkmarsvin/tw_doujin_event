@@ -468,6 +468,8 @@ try {
   assert.equal(await services.getByRole("button", { name: "檢查中…", exact: true }).isDisabled(), true);
   assert.equal(pendingCheck.requests.filter(x => x.path === "/api/admin/service-check").length, 0, "loading an existing pending check only resumes its read-only wait");
   pendingCheck.completeChecks();
+  // A background read that lands before the next poll still ends the wait.
+  await refreshInBackground(pendingCheck.page);
   await services.getByText("最近檢查可用", { exact: true }).first().waitFor();
   assert.equal(await services.getByRole("button", { name: "檢查服務", exact: true }).isEnabled(), true);
   assert.ok(pendingCheck.requests.filter(x => x.path === "/api/admin/site-settings" && x.method === "GET").length >= 2);
