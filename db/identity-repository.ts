@@ -11,7 +11,7 @@ import { createOrganizerAmendmentRepository } from "./organizer-amendment-reposi
 import { createOrganizerRecoveryRepository } from "./organizer-recovery-repository";
 import { createOrganizerApplicationRepository } from "./organizer-application-repository";
 import { createReviewNotificationRepository, seedNotificationPreferences, enqueueReviewNotification, deleteNotificationRecipient, cancelNotificationRecipient } from "./review-notification-repository";
-import { createAccountNotificationRepository, createAccountNotificationWriter, deleteAccountNotifications, claimNotificationSource, circleNotificationSource, ownerNotificationSource, memberNotificationSource } from "./account-notification-repository";
+import { createAccountNotificationRepository, createAccountNotificationWriter, deleteAccountNotifications, claimNotificationSource, circleNotificationSource, ownerNotificationSource, memberNotificationSource, organizerCandidateEdition } from "./account-notification-repository";
 import { createSiteSettingsRepository, seedSiteSettings } from "./site-settings-repository";
 
 /**
@@ -1952,14 +1952,11 @@ export function createIdentityRepository(database: D1Database, options: { bootst
 
   async function listOrganizerCandidatesForAccount(accountId: string, admin: boolean) {
     await ensureTables();
-    const edition = `(SELECT COUNT(*) FROM organizer_event_candidates previous
-      WHERE previous.event_id = c.event_id AND (previous.created_at < c.created_at
-        OR (previous.created_at = c.created_at AND previous.id <= c.id)))`;
     if (admin) {
       const rows = await database.prepare(
         `SELECT c.id, c.tentative_name, c.event_id, c.status, c.current_version, c.updated_at,
                 c.last_updated_role, c.publication_operation, c.created_at,
-                CASE WHEN c.event_id IS NULL THEN 1 ELSE ${edition} END AS edition, 'admin' AS role,
+                ${organizerCandidateEdition} AS edition, 'admin' AS role,
                 CASE WHEN w.candidate_id IS NULL OR w.onboarding_completed_at IS NOT NULL
                   THEN 'binder' ELSE 'guided' END AS workspace_mode
          FROM organizer_event_candidates c
@@ -1975,7 +1972,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     const rows = await database.prepare(
       `SELECT c.id, c.tentative_name, c.event_id, c.status, c.current_version, c.updated_at,
               c.last_updated_role, c.publication_operation, c.created_at,
-              CASE WHEN c.event_id IS NULL THEN 1 ELSE ${edition} END AS edition, g.role,
+              ${organizerCandidateEdition} AS edition, g.role,
               CASE WHEN w.candidate_id IS NULL OR w.onboarding_completed_at IS NOT NULL
                 THEN 'binder' ELSE 'guided' END AS workspace_mode
        FROM organizer_event_candidates c
