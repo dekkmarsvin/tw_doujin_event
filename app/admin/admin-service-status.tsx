@@ -8,6 +8,7 @@ const steps: Record<string, string> = {
   waiting_deployment: "部署網站", verifying_production: "確認公開結果",
 };
 export function publicationProgress(job: PublicationActivity, enabled: boolean) {
+  if (job.status === "failed") return `未完成 · ${steps[job.step] ?? "處理發布"}`;
   return `${job.status === "queued" ? "已排程" : "發布中"} · ${!enabled ? "已暫停" : job.status === "queued" ? "等待開始" : steps[job.step] ?? "處理中"}`;
 }
 export function ServiceStatus({ label, result, pending, requested = false }: { label: string; result: ServiceCheck | null; pending: boolean; requested?: boolean }) {
