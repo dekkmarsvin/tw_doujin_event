@@ -25,7 +25,9 @@ try {
     await editor.getByRole("button", { name: /完成範圍/ }).click();
   };
   await draw([[.05, .05], [.42, .05], [.42, .7], [.05, .6]]);
-  await draw([[.58, .05], [.95, .05], [.95, .7]]);
+  // The property panel floats over the right of the canvas, so the second
+  // piece is drawn where the map is still uncovered.
+  await draw([[.48, .05], [.7, .05], [.7, .7]]);
   assert.equal(await svg.locator("polygon").count(), 2);
   await journey.capture(page, "organizer-area-two-pieces");
   await page.getByRole("button", { name: "儲存地圖變更", exact: true }).click();
