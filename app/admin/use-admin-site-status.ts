@@ -36,7 +36,7 @@ export function useAdminSiteStatus(onLoaded?: (answer: AdminSiteSettings) => voi
   useEffect(() => {
     mounted.current = true;
     const requests = version.current;
-    void load();
+    queueMicrotask(() => void load());
     return () => { mounted.current = false; ++requests.value; };
   }, [load]);
   const requestedAt = data?.services?.requestedAt;

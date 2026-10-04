@@ -147,6 +147,7 @@
 }
 .editorCard { max-width: none; }
 .eventClaimPanel { max-width: none; margin: 0; }
+.claimPanels { display: grid; gap: 18px; }
 .takedownSearch { display: flex; align-items: end; gap: 12px; margin-top: 18px; }
 .takedownSearch label { flex: 1; }
 .card .takedownSearch button { flex: 0 0 auto; margin: 0; }

@@ -277,7 +277,7 @@ export function takedownOverride(circleId: string, reason: string, eventId?: str
   return call<{ ok: true }>("/api/admin/overrides", { method: "POST", body: JSON.stringify({ circleId, reason }) }, eventId);
 }
 
-export type TakedownCircle = { circleId: string; name: string; status: "live" | "takendown" | "none"; cleanupPending?: boolean };
+export type TakedownCircle = { circleId: string; name: string; status: "live" | "takendown" | "none"; cleanupPending?: boolean; verifiedClaimId?: string };
 export function searchTakedownCircles(query: string, eventId: string) {
   return call<{ circles: TakedownCircle[] }>(`/api/admin/overrides?q=${encodeURIComponent(query)}`, undefined, eventId);
 }

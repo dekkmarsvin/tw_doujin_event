@@ -33,7 +33,7 @@
 
 `GET／POST /api/organizer/events/:candidateId/claims` 要求有效 session 與該候選的有效 Owner／Editor grant，或網站管理者身分。候選須有已發布版次記錄，或為伺服器從同一活動已發布來源建立的修正版；一般 CREATE 草稿即使填入已公開活動 ID，也不取得審核權限。活動由伺服器讀取這項可信關聯的 `event_id` 決定；不接受由 body 或 query 改寫活動範圍。沒有候選授權、可信關聯、活動未公開或認領屬於另一活動時回 404。列表只回此活動的待審認領與佐證，不回跨活動管理總覽或其他帳號 email。
 
-面板共用 `/admin` 的單筆／批次核准及婉拒、佐證、重複申請提示與重新整理。Owner／Editor 只可核准或婉拒 `pending` 認領，不能撤銷已通過認領或取得其他全域管理權限。每筆裁決沿用唯一擁有者約束、狀態 CAS 及帳號通知，SQL 寫入時再次核對 actor 有效、候選可信關聯與認領活動相同，以及 grant／管理者身分仍有效；撤權競態不改寫認領。主辦裁決的 method 為 `organizer`，audit action 為 `claim.organizer_approve／reject`，保留 actorRole、candidateId、eventId 與結果。
+面板共用 `/admin` 的單筆／批次核准及婉拒、佐證、重複申請提示與重新整理。Owner／Editor 可核准或婉拒 `pending` 認領；撤銷已通過的認領限 Owner（與網站管理者），Editor 回 `403`。Owner 在同一面板以社團名稱搜尋此活動的公開社團，已通過認領的社團附撤銷，確認後沿用唯一擁有者約束與公開文件重建；搜尋結果只多帶已通過認領的 ID，不回帳號個資。任何組合都不取得其他全域管理權限。每筆裁決沿用唯一擁有者約束、狀態 CAS 及帳號通知，SQL 寫入時再次核對 actor 有效、候選可信關聯與認領活動相同，以及 grant／管理者身分仍有效；撤權競態不改寫認領；撤銷在 SQL 寫入時另核對 Owner grant，請求中途降為 Editor 時回 `403` 且認領不變。主辦裁決的 method 為 `organizer`，audit action 為 `claim.organizer_approve／reject／revoke`，保留 actorRole、candidateId、eventId 與結果。
 
 ### 活動內撤下社團補充資料
 

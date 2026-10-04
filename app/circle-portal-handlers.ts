@@ -1849,8 +1849,13 @@ export function createCirclePortalHandlers({
     const body = await readJson(request);
     const claimId = typeof body?.claimId === "string" ? body.claimId : "";
     const decision = body?.decision;
-    if (decision !== "approve" && decision !== "reject" && (authority || decision !== "revoke")) {
+    if (decision !== "approve" && decision !== "reject" && decision !== "revoke") {
       return json({ error: authority ? "請選擇核准或婉拒。" : "decision 必須是 approve、reject 或 revoke。" }, 400);
+    }
+    // Withdrawing an approved owner is an Owner decision on the organizer side;
+    // the SQL write rechecks the Owner grant so a downgrade cannot slip through.
+    if (authority && decision === "revoke" && actorRole === "organizer_editor") {
+      return json({ error: "只有活動負責人可以撤銷認領。" }, 403);
     }
 
     const claim = await repository.getClaim(claimId);
@@ -1866,15 +1871,17 @@ export function createCirclePortalHandlers({
     // rejection that landed on a claim approved meanwhile would withdraw the
     // owner's content under the name of a rejection. Withdrawing an owner is
     // what revoke is for.
+    // Revoke withdraws an approved owner and nothing else: a claim withdrawn or
+    // rejected since the reviewer looked keeps that result.
     const ok = decision === "approve"
       ? await repository.markClaimVerified(claimId, method, now, session.email, authority)
       : await repository.setClaimStatus(claimId, decision === "reject" ? "rejected" : "revoked", now, session.email,
-        decision === "reject" ? "pending" : undefined, authority);
+        decision === "reject" ? "pending" : "verified", authority && decision === "revoke" ? { ...authority, ownerOnly: true } : authority);
 
     // Revoking ownership withdraws that circle's content in the same step. The
     // phase has to be the current one: rebuilding as "during" after the event
     // would republish every circle that had opted out of the post-event window.
-    if (decision !== "approve" && ok && !authority) {
+    if (ok && (decision === "revoke" || (decision === "reject" && !authority))) {
       await repository.rebuildOverridesDoc(eventId, await dataUpdatedAt(), now, await currentPhase());
     }
     await repository.writeAudit({
@@ -1889,8 +1896,10 @@ export function createCirclePortalHandlers({
       const access = await organizerClaimAccess(request, authority.candidateId);
       if (!access.ok) return access.response;
       if (access.eventId !== eventId) return json({ error: "找不到這筆認領。" }, 404);
+      if (decision === "revoke" && organizerAuditRole(access) === "organizer_editor") return json({ error: "只有活動負責人可以撤銷認領。" }, 403);
     }
-    return json({ error: decision !== "revoke" && claim.status !== "pending" ? "這筆認領已不在待審中。" : "此社團已有通過的認領。" }, 409);
+    return json({ error: decision === "revoke" ? "這筆認領已不是通過狀態。"
+      : claim.status !== "pending" ? "這筆認領已不在待審中。" : "此社團已有通過的認領。" }, 409);
   }
 
   async function adminListAdmins(request: Request) {
@@ -2155,7 +2164,9 @@ export function createCirclePortalHandlers({
       const override = await repository.getOverride(eventId, circle.id);
       const cleanupPending = override?.status === "takendown" && thumbnailStore
         ? (await thumbnailStore.list(circleObjectPrefix(eventId, circle.id))).length > 0 : false;
-      return { circleId: circle.id, name: circle.name, status: override?.status ?? "none", ...(cleanupPending ? { cleanupPending: true } : {}) };
+      const claimId = await repository.verifiedClaimId(eventId, circle.id);
+      return { circleId: circle.id, name: circle.name, status: override?.status ?? "none", ...(cleanupPending ? { cleanupPending: true } : {}),
+        ...(claimId ? { verifiedClaimId: claimId } : {}) };
     }));
     return json({ circles });
   }

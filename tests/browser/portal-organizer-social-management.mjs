@@ -16,6 +16,7 @@ const detail = id => ({ claimReviewAvailable: true, event: { ...summaries.find(e
   workspace: { mode: "binder", onboardingCompletedAt: now, resume: { guidedTask: "identity_source", section: "review" },
     readiness: { completed: 5, total: 5, suggestedNextSection: "review", blockers: [], sections: [] } } });
 let status = "live";
+let revoked = false;
 let claims = [1, 2].map(index => ({ id: `social-claim-${index}`, eventId: "sample", circleId: "c-900001", circleName: "北風畫室", circleClaimed: false, evidenceUrl: null, evidenceNote: "社團代表", targetUrl: null, createdAt: now + index }));
 let claimsUnavailable = false;
 let reportedClaimCount = 602;
@@ -30,7 +31,8 @@ try {
       if (path.endsWith("/claims")) {
         if (req.method() === "POST") {
           const { claimId, decision } = req.postDataJSON();
-          assert.ok(["approve", "reject"].includes(decision));
+          assert.ok(["approve", "reject", "revoke"].includes(decision));
+          if (decision === "revoke") { writes.push({ candidate: path.split("/")[4], claimId, decision }); revoked = true; return reply({ ok: true }); }
           claims = claims.filter(claim => claim.id !== claimId);
           return reply({ ok: true });
         }
@@ -39,7 +41,7 @@ try {
       }
       if (path.endsWith("/overrides")) {
         if (req.method() === "POST") { writes.push({ candidate: path.split("/")[4], ...req.postDataJSON() }); status = "takendown"; return reply({ ok: true }); }
-        return reply({ circles: url.searchParams.get("q") === "北風" ? [{ circleId: "c-900001", name: "北風畫室", status }, { circleId: "c-900002", name: "北風別館", status: "none" }] : [] });
+        return reply({ circles: url.searchParams.get("q") === "北風" ? [{ circleId: "c-900001", name: "北風畫室", status, ...(revoked ? {} : { verifiedClaimId: "north-owner" }) }, { circleId: "c-900002", name: "北風別館", status: "none" }] : [] });
       }
       if (path.endsWith("/workspace")) return reply(detail(path.split("/")[4]));
       if (path.startsWith("/api/organizer/events/")) return reply(detail(path.split("/")[4]));
@@ -69,6 +71,7 @@ try {
   claimsUnavailable = false;
   await page.getByRole("button", { name: "重新整理", exact: true }).click();
   await header.getByText("待審 0 筆", { exact: true }).waitFor();
+  assert.equal(await page.getByRole("heading", { name: "撤銷已通過的認領", exact: true }).count(), 0, "an editor is not offered revoke");
   await page.getByRole("combobox", { name: "活動版本", exact: true }).selectOption("social-original");
   await page.getByLabel("活動審核與發布狀態").getByText("已發布", { exact: true }).waitFor();
   await page.getByRole("heading", { name: "社團認領", exact: true }).waitFor();
@@ -107,5 +110,22 @@ try {
   assert.equal(await claimStatus.getAttribute("aria-current"), null);
   await page.waitForTimeout(250); // let the 180ms background transition settle before the capture
   await journey.capture(page, "organizer-header-status-navigation");
+
+  // An Owner withdraws an approved claim from the same 社團認領 panel.
+  for (const summary of summaries) summary.role = "owner";
+  await page.reload();
+  await page.getByRole("heading", { name: "社團處置測試", exact: true }).waitFor();
+  await page.getByRole("combobox", { name: "活動版本", exact: true }).selectOption("social-original");
+  await page.getByRole("button", { name: "社團認領", exact: true }).click();
+  const revokePanel = page.locator('section[aria-labelledby="claim-revoke-heading"]');
+  await revokePanel.getByRole("textbox", { name: "社團名稱", exact: true }).fill("北風");
+  await revokePanel.getByRole("button", { name: "搜尋", exact: true }).click();
+  await revokePanel.getByRole("button", { name: "撤銷北風畫室的認領", exact: true }).click();
+  assert.equal(await revokePanel.getByRole("button", { name: "撤銷北風別館的認領", exact: true }).count(), 0, "an unclaimed circle has nothing to revoke");
+  await revokePanel.getByRole("dialog").getByRole("button", { name: "確認撤銷", exact: true }).click();
+  await revokePanel.getByText("已撤銷「北風畫室」的認領。", { exact: true }).waitFor();
+  assert.deepEqual(writes.at(-1), { candidate: "social-original", claimId: "north-owner", decision: "revoke" });
+  assert.equal(await revokePanel.getByRole("button", { name: "撤銷北風畫室的認領", exact: true }).count(), 0);
+  await journey.capture(page, "organizer-claim-revoke-done");
   await journey.finish();
 } catch (error) { await journey.abort(error); }

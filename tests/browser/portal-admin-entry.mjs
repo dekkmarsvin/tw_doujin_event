@@ -69,12 +69,13 @@ async function open(role, entry = "/admin", implicitMapDraft = false, pendingSer
     } };
   };
   const supplementals = new Map();
+  const revokedClaims = new Set();
   const circleDetail = eventId => {
     const supplemental = supplementals.get(eventId) ?? { status: "live", fields: { pen: eventId === "sample-two" ? "第二場作者" : "第一場作者", saleInfo: "已保存的品書介紹" }, updatedAt: now,
       postEventHidden: false, publicState: "public", publicReason: null, phase: "during", cleanupState: "not_required", takedown: null };
     return { eventId, circleId: "c-900001", name: "待審測試社", placements: [{ day: "1", area: "A", boothCode: "A01", status: "active" }],
       publicHref: `/events/${eventId}/circles/c-900001/`, organizerHref: null,
-      claims: [{ id: "verified-one", status: "verified", method: "manual", accountEmail: "owner@example.test", accountStatus: "active", createdAt: now,
+      claims: [{ id: "verified-one", status: revokedClaims.has(eventId) ? "revoked" : "verified", method: "manual", accountEmail: "owner@example.test", accountStatus: "active", createdAt: now,
         verifiedAt: now, reviewedAt: now, reviewedBy: "admin@example.test", reviewHref: null }], supplemental,
       history: supplemental.takedown ? [{ action: "override.takendown", at: now, claimId: null, reason: supplemental.takedown.reason, by: "admin@example.test", retryCleanup: false }] : [] };
   };
@@ -86,7 +87,7 @@ async function open(role, entry = "/admin", implicitMapDraft = false, pendingSer
     await page.route("**/api/**", async route => {
       const request = route.request(), url = new URL(request.url()), path = url.pathname, method = request.method();
       const body = method === "GET" ? null : request.postDataJSON();
-      requests.push({ path, method, event: url.searchParams.get("event"), body });
+      requests.push({ path, method, event: url.searchParams.get("event"), ...(url.searchParams.has("circle") ? { circle: url.searchParams.get("circle") } : {}), body });
       const reply = (body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
       if (path === "/api/auth/session") return role === "anonymous" ? reply({ error: "尚未登入。" }, 401)
         : reply({ email: `${role}@example.test`, isAdmin: role === "admin", isMapContributor: false, expiresAt: now + 86400000 });
@@ -94,6 +95,7 @@ async function open(role, entry = "/admin", implicitMapDraft = false, pendingSer
       if (path === "/api/claims") return reply({ claims: [], eventId: url.searchParams.get("event") });
       if (path === "/api/admin/claims" && method === "POST") {
         if (failure) return reply({ error: "登入已失效。" }, failure);
+        if (body.decision === "revoke" && body.claimId === "verified-one") { revokedClaims.add(url.searchParams.get("event")); return reply({ ok: true }); }
         const index = pending.findIndex(x => x.id === body.claimId && x.eventId === url.searchParams.get("event"));
         if (index < 0) return reply({ error: "找不到這筆認領。" }, 404);
         pending.splice(index, 1);
@@ -332,11 +334,24 @@ try {
   assert.deepEqual(takedownRequest.body, { circleId: "c-900001", reason: "測試撤下" });
   assert.equal(takedownRequest.event, "sample");
   assert.ok(requests.filter(x => x.path === "/api/admin/circles/c-900001").every(x => x.event === "sample"), "detail reloads keep the selected event");
+  const circleClaims = takedown.locator('section[aria-labelledby="circle-claims-heading"]');
+  await circleClaims.getByRole("button", { name: "撤銷owner@example.test的認領", exact: true }).click();
+  await takedown.getByRole("dialog").getByText("該帳號不能再編輯這個社團", { exact: false }).waitFor();
+  await takedown.getByRole("dialog").getByRole("button", { name: "確認撤銷", exact: true }).click();
+  await takedown.getByText("已撤銷認領。", { exact: true }).waitFor();
+  const revokeRequest = requests.find(x => x.path === "/api/admin/claims" && x.body?.decision === "revoke");
+  assert.deepEqual(revokeRequest.body, { claimId: "verified-one", decision: "revoke" });
+  assert.equal(revokeRequest.event, "sample");
+  assert.equal(await circleClaims.getByRole("button", { name: /撤銷.*的認領/ }).count(), 0, "a revoked claim offers no second revoke");
   await navigate(page, "帳號管理");
   const accountPanel = page.locator('section[aria-labelledby="account-query-heading"]');
   await accountPanel.getByLabel("Email 或社團名稱", { exact: true }).fill("無此社團");
   await accountPanel.getByRole("button", { name: "查詢", exact: true }).click();
   await accountPanel.getByText("找不到名稱含「無此社團」的社團認領。", { exact: true }).waitFor();
+  await accountPanel.getByLabel("Email 或社團名稱", { exact: true }).fill("Millet@半米紀行");
+  await accountPanel.getByRole("button", { name: "查詢", exact: true }).click();
+  await accountPanel.getByText("找不到名稱含「Millet@半米紀行」的社團認領。", { exact: true }).waitFor();
+  assert.ok(requests.some(x => x.path === "/api/admin/accounts" && x.method === "GET" && x.circle === "Millet@半米紀行"), "an @ in a circle name is a name search, not an invalid Email");
   await accountPanel.getByLabel("Email 或社團名稱", { exact: true }).fill(" 待審 ");
   await accountPanel.getByRole("button", { name: "查詢", exact: true }).click();
   const circleMatches = accountPanel.locator('section[aria-label="社團名稱搜尋結果"]');

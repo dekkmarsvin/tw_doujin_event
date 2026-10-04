@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { PortalError, readAdminCircleDetail, searchTakedownCircles, takedownOverride, type AdminCircleDetail, type TakedownCircle } from "../circle-editor-client";
+import { decideClaim, PortalError, readAdminCircleDetail, searchTakedownCircles, takedownOverride, type AdminCircleDetail, type TakedownCircle } from "../circle-editor-client";
 import { CIRCLE_OVERRIDE_LIST_FIELDS, type CircleOverrideFields } from "../circle-overrides";
 import { LINK_KIND_LABEL } from "../circle-presentation";
 import type { EventDefinition } from "../event-catalog";
@@ -84,11 +84,15 @@ function AdminCircleDetailPanel({ event, circleId, onBack, onChanged }: {
   const [confirming, setConfirming] = useState(false);
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<{ message: string; failed: boolean } | null>(null);
+  const [revoking, setRevoking] = useState<AdminCircleDetail["claims"][number] | null>(null);
   const sequence = useRef(0);
   const busy = useRef(false);
   const dialog = useRef<HTMLDivElement>(null);
+  const revokeDialog = useRef<HTMLDivElement>(null);
   const close = () => { if (!busy.current) setConfirming(false); };
+  const closeRevoke = () => { if (!busy.current) setRevoking(null); };
   useModalFocus(confirming, dialog, close);
+  useModalFocus(!!revoking, revokeDialog, closeRevoke);
   const reload = useCallback(async () => {
     const current = ++sequence.current;
     setLoading(true); setReadError(""); setDetail(null);
@@ -125,6 +129,21 @@ function AdminCircleDetailPanel({ event, circleId, onBack, onChanged }: {
       busy.current = false; setPending(false);
     }
   };
+  const revoke = async () => {
+    if (!revoking || busy.current) return;
+    busy.current = true; setPending(true); setResult(null);
+    try {
+      await decideClaim(revoking.id, "revoke", event.id);
+      setResult({ message: "已撤銷認領。", failed: false });
+    } catch (error) {
+      setResult({ message: errorMessage(error), failed: true });
+      if (error instanceof PortalError && error.status === 401) return;
+    } finally {
+      setRevoking(null);
+      await reload(); onChanged();
+      busy.current = false; setPending(false);
+    }
+  };
   return <section className={`${styles.card} ${styles.admin} ${ui.circleDetail}`} id="takedown" aria-label="社團明細">
     <div className={ui.detailHeading}><div><p className={styles.muted}>{event.name}</p><h3>{detail?.name ?? "社團明細"}</h3></div>
       <button type="button" className={styles.secondaryButton} disabled={pending} onClick={onBack}>返回搜尋結果</button></div>
@@ -143,6 +162,8 @@ function AdminCircleDetailPanel({ event, circleId, onBack, onChanged }: {
         <ul className={ui.detailList}>{detail.claims.map(claim => <li key={claim.id}>
           <div><strong>{claim.accountEmail ?? "帳號已刪除"}</strong><span>{claimStatus[claim.status]}{claim.accountStatus === "disabled" ? "・帳號已停用" : claim.accountStatus === "deleting" ? "・帳號刪除中" : ""}</span>
             <small>申請時間：{time(claim.createdAt)}</small></div>{claim.reviewHref && <a href={claim.reviewHref}>前往認領審核</a>}
+          {claim.status === "verified" && <button type="button" className={styles.secondaryButton} disabled={pending} aria-label={`撤銷${claim.accountEmail ?? "此帳號"}的認領`}
+            onClick={() => { setResult(null); setRevoking(claim); }}>撤銷認領</button>}
         </li>)}</ul>
       </section>
       <section className={ui.detailSection} aria-labelledby="circle-content-heading"><h4 id="circle-content-heading">補充內容</h4>
@@ -164,6 +185,13 @@ function AdminCircleDetailPanel({ event, circleId, onBack, onChanged }: {
         </div></li>)}</ul> : <p className={styles.muted}>沒有處理紀錄。</p>}
       </section>
     </>}
+    {revoking && detail && <div className={styles.previewBackdrop}><div ref={revokeDialog} className={styles.batchDialog} role="dialog" aria-modal="true" aria-labelledby="circle-revoke-confirm" tabIndex={-1}>
+      <h2 id="circle-revoke-confirm">撤銷「{detail.name}」的認領？</h2>
+      <p>{event.name}／{revoking.accountEmail ?? "帳號已刪除"}</p>
+      <p>該帳號不能再編輯這個社團，社團補充資料立即停止公開；內容保留，之後由正確的社團完成認領時會重新公開。</p>
+      <div className={styles.reviewActions}><button type="button" disabled={pending} onClick={closeRevoke}>取消</button>
+        <button type="button" disabled={pending} onClick={() => { void revoke(); }}>{pending ? "處理中…" : "確認撤銷"}</button></div>
+    </div></div>}
     {confirming && detail && <div className={styles.previewBackdrop}><div ref={dialog} className={styles.batchDialog} role="dialog" aria-modal="true" aria-labelledby="circle-takedown-confirm" tabIndex={-1}>
       <h2 id="circle-takedown-confirm">{cleanup ? "完成圖片清除？" : `撤下「${detail.name}」的補充資料？`}</h2>
       <p>{event.name}／{detail.name}</p><p>{cleanup ? "清除上次撤下後留下的上傳圖片。官方攤位資料與社團認領保留。" : "介紹與品書將停止公開，已上傳圖片會刪除。官方攤位資料與社團認領保留。"}</p>

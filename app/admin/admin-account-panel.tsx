@@ -14,7 +14,8 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 
 type CircleSearch = { query: string; matches: AdminAccountCircleMatch[] | null; error: string };
 
-/** One field takes either: anything with an @ is an Email, anything else a circle name. */
+/** One field takes either: a valid Email reads that account, anything else searches circle names —
+ * official names include 「Millet@半米紀行」, so an @ alone does not make an Email. */
 export function AdminAccountPanel({ initialEmail, initialCircle, onSearchChange, onCircleSearch }: {
   initialEmail: string; initialCircle: string; onSearchChange: (email: string) => void; onCircleSearch: (circle: string) => void;
 }) {
@@ -105,7 +106,8 @@ export function AdminAccountPanel({ initialEmail, initialCircle, onSearchChange,
       event.preventDefault();
       if (busy.current) return;
       setResult(null);
-      if (!query.includes("@")) {
+      const email = normalizeEmail(query);
+      if (!isEmailShaped(email)) {
         const circle = query.normalize("NFKC").trim();
         if (circle.length > 100) { setReadError("社團名稱不可超過 100 字。"); return; }
         setQuery(circle);
@@ -113,8 +115,6 @@ export function AdminAccountPanel({ initialEmail, initialCircle, onSearchChange,
         else onCircleSearch(circle);
         return;
       }
-      const email = normalizeEmail(query);
-      if (!isEmailShaped(email)) { setReadError("請填寫有效的 Email。"); return; }
       setQuery(email);
       if (email === initialEmail) void load(email);
       else onSearchChange(email);
