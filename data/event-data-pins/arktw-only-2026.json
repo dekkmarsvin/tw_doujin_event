@@ -2,19 +2,19 @@
   "schema": "event-data-pin/2",
   "eventId": "arktw-only-2026",
   "repository": "dekkmarsvin/tw_doujin_event-data",
-  "commit": "44c437efc9133e1a37a68b93f3ed3e49175684e2",
+  "commit": "c0d5ed56a924f4bbf514f9788789a924b38f7e81",
   "files": [
     {
       "path": "events/arktw-only-2026/circle-identity-groups.json",
-      "sha256": "3f766f5dff0d81b5117e62fbe4e8616d77a4b1a072e1268ac8f13e67a6457609"
+      "sha256": "056f0f75fa63c64f95b7c5a7c740037fb306e6790453cc3946fe0445b4ffd58e"
     },
     {
       "path": "events/arktw-only-2026/event.json",
-      "sha256": "0f355330a8701edc22c2013b1dc8f09b008cd11e27fc72a2e29d3f2500d0451a"
+      "sha256": "b7776cb7396fa2d6763c8c2c861f0ed96d56fe0a7b7a0a014524b309e42e26c5"
     },
     {
       "path": "events/arktw-only-2026/map.json",
-      "sha256": "e0ff112ff29e94c6b07cc252f613847fd870e765e24f18cbde14bb0ef64bd155"
+      "sha256": "2e18bd485c106d0058e004a538227caf546365375d5ab5ce06fe140d6ceb2bd2"
     },
     {
       "path": "events/arktw-only-2026/official-booths.json",
