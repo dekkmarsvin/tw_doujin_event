@@ -81,7 +81,6 @@ try {
   await panel.getByText(`已核准「${CIRCLE_NAME}」。`, { exact: true }).waitFor();
   await claimRow.waitFor({ state: "hidden" });
   await journey.capture(admin, "portal-claim-approved");
-  await admin.close();
 
   // 4. The same session, reloaded: approval reaches the circle without a
   //    second login, which is also all the rate limit allows. Hold the saved
@@ -418,6 +417,21 @@ try {
   }
   await journey.capture(reader, "reader-ratings-published");
   await reader.close();
+
+  const detailResponse = admin.waitForResponse(response => {
+    const url = new URL(response.url());
+    return response.request().method() === "GET" && url.pathname === `/api/admin/circles/${CIRCLE_ID}` && url.searchParams.get("event") === "sample";
+  });
+  await admin.goto(`${base}/admin?${new URLSearchParams({ section: "circles", view: "search", event: "sample", circle: CIRCLE_ID, q: CIRCLE_NAME })}`);
+  const detailResult = await detailResponse;
+  assert.equal(detailResult.status(), 200, "the real local Pages route serves the authenticated admin detail");
+  const detail = await detailResult.json();
+  assert.equal(detail.supplemental.fields.pen, PEN_NAME);
+  assert.equal(detail.supplemental.publicState, "public", "the detail matches the public page verified above");
+  assert.ok(detail.claims.some(claim => claim.status === "verified" && claim.accountEmail === CIRCLE));
+  await admin.locator("#takedown").getByText(PEN_NAME, { exact: true }).waitFor();
+  await journey.capture(admin, "admin-circle-real-detail");
+  await admin.close();
 
   await journey.finish();
 } catch (error) {
