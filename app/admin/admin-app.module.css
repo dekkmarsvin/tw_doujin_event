@@ -86,6 +86,20 @@
 .editions li { display: grid; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line); }
 .editions li:first-child { padding-top: 0; border-top: 0; }
 .editions span { font-size: 13px; color: var(--muted); }
+/* The served edition and a failed publication carry text, a 1px frame and a tint; older ones fold away in muted text. */
+.editions .editionStatus { padding: 1px 7px; border: 1px solid var(--line); border-radius: 5px; background: #fff; color: var(--muted); font-size: 12px; }
+.editions li:is(.edition_live, .edition_failed) { margin: 6px 0; padding: 10px 12px; border: 1px solid; border-radius: 7px; }
+.editions li:is(.edition_live, .edition_failed) + li { border-top: 0; }
+.editions li.edition_live { border-color: #cfe4da; background: #edf8f3; }
+.editions li.edition_failed { border-color: #f0cdc6; background: #fff3f1; }
+.edition_live strong, .editions .edition_live .editionStatus { border-color: #cfe4da; color: var(--success); }
+.edition_failed strong, .editions .edition_failed .editionStatus { border-color: #f0cdc6; color: var(--danger); }
+.edition_earlier strong { color: var(--muted); }
+.earlierEditions { margin-top: 10px; border-top: 1px dashed #cfd5d0; padding-top: 4px; }
+.earlierEditions summary { display: flex; list-style: none; align-items: center; min-height: 32px; color: var(--muted); font-size: 13px; font-weight: 700; cursor: pointer; }
+.earlierEditions .editions { margin-top: 6px; }
+.earlierEditions summary::before { content: "▸"; width: 1em; }
+.earlierEditions[open] summary::before { content: "▾"; }
 .eventCounts { display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 13px; }
 @media (min-width: 1051px) {
   .eventRow { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(0, 2.5fr) minmax(120px, .6fr); align-items: start; gap: 22px; }
@@ -112,7 +126,7 @@
 @media (max-width: 760px) {
   .title h2 { font-size: 18px; }
   .summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .content.content button, .navigation summary, .accountMenu summary { min-height: 44px; }
+  .content.content button, .navigation summary, .accountMenu summary, .earlierEditions summary { min-height: 44px; }
   .summary a, .tabs a, .rows a, .detailActions a, .detailList a, .accountMenu a { display: inline-flex; align-items: center; min-height: 44px; }
   .accountMenu button { min-height: 44px; }
   .detailHeading { align-items: flex-start; flex-wrap: wrap; }
