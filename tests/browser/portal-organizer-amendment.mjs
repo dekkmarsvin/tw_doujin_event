@@ -37,7 +37,7 @@ function fixtureRoutes(role, existing = false, delayStart = false) {
   const startWait = delayStart ? new Promise((resolve) => { releaseStart = resolve; }) : Promise.resolve();
   const state = { created: existing, version: 1, changes: [], impact: [], settings: null, conflict: false, starts: 0, saves: 0,
     otherVersion: 1, otherDraft: { ...baseline.draft, event: { ...baseline.draft.event, id: "other-event", name: "另一場待編輯活動" } },
-    sections: { source: "review", amendment: "import", other: "event" } };
+    sections: { source: "review", amendment: "import", other: "event" }, validateGate: Promise.resolve(), validateSeen: () => {} };
   const plan = () => planOrganizerAmendment({ ...baseline, changes: state.changes, today: () => "2026-09-15" });
   const summary = (id) => ({ id, tentativeName: id === "other" ? "另一場待編輯活動" : "#190 合成修正驗收", eventId: id === "other" ? "other-event" : baseline.event.id,
     operation: id === "amendment" ? "AMEND" : "CREATE", status: id === "source" ? "published" : "draft",
@@ -86,7 +86,7 @@ function fixtureRoutes(role, existing = false, delayStart = false) {
         return reply({ ok: true, candidateId: "other", version: state.otherVersion });
       }
       // Opening 檢查與發布 runs the check once.
-      if (path.endsWith("/validate") && method === "POST") return reply({ ok: true, version: state.version, issues: [] });
+      if (path.endsWith("/validate") && method === "POST") { state.validateSeen(); await state.validateGate; return reply({ ok: true, version: state.version, issues: [] }); }
       if (/\/events\/(source|amendment|other)$/.test(path)) return reply(detail(path.split("/").at(-1)));
       throw new Error(`Unexpected synthetic UI request: ${method} ${path}`);
     });
@@ -234,6 +234,36 @@ try {
   assert.equal(delayed.state.otherDraft.event.name, "另一場還沒儲存的內容");
   assert.equal(delayed.state.otherVersion, 2);
   await moving.close();
+
+  // The check runs by itself on entry, so a reader can leave before it answers.
+  // Its late answer must not bring the activity they left back on screen.
+  const late = fixtureRoutes("owner", false, true);
+  let releaseValidate;
+  const validateSeen = new Promise((resolve) => { late.state.validateSeen = resolve; });
+  late.state.validateGate = new Promise((resolve) => { releaseValidate = resolve; });
+  late.state.sections.other = "review";
+  const leaving = await journey.page({ url: `${base}/organizer`, routes: late.routes });
+  await leaving.getByRole("button", { name: "開始修正已發布活動", exact: true }).waitFor();
+  await leaving.getByRole("button", { name: /另一場待編輯活動/ }).click();
+  await leaving.getByRole("heading", { name: "檢查與發布", exact: true }).waitFor();
+  await validateSeen;
+  await leaving.getByRole("button", { name: /#190 合成修正驗收/ }).click();
+  await leaving.getByRole("button", { name: "開始修正已發布活動", exact: true }).waitFor();
+  // Even a brief return would unmount whatever the reader had started here.
+  await leaving.evaluate(() => {
+    window.leftActivityReturned = false;
+    new MutationObserver(() => {
+      if ([...document.querySelectorAll("h2")].some((heading) => heading.textContent === "另一場待編輯活動")) window.leftActivityReturned = true;
+    }).observe(document.body, { subtree: true, childList: true, characterData: true });
+  });
+  const reread = leaving.waitForResponse((response) => response.url().endsWith("/api/organizer/events") && response.request().method() === "GET");
+  releaseValidate();
+  await reread;
+  await leaving.waitForTimeout(300);
+  assert.equal(await leaving.evaluate(() => window.leftActivityReturned), false, "the late check never brings the left activity back");
+  assert.equal(await leaving.getByRole("button", { name: "開始修正已發布活動", exact: true }).count(), 1, "the chosen activity stays on screen");
+  assert.equal(await leaving.getByRole("combobox", { name: "活動版本", exact: true }).inputValue(), "source");
+  await leaving.close();
 
   // Equal dimensions must not hide which picture a saved correction replaces.
   // The previous image is public, while the replacement still needs its

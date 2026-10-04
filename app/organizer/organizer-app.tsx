@@ -199,6 +199,8 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
     if (entry.has("candidate")) return entry.get("candidate");
     try { return localStorage.getItem(resumeKey); } catch { return null; }
   });
+  const currentSelection = useRef(selectedId);
+  useEffect(() => { currentSelection.current = selectedId; }, [selectedId]);
   const [publicationReadError, setPublicationReadError] = useState<{ candidateId: string; needsLogin: boolean } | null>(null);
   const [pollGeneration, setPollGeneration] = useState(0);
   const [detail, setDetail] = useState<OrganizerEventDetail | null>(null);
@@ -330,11 +332,15 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
    * effect. */
   const refresh = useCallback(async () => {
     const list = reloadList();
-    await Promise.all([list, selectedId ? reloadDetail(selectedId, undefined, "keep").catch(async (error) => {
+    // A panel's action can answer after the reader has opened another
+    // activity -- the check in 檢查與發布 starts by itself on entry -- and that
+    // answer must not put the activity they left back on screen.
+    const candidateId = selectedId;
+    await Promise.all([list, candidateId ? reloadDetail(candidateId, () => currentSelection.current === candidateId, "keep").catch(async (error) => {
       // Removing one's own owner grant may make this detail unavailable.
       // The refreshed list already selects an accessible activity or clears it.
       if (error instanceof PortalError && error.status === 404
-        && !(await list).some((event) => event.id === selectedId)) return;
+        && !(await list).some((event) => event.id === candidateId)) return;
       throw error;
     }) : Promise.resolve()]);
   }, [reloadDetail, reloadList, selectedId]);
