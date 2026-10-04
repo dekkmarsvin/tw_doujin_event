@@ -4,7 +4,16 @@ import { createServer } from "vite";
 const vite = await createServer({ configFile: false, server: { middlewareMode: true }, environments: { ssr: {} }, logLevel: "silent" });
 const { publicationProgress, publicationFailureMessage } = await vite.environments.ssr.runner.import("/app/organizer-publication-presentation.ts");
 const { publicationRolloutProblems, PUBLICATION_REQUIRED_CHECKS } = await vite.environments.ssr.runner.import("/app/publication-rollout.ts");
+const { publicationProgress: adminPublicationProgress } = await vite.environments.ssr.runner.import("/app/admin/admin-service-status.tsx");
 after(() => vite.close());
+
+test("Admin summary keeps unresolved failure separate from retry permission and paused processing", () => {
+  for (const retryable of [true, false]) for (const enabled of [true, false]) {
+    assert.equal(adminPublicationProgress({ status: "failed", step: "waiting_deployment", retryable }, enabled), "未完成 · 部署網站");
+  }
+  assert.equal(adminPublicationProgress({ status: "queued", step: "preparing_data", updatedAt: 1 }, true), "已排程 · 等待開始");
+  assert.equal(adminPublicationProgress({ status: "publishing", step: "waiting_deployment", updatedAt: 1 }, false), "發布中 · 已暫停");
+});
 
 test("failed deployment preserves completed data stages and never looks published", () => {
   assert.deepEqual(publicationProgress({ step: "waiting_deployment", status: "failed" }).map(({ state }) => state), ["complete", "complete", "failed", "pending"]);

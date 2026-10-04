@@ -37,9 +37,10 @@ export function AdminSiteSettingsPanel() {
     } catch (error) { if (mounted.current) setError(error instanceof Error ? error.message : "儲存失敗，請稍後再試。"); }
     finally { if (mounted.current) setBusy(false); }
   }
-  if (!data || !form) return <section className={styles.card}><h2>網站設定</h2>{error ? <><p className={styles.error} role="alert">{error}</p><button type="button" onClick={() => void load()}>重新載入</button></> : <p>載入中…</p>}</section>;
+  if (!data || !form) return <section className={styles.card}>{error ? <><p className={styles.error} role="alert">{error}</p><button type="button" onClick={() => void load()}>重新載入</button></> : <p>載入中…</p>}</section>;
   const patch = (change: Partial<SiteSettingsInput>) => setForm(current => current ? { ...current, ...change } : current);
   return <form className={settingsStyles.workspace} onSubmit={event => void submit(event)}>
+    <p className={settingsStyles.intro}>管理活動申請、聯絡方式、通知與發布作業</p>
     <fieldset disabled={busy} className={settingsStyles.fields}>
       <section className={`${styles.card} ${settingsStyles.card}`}><h3>活動申請</h3><p>決定誰可以送出活動建置申請。</p>
         <fieldset className={settingsStyles.modes}><legend>申請開放對象</legend>
@@ -72,8 +73,8 @@ export function AdminSiteSettingsPanel() {
         <ServiceStatus label="發布服務" result={data.services?.publication ?? null} pending={checking} requested={!!data.services} />
         {data.publicationActivities.length ? <div className={settingsStyles.activities}><h4>目前發布作業</h4><ul>{data.publicationActivities.map(job => <li key={job.id}>
           <a href={`/organizer?candidate=${encodeURIComponent(job.candidateId)}&section=review`}>{job.eventName}</a>
-          <span>{publicationProgress(job, data.settings.publicationEnabled)}</span>
-        </li>)}</ul></div> : <p className={settingsStyles.empty}>目前沒有排程或進行中的發布作業。</p>}
+          <span>第 {job.edition} 版 · {publicationProgress(job, data.settings.publicationEnabled)}</span>
+        </li>)}</ul></div> : <p className={settingsStyles.empty}>目前沒有待處理的發布作業。</p>}
       </section>
     </fieldset>
     <div className={settingsStyles.actions}>

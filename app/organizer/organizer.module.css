@@ -425,7 +425,7 @@
 }
 
 @media (max-width: 1039px) {
-  .header { min-height: 72px; padding: 13px 18px; }
+  .header { min-height: 72px; padding: 13px 18px; flex-direction: column; align-items: stretch; }
   .header h1 { font-size: 18px; }
   .identity span { display: none; }
   .shell { display: none; }

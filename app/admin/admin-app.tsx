@@ -12,7 +12,7 @@ import { AdminNotificationPanel } from "./admin-notification-panel";
 import { AdminReviewQueue } from "./admin-review-queue";
 import { AdminReferencePanel, type ReferenceView } from "./admin-reference-panel";
 import { AdminSiteSettingsPanel } from "./admin-site-settings-panel";
-import { AdminOverview, AdminPublicationPanel } from "./admin-overview";
+import { AdminOverview, AdminPublicationPanel, AdminEventPanel } from "./admin-overview";
 import { adminHref, readAdminRoute, type AdminRoute, type AdminSection } from "./admin-navigation";
 import styles from "../circle-portal/portal.module.css";
 import ui from "./admin-app.module.css";
@@ -53,7 +53,7 @@ export default function AdminApp() {
   const event = route.event ? getPublishedEvent(route.event) : nearestEvent(PUBLISHED_EVENTS, today) ?? PUBLISHED_EVENTS[0];
   const scoped = route.section === "circles" || (route.section === "events" && route.view === "maps");
   const unavailable = route.unavailable || (scoped && !event);
-  const tabs = route.section === "events" ? [["publication", "審核與發布"], ["maps", "地圖投稿"]]
+  const tabs = route.section === "events" ? [["list", "活動總表"], ["publication", "審核與發布"], ["maps", "地圖投稿"]]
     : route.section === "circles" ? [["claims", "認領審核"], ["search", "社團查詢"]]
       : route.section === "accounts" ? [["search", "帳號查詢"], ["admins", "網站管理者"]] : [];
   return <div className={`${styles.page} ${ui.workspace}`}>
@@ -78,7 +78,7 @@ export default function AdminApp() {
             {tabs.length > 0 && <nav className={ui.tabs} aria-label={`${labels[route.section]}頁籤`}>{tabs.map(([view, label]) => <a key={view} href={adminHref(route.section, { view, ...(route.section === "accounts" ? { email: route.email } : { event: route.event }) })} aria-current={route.view === view ? "page" : undefined}>{label}</a>)}</nav>}
             {unavailable ? <section className={styles.card}><h3>無法開啟指定頁面</h3><p>這個入口或活動目前無法使用。</p><a href="/admin">返回管理總覽</a></section>
               : route.section === "overview" ? <AdminOverview />
-                : route.section === "events" ? route.view === "publication" ? <AdminPublicationPanel />
+                : route.section === "events" ? route.view === "list" ? <AdminEventPanel /> : route.view === "publication" ? <AdminPublicationPanel />
                   : <AdminMapReviewPanel event={event!} initialDraftId={route.draft} onEventChange={id => replaceRoute({ event: id, draft: "" })} onSelectDraft={draft => replaceRoute({ event: event!.id, draft })} />
                   : route.section === "circles" ? route.view === "claims" ? <AdminReviewQueue key={`${route.event}:${route.claim}`} initialEventId={route.event} initialClaimId={route.claim} onEventChange={id => replaceRoute({ event: id, claim: "" })} />
                     : <AdminCirclePanel key={event!.id} event={event!} initialQuery={route.q} circleId={route.circle}

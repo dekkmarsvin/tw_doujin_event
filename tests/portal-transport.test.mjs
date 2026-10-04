@@ -31,7 +31,9 @@ test("Admin precise routes take precedence over legacy event links while old des
     assert.deepEqual([result.section, result.view, result.event], [section, view, "sample"]);
   }
   assert.equal(route("/admin?section=references").section, "data");
-  assert.equal(route("/admin?section=events&view=list").unavailable, true);
+  assert.equal(route("/admin?section=events&view=list").unavailable, false);
+  assert.equal(route("/admin?section=events").view, "list");
+  assert.equal(route("/admin?section=events&view=unsupported").unavailable, true);
   const search = route(adminHref("circles", { view: "search", event: "sample", q: "測試社團" }));
   assert.equal(search.q, "測試社團");
   const account = route(adminHref("accounts", { view: "search", email: "user@example.test" }));
@@ -181,7 +183,7 @@ test("continuation rejects caller URLs and retains legacy admin notifications an
   assert.equal(adminLoginDestination(new URLSearchParams("event=sample&circle=c-900001&returnTo=https://evil.test")), null);
   const selectors = notificationParameters({ admin: "1", adminEvent: "sample", adminClaim: "//evil.test", adminSection: "/other", adminHash: "javascript:alert(1)", returnTo: "https://evil.test", event: "wrong", circle: "wrong", login: "secret" }, "circle");
   assert.equal(adminLoginDestination(selectors), "/admin?event=sample");
-  for (const path of ["/admin?event=sample", "/admin#review-notifications", "/admin?section=events&view=maps&event=sample&draft=map-one"]) {
+  for (const path of ["/admin?event=sample", "/admin#review-notifications", "/admin?section=events&view=list", "/admin?section=events&view=maps&event=sample&draft=map-one"]) {
     assert.equal(adminLoginDestination(new URL(adminLoginEntry(path), ORIGIN).searchParams), path);
   }
   assert.equal(notificationParameters({ admin: "1", adminSearch: "x".repeat(101) }, "circle").has("adminSearch"), false);

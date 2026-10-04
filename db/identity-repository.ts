@@ -2035,6 +2035,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       const rows = await database.prepare(
         `SELECT c.id, c.tentative_name, c.event_id, c.status, c.current_version, c.updated_at,
                 c.last_updated_role, c.publication_operation, c.created_at,
+                json_extract(c.current_draft_json, '$.event.days') AS event_days_json,
+                (SELECT json_extract(settings_json, '$.days') FROM organizer_amendment_changes
+                 WHERE candidate_id = c.id ORDER BY version DESC LIMIT 1) AS amendment_days_json,
                 ${organizerCandidateEdition} AS edition, 'admin' AS role,
                 CASE WHEN w.candidate_id IS NULL OR w.onboarding_completed_at IS NOT NULL
                   THEN 'binder' ELSE 'guided' END AS workspace_mode
@@ -2045,6 +2048,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
         id: string; tentative_name: string; event_id: string | null; status: OrganizerCandidateStatus;
         current_version: number; updated_at: number; last_updated_role: string; role: "admin";
         workspace_mode: "guided" | "binder"; publication_operation: "CREATE" | "AMEND"; created_at: number; edition: number;
+        event_days_json: string | null; amendment_days_json: string | null;
       }>();
       return rows.results;
     }

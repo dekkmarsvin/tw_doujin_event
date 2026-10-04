@@ -1,4 +1,5 @@
 import type { PublicationActivity, ServiceChecks, SiteSettings, SiteSettingsInput } from "../app/site-settings";
+import { organizerCandidateEdition } from "./account-notification-repository";
 
 type SettingsRow = {
   organizer_application_mode: SiteSettings["organizerApplicationMode"]; organizer_allowed_emails_json: string;
@@ -66,10 +67,15 @@ export function createSiteSettingsRepository(database: D1Database, ensureTables:
   }
   async function listActivePublicationActivities() {
     await ensureTables();
-    return (await database.prepare(`SELECT j.id, j.candidate_id AS candidateId, c.tentative_name AS eventName, j.status, j.step
+    const rows = (await database.prepare(`SELECT j.id, j.candidate_id AS candidateId, c.event_id AS eventId,
+        c.tentative_name AS eventName, ${organizerCandidateEdition} AS edition,
+        j.candidate_version AS candidateVersion, c.current_version AS currentVersion, c.status AS candidateStatus,
+        j.status, j.step, j.updated_at AS updatedAt, j.retryable
       FROM organizer_publication_jobs j JOIN organizer_event_candidates c ON c.id = j.candidate_id
-      WHERE j.status IN ('queued', 'publishing') AND c.current_version = j.candidate_version
-      ORDER BY j.created_at, j.id`).all<PublicationActivity>()).results;
+      WHERE j.status IN ('queued', 'publishing', 'failed') AND c.current_version = j.candidate_version
+        AND c.status <> 'abandoned'
+      ORDER BY j.created_at, j.id`).all<Omit<PublicationActivity, "retryable"> & { retryable: number }>()).results;
+    return rows.map(row => ({ ...row, retryable: !!row.retryable }));
   }
   async function getServiceChecks(): Promise<ServiceChecks | null> {
     await ensureTables();

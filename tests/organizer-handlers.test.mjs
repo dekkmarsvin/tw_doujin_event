@@ -118,6 +118,52 @@ beforeEach(async () => {
   handlers = createCirclePortalHandlers(handlerOptions);
 });
 
+test("Admin candidate summaries read only valid working dates and retain candidate editions", async () => {
+  const adminCookie = await signIn("admin@example.test");
+  const adminId = await repository.upsertAccount("admin@example.test", now);
+  const baselineDays = [{ id: "1", label: "第一日", date: "2026-10-01" }, { id: "2", label: "第二日", date: "2026-10-02" }];
+  for (const [index, candidate] of [
+    { id: "dates-published", eventId: "dates-event", days: baselineDays, status: "published" },
+    { id: "dates-amendment", eventId: "dates-event", days: baselineDays, operation: "AMEND", version: 17 },
+    { id: "dates-unfinished", eventId: null, days: [{ id: "1", date: "" }, { id: "2", date: "2026-02-30" },
+      { id: "3", date: "2026-03-02" }, { id: "4", date: "2026-03-01" }] },
+    { id: "dates-empty", eventId: null, days: [] },
+  ].entries()) {
+    await repository.createOrganizerCandidate({ id: candidate.id, tentativeName: "同名活動", ownerEmail: "owner@example.test",
+      createdByAccountId: adminId, draftJson: JSON.stringify({ event: { days: candidate.days },
+        officialSource: { url: "https://private.example/full-draft" }, privateFixture: "not-a-list-field" }), now: now + index });
+    await database.prepare(`UPDATE organizer_event_candidates SET event_id = ?2, status = ?3,
+      publication_operation = ?4, current_version = ?5 WHERE id = ?1`)
+      .bind(candidate.id, candidate.eventId, candidate.status ?? "draft", candidate.operation ?? "CREATE", candidate.version ?? 1).run();
+  }
+  await database.prepare(`INSERT INTO organizer_amendment_changes
+    (candidate_id, version, changes_json, settings_json, revision_id, created_at) VALUES ('dates-amendment', 17, '[]', ?1, 'date-revision', ?2)`)
+    .bind(JSON.stringify({ days: [{ id: "1", date: "2026-11-01" }] }), now).run();
+  const listOnly = createCirclePortalHandlers({ ...handlerOptions, repository: { ...repository,
+    getOrganizerCandidate: async () => { throw new Error("the activity list must not load full workspaces"); },
+  } });
+  const path = "/api/organizer/events";
+  assert.equal((await listOnly.listOrganizerCandidates(request(path))).status, 401);
+  const stranger = await signIn("summary-stranger@example.test");
+  assert.deepEqual(await (await listOnly.listOrganizerCandidates(request(path, "GET", undefined, stranger))).json(), { events: [] });
+  const response = await listOnly.listOrganizerCandidates(request(path, "GET", undefined, adminCookie));
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  const { events } = await response.json();
+  assert.equal(events.length, 4);
+  const byId = new Map(events.map(event => [event.id, event]));
+  assert.deepEqual(byId.get("dates-published").dateRange, { start: "2026-10-01", end: "2026-10-02" });
+  assert.deepEqual(byId.get("dates-amendment").dateRange, { start: "2026-10-02", end: "2026-11-01" });
+  assert.equal(byId.get("dates-amendment").edition, 2);
+  assert.equal(byId.get("dates-amendment").version, 17, "saving revisions is independent of activity edition");
+  assert.deepEqual(byId.get("dates-unfinished").dateRange, { start: "2026-03-01", end: "2026-03-02" });
+  assert.equal(byId.get("dates-empty").dateRange, null, "an unfinished candidate gets no invented date");
+  assert.doesNotMatch(JSON.stringify(events), /private\.example|privateFixture|officialSource|event_days_json|amendment_days_json/);
+  const owner = await signIn("owner@example.test", "organizer");
+  const ownEvents = (await (await listOnly.listOrganizerCandidates(request(path, "GET", undefined, owner))).json()).events;
+  assert.equal(ownEvents.length, 4);
+  assert.ok(ownEvents.every(event => !("dateRange" in event)), "the extra projection is only requested by the Admin list");
+});
+
 test("admin invitation creates an organizer event entry that only its owner can open", async () => {
   const adminCookie = await signIn("admin@example.test");
   const created = await handlers.adminCreateOrganizerCandidate(request(
