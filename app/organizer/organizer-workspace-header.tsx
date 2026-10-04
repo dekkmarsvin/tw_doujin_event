@@ -5,7 +5,7 @@ import styles from "./organizer.module.css";
 
 /** Which panel the header's controls lead to. A status is a way in to the
  * panel that changes it, so each one is marked while that panel is open. */
-export type OrganizerHeaderTarget = "review" | "claims" | "members";
+export type OrganizerHeaderTarget = "review" | "circles" | "members";
 
 export function OrganizerWorkspaceHeader({ detail, current, onOpen, pendingClaims }: {
   detail: OrganizerEventDetail;
@@ -27,7 +27,7 @@ export function OrganizerWorkspaceHeader({ detail, current, onOpen, pendingClaim
       <button type="button" aria-current={marked("review")} onClick={() => onOpen("review")}>
         <span>發布狀態</span><strong data-state={detail.event.status}>{status.publication}</strong>
       </button>
-      {detail.claimReviewAvailable && <button type="button" aria-current={marked("claims")} onClick={() => onOpen("claims")}>
+      {detail.claimReviewAvailable && <button type="button" aria-current={marked("circles")} onClick={() => onOpen("circles")}>
         <span>社團認領</span><strong>{typeof pendingClaims === "number" ? `待審 ${pendingClaims} 筆` : pendingClaims === "error" ? "讀取失敗" : "讀取中…"}</strong>
       </button>}
     </div>

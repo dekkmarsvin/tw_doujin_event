@@ -3,9 +3,12 @@ import { AdminReviewQueue, type ClaimReviewScope } from "../admin/admin-review-q
 import { decideOrganizerClaim, listOrganizerClaims, searchOrganizerTakedownCircles } from "../organizer-client";
 import { useModalFocus } from "../use-modal-focus";
 import type { ReviewQueue, TakedownCircle } from "../circle-editor-client";
+import { OrganizerTakedownPanel } from "./organizer-takedown-panel";
 import styles from "../circle-portal/portal.module.css";
 
-export function OrganizerClaimsPanel({ candidateId, eventId, canRevoke, onQueueLoaded }: {
+/** 社團管理: claims and supplemental takedowns of the published activity. The
+ * roster and booths themselves are activity data, so the intro points there. */
+export function OrganizerCirclePanel({ candidateId, eventId, canRevoke, onQueueLoaded }: {
   candidateId: string; eventId: string; canRevoke: boolean; onQueueLoaded: (queue: ReviewQueue | null) => void;
 }) {
   const claimScope = useMemo<ClaimReviewScope>(() => ({
@@ -14,8 +17,13 @@ export function OrganizerClaimsPanel({ candidateId, eventId, canRevoke, onQueueL
     decide: (claimId, decision) => decideOrganizerClaim(candidateId, claimId, decision),
   }), [candidateId, eventId]);
   return <div className={styles.claimPanels}>
+    <section className={`${styles.card} ${styles.admin} ${styles.eventClaimPanel}`} aria-labelledby="circle-management-heading">
+      <h2 id="circle-management-heading">社團管理</h2>
+      <p>社團名單和攤位的新增、刪除或調整屬於活動資料，請在「活動資料」匯入；活動已發布後，由負責人建立修正版，送審並發布後生效。</p>
+    </section>
     <AdminReviewQueue initialEventId={eventId} claimScope={claimScope} onQueueLoaded={onQueueLoaded} />
     {canRevoke && <OrganizerClaimRevoke candidateId={candidateId} />}
+    <OrganizerTakedownPanel candidateId={candidateId} eventId={eventId} />
   </div>;
 }
 

@@ -80,7 +80,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 **驗證碼只存在於第二層。** 人工審核不發驗證碼：管理者看的是 `evidence_url` 與 `evidence_note`，判斷依據是人工核對。介面在人工審核路徑不得索取驗證碼。
 
-人工審核也可由持有所屬候選活動有效 Owner／Editor grant 的主辦人員，在 `/organizer` 的活動內社團認領面板完成。僅開放當前部署已公開活動的待審認領核准／婉拒，範圍與寫入授權重查依[主辦工作區契約](./organizer-workspace.md#活動內社團認領審核)；撤銷已通過的認領限網站管理者與該活動的 Owner，Editor 不可撤銷。主辦裁決與管理者裁決共用狀態與唯一擁有者約束，audit 分別記為 `claim.organizer_approve／reject／revoke` 與 `claim.admin_approve／reject／revoke`。
+人工審核也可由持有所屬候選活動有效 Owner／Editor grant 的主辦人員，在 `/organizer` 活動內「社團管理」面板的社團認領完成。僅開放當前部署已公開活動的待審認領核准／婉拒，範圍與寫入授權重查依[主辦工作區契約](./organizer-workspace.md#活動內社團認領審核)；撤銷已通過的認領限網站管理者與該活動的 Owner，Editor 不可撤銷。主辦裁決與管理者裁決共用狀態與唯一擁有者約束，audit 分別記為 `claim.organizer_approve／reject／revoke` 與 `claim.admin_approve／reject／revoke`。
 
 資料庫層保證**一個社團同時只有一位擁有者**。所有認領與撤下決策寫入稽核記錄。
 
