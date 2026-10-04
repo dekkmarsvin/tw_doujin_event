@@ -69,6 +69,6 @@ test("Pages routing includes HTML and existing APIs but bypasses bulk static ass
   const routes = JSON.parse(await readFile(new URL("../public/_routes.json", import.meta.url), "utf8"));
   const matches = (pattern, path) => new RegExp(`^${pattern.split("*").map(p => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`).test(path);
   const invokes = path => routes.include.some(p => matches(p, path)) && !routes.exclude.some(p => matches(p, path));
-  for (const path of ["/", "/index.html", "/circle.html", "/organizer", "/admin", "/privacy/", "/events/example/circles/id/", "/s/example", "/api/shares/example", "/api/auth/session", "/data/events/example/overrides.json"]) assert.equal(invokes(path), true, path);
-  for (const path of ["/assets/app.js", "/fonts/geist.woff2", "/data/events/example/circles.json", "/data/events/example/maps/day1.json", "/sw.js", "/manifest.webmanifest", "/share-card.png", "/sitemap.xml"]) assert.equal(invokes(path), false, path);
+  for (const path of ["/", "/index.html", "/circle.html", "/organizer", "/admin", "/privacy/", "/portal/", "/events/example/circles/id/", "/s/example", "/api/shares/example", "/api/auth/session", "/data/events/example/overrides.json"]) assert.equal(invokes(path), true, path);
+  for (const path of ["/assets/app.js", "/fonts/geist.woff2", "/data/events/example/circles.json", "/data/events/example/maps/day1.json", "/sw.js", "/manifest.webmanifest", "/share-card.png", "/sitemap.xml", "/portal/media/circle-editor.webp"]) assert.equal(invokes(path), false, path);
 });
