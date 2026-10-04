@@ -50,7 +50,8 @@ try {
   } });
   await page.getByRole("heading", { name: "社團處置測試", exact: true }).waitFor();
   assert.equal(await page.getByRole("button", { name: "活動資料", exact: true }).count(), 1);
-  assert.equal(await page.getByRole("button", { name: "社團認領", exact: true }).count(), 1);
+  assert.equal(await page.getByRole("button", { name: "社團管理", exact: true }).count(), 1);
+  assert.equal(await page.getByRole("button", { name: "撤下補充資料", exact: true }).count(), 0, "claims and takedowns share one 社團管理 panel");
   assert.equal(await page.getByRole("combobox", { name: "活動版本", exact: true }).inputValue(), "social-latest");
   await page.getByLabel("活動審核與發布狀態").getByText("審核中", { exact: true }).waitFor();
   const header = page.getByLabel("活動審核與發布狀態");
@@ -58,7 +59,9 @@ try {
   reportedClaimCount = null;
   const sidebar = page.getByRole("complementary");
   assert.equal(await sidebar.getByRole("combobox", { name: "活動版本", exact: true }).count(), 1);
-  await page.getByRole("button", { name: "社團認領", exact: true }).click();
+  await page.getByRole("button", { name: "社團管理", exact: true }).click();
+  await page.getByRole("heading", { name: "社團管理", exact: true }).waitFor();
+  await page.getByText(/社團名單和攤位的新增、刪除或調整屬於活動資料/).waitFor();
   await page.getByRole("heading", { name: "社團認領", exact: true }).waitFor();
   await header.getByText("待審 2 筆", { exact: true }).waitFor();
   await page.getByRole("button", { name: "婉拒", exact: true }).first().click();
@@ -76,12 +79,12 @@ try {
   await page.getByLabel("活動審核與發布狀態").getByText("已發布", { exact: true }).waitFor();
   await page.getByRole("heading", { name: "社團認領", exact: true }).waitFor();
   await header.getByText("待審 0 筆", { exact: true }).waitFor();
-  await page.getByRole("button", { name: "撤下補充資料", exact: true }).click();
-  await page.getByRole("textbox", { name: "社團名稱", exact: true }).fill("不存在");
-  await page.getByRole("button", { name: "搜尋", exact: true }).click();
-  await page.getByText("找不到符合的社團。", { exact: true }).waitFor();
-  await page.getByRole("textbox", { name: "社團名稱", exact: true }).fill("北風");
-  await page.getByRole("button", { name: "搜尋", exact: true }).click();
+  const takedownPanel = page.locator('section[aria-labelledby="takedown-heading"]');
+  await takedownPanel.getByRole("textbox", { name: "社團名稱", exact: true }).fill("不存在");
+  await takedownPanel.getByRole("button", { name: "搜尋", exact: true }).click();
+  await takedownPanel.getByText("找不到符合的社團。", { exact: true }).waitFor();
+  await takedownPanel.getByRole("textbox", { name: "社團名稱", exact: true }).fill("北風");
+  await takedownPanel.getByRole("button", { name: "搜尋", exact: true }).click();
   await page.getByRole("button", { name: "選擇北風畫室", exact: true }).click();
   assert.equal(await page.getByRole("button", { name: "選擇北風別館", exact: true }).isEnabled(), false);
   await page.getByRole("textbox", { name: "原因", exact: true }).fill("權利人要求");
@@ -111,12 +114,12 @@ try {
   await page.waitForTimeout(250); // let the 180ms background transition settle before the capture
   await journey.capture(page, "organizer-header-status-navigation");
 
-  // An Owner withdraws an approved claim from the same 社團認領 panel.
+  // An Owner withdraws an approved claim from the same 社團管理 panel.
   for (const summary of summaries) summary.role = "owner";
   await page.reload();
   await page.getByRole("heading", { name: "社團處置測試", exact: true }).waitFor();
   await page.getByRole("combobox", { name: "活動版本", exact: true }).selectOption("social-original");
-  await page.getByRole("button", { name: "社團認領", exact: true }).click();
+  await page.getByRole("button", { name: "社團管理", exact: true }).click();
   const revokePanel = page.locator('section[aria-labelledby="claim-revoke-heading"]');
   await revokePanel.getByRole("textbox", { name: "社團名稱", exact: true }).fill("北風");
   await revokePanel.getByRole("button", { name: "搜尋", exact: true }).click();
