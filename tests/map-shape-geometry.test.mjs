@@ -3,7 +3,7 @@ import test, { after } from "node:test";
 import { createServer } from "vite";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
-const { arcThroughPoints, assignShapeBox, circleThroughPoints, cloneShape, isSimplePolygon, pointInPolygon, polygonBounds, shapeInterior } = await vite.environments.ssr.runner.import("/app/map-shape-geometry.ts");
+const { arcThroughPoints, assignShapeBox, circleThroughPoints, cloneShape, isSimplePolygon, pointInPolygon, polygonBounds, rectInsidePolygon, shapeInterior } = await vite.environments.ssr.runner.import("/app/map-shape-geometry.ts");
 const { createBlankEventMapLayout, validateEventMapLayout, scaleEventMapLayout } = await vite.environments.ssr.runner.import("/app/event-map.ts");
 const { parseMapContributionDraftContent } = await vite.environments.ssr.runner.import("/app/map-contribution-draft.ts");
 const { applySelectionBoxes } = await vite.environments.ssr.runner.import("/app/map-layout-editor-selection.ts");
@@ -77,4 +77,10 @@ test("three clicks make an arc that bends toward the middle click and ends on th
   assert.equal(arcThroughPoints({ x: -10, y: 0 }, { x: 0, y: -10 }, { x: 10, y: 0 }, 5).length, 5, "the arc fits the vertices left");
   const circle = circleThroughPoints({ x: 10, y: 0 }, { x: 0, y: 10 }, { x: -10, y: 0 });
   assert.ok(onCircle(circle, 0, 0, 10) && isSimplePolygon(circle));
+});
+
+test("a box is inside a concave area only when no edge of the area cuts it", () => {
+  assert.equal(rectInsidePolygon({ x: 12, y: 40, width: 16, height: 60 }, concave), true);
+  assert.equal(rectInsidePolygon({ x: 12, y: 12, width: 60, height: 60 }, concave), false, "every corner may be inside while the missing corner cuts through");
+  assert.equal(rectInsidePolygon({ x: 0, y: 40, width: 16, height: 20 }, concave), false);
 });

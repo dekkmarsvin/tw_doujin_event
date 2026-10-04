@@ -50,6 +50,14 @@ export function pointInPolygon(point: MapPoint, points: readonly MapPoint[]): bo
   return inside;
 }
 
+/** Whether a box lies inside a simple polygon: every corner is inside and no
+ * edge of the polygon crosses or touches the box's outline. */
+export function rectInsidePolygon(rect: MapRect, points: readonly MapPoint[]): boolean {
+  const corners = [{ x: rect.x, y: rect.y }, { x: rect.x + rect.width, y: rect.y }, { x: rect.x + rect.width, y: rect.y + rect.height }, { x: rect.x, y: rect.y + rect.height }];
+  if (!corners.every((corner) => pointInPolygon(corner, points))) return false;
+  return !points.some((a, i) => corners.some((corner, j) => segmentsMeet(a, points[(i + 1) % points.length], corner, corners[(j + 1) % 4])));
+}
+
 function edgeDistance(point: MapPoint, a: MapPoint, b: MapPoint) {
   const dx = b.x - a.x, dy = b.y - a.y;
   const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / (dx * dx + dy * dy)));
