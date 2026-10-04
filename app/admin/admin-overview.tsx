@@ -7,7 +7,7 @@ import { ADMIN_REFRESH_INTERVAL, useAdminReviewQueue } from "./use-admin-review-
 import { useVisibleRefresh } from "./use-visible-refresh";
 import { useAdminSiteStatus } from "./use-admin-site-status";
 import { adminDate, publicationProgress, ServiceResults } from "./admin-service-status";
-import { groupAdminEvents, activityTime, candidateCalendar, candidateHref } from "./admin-event-groups";
+import { groupAdminEvents, activityTime, candidateCalendar, candidateHref, editionStandings, type EditionStanding } from "./admin-event-groups";
 import { STATUS_LABEL } from "../organizer/organizer-shared";
 import type { ReviewQueue } from "../circle-editor-client";
 import styles from "../circle-portal/portal.module.css";
@@ -73,7 +73,8 @@ function AdminDashboard({ queueState, mode }: { queueState?: ReturnType<typeof u
           {queueState?.loadError && <><p className={styles.error} role="alert">待審摘要更新失敗：{queueState.loadError}</p>
             {queueState.updatedAt && <p className={ui.status}>待審摘要更新於 {adminDate(queueState.updatedAt)}</p>}</>}
           {error && <><p className={styles.error} role="alert">活動內容更新失敗：{error}</p>{updatedAt && <p className={ui.status}>活動內容更新於 {adminDate(updatedAt)}</p>}</>}
-          <AdminEventList candidates={candidates} readFailed={!!error} queue={queue} today={today} />
+          <AdminEventList candidates={candidates} readFailed={!!error} queue={queue} today={today}
+            failures={new Map((data?.publicationActivities ?? []).filter(job => job.status === "failed").map(job => [job.candidateId, publicationProgress(job, true)] as const))} />
         </> : <section className={styles.card} aria-labelledby="tasks-heading"><h3 id="tasks-heading">需要處理</h3>
           {queueState?.loadError && <><p className={styles.error} role="alert">待審摘要更新失敗：{queueState.loadError}</p>
             {queueState.updatedAt && <p className={ui.status}>待審摘要更新於 {adminDate(queueState.updatedAt)}</p>}</>}
@@ -120,24 +121,28 @@ function AdminDashboard({ queueState, mode }: { queueState?: ReturnType<typeof u
   </>;
 }
 
-function AdminEventList({ candidates, readFailed, queue, today }: { candidates: OrganizerEventSummary[] | null; readFailed: boolean; queue: ReviewQueue | null | undefined; today: string }) {
+function AdminEventList({ candidates, readFailed, queue, today, failures }: { candidates: OrganizerEventSummary[] | null; readFailed: boolean; queue: ReviewQueue | null | undefined; today: string; failures: Map<string, string> }) {
   const groups = groupAdminEvents(candidates ?? [], PUBLISHED_EVENTS, today);
   // Groups arrive current first; ended ones sit under a divider once something precedes them.
   const firstEnded = groups.findIndex(group => activityTime(group.calendar, today) === "已結束");
   return <div className={ui.eventList} aria-label="完整活動總表">
     {!candidates && <p>{readFailed ? "無法取得工作版次。" : "工作版次載入中…"}</p>}
-    {groups.map((group, index) => <Fragment key={group.id}>{index === firstEnded && index > 0 && <p className={ui.groupDivider}>已結束</p>}<article className={`${styles.card} ${ui.eventRow}`} aria-label={group.name}>
+    {groups.map((group, index) => {
+      const standings = editionStandings(group);
+      const live = group.editions.find(item => standings.get(item.id) === "live");
+      const shown = group.editions.filter(item => standings.get(item.id) !== "earlier");
+      const earlier = group.editions.filter(item => standings.get(item.id) === "earlier");
+      const edition = (item: OrganizerEventSummary) => <EditionItem key={item.id} item={item} groupName={group.name} standing={standings.get(item.id)!} failure={failures.get(item.id)} />;
+      return <Fragment key={group.id}>{index === firstEnded && index > 0 && <p className={ui.groupDivider}>已結束</p>}<article className={`${styles.card} ${ui.eventRow}`} aria-label={group.name}>
       <header><h3>{group.name}</h3><p>{group.calendar.label}{activityTime(group.calendar, today) !== group.calendar.label && ` · ${activityTime(group.calendar, today)}`}</p>{group.published?.venue && <p>{group.published.venue}</p>}</header>
       <div className={ui.eventVersions}>
         <section aria-label="目前公開內容"><h4>目前公開內容</h4>{group.published ? <>
-          <p>已公開</p><p>{group.calendar.label}</p><a href={`/events/${encodeURIComponent(group.eventId!)}/`}>查看公開頁</a>
+          <p>已公開{live?.edition ? ` · 第 ${live.edition} 版` : ""}</p><p>{group.calendar.label}</p><a href={`/events/${encodeURIComponent(group.eventId!)}/`}>查看公開頁</a>
         </> : <p>尚未公開</p>}</section>
-        <section aria-label="工作版次"><h4>工作版次</h4>{group.editions.length ? <ul className={ui.editions}>{group.editions.map(item => <li key={item.id}>
-          <strong>{item.edition ? `第 ${item.edition} 版` : "版次未提供"} · {STATUS_LABEL[item.status]}</strong>
-          {item.tentativeName !== group.name && <span>{item.tentativeName}</span>}
-          <span>{candidateCalendar(item).label}</span>
-          <div className={ui.detailActions}><a href={candidateHref(item.id)}>開啟工作區</a><a href={candidateHref(item.id, true)}>審核與發布</a></div>
-        </li>)}</ul> : <p>{!candidates ? readFailed ? "無法取得工作版次。" : "載入中…" : "無工作區"}</p>}</section>
+        <section aria-label="工作版次"><h4>工作版次</h4>{group.editions.length ? <>
+          {shown.length > 0 && <ul className={ui.editions}>{shown.map(edition)}</ul>}
+          {earlier.length > 0 && <details className={ui.earlierEditions}><summary>較早版本 {earlier.length} 筆</summary><ul className={ui.editions}>{earlier.map(edition)}</ul></details>}
+        </> : <p>{!candidates ? readFailed ? "無法取得工作版次。" : "載入中…" : "無工作區"}</p>}</section>
       </div>
       <div className={ui.eventWork}><p className={ui.eventCounts}><span>內容待審 {candidates ? group.editions.filter(item => item.status === "submitted").length : "—"}</span>
         <span>認領待審 {queue?.claimCounts ? queue.claimCounts.find(item => item.eventId === group.eventId)?.pending ?? 0 : "—"}</span>
@@ -147,6 +152,23 @@ function AdminEventList({ candidates, readFailed, queue, today }: { candidates: 
         {!!queue?.claimCounts?.find(item => item.eventId === group.eventId)?.pending && <a href={adminHref("circles", { view: "claims", event: group.eventId })}>審核認領</a>}
         {!!queue?.mapDrafts.find(item => item.eventId === group.eventId)?.submitted && <a href={adminHref("events", { view: "maps", event: group.eventId })}>查看地圖投稿</a>}
       </div>}</div>
-    </article></Fragment>)}
+    </article></Fragment>;
+    })}
   </div>;
+}
+
+const STANDING_LABEL: Partial<Record<EditionStanding, string>> = { live: "公開中", earlier: "舊版" };
+
+function EditionItem({ item, groupName, standing, failure }: { item: OrganizerEventSummary; groupName: string; standing: EditionStanding; failure?: string }) {
+  const label = item.edition ? `第 ${item.edition} 版` : "版次未提供";
+  // Abandoned keeps its own words; superseded published editions read as 舊版.
+  const status = (item.status === "abandoned" ? undefined : STANDING_LABEL[standing]) ?? STATUS_LABEL[item.status];
+  return <li className={ui[`edition_${standing}`]}>
+    {standing === "earlier" ? <strong>{label} · {status}</strong> : <strong>{label} <span className={ui.editionStatus}>{status}</span></strong>}
+    {item.tentativeName !== groupName && <span>{item.tentativeName}</span>}
+    {standing !== "earlier" && <span>{candidateCalendar(item).label}</span>}
+    {standing === "failed" && failure && <span>{failure}</span>}
+    <div className={ui.detailActions}>{standing === "failed" ? <><a href={candidateHref(item.id, true)}>查看處理方式</a><a href={candidateHref(item.id)}>開啟工作區</a></>
+      : <><a href={candidateHref(item.id)}>開啟工作區</a>{standing !== "earlier" && <a href={candidateHref(item.id, true)}>審核與發布</a>}</>}</div>
+  </li>;
 }

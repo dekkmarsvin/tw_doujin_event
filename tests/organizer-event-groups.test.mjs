@@ -3,7 +3,7 @@ import test, { after } from "node:test";
 import { createServer } from "vite";
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const { groupOrganizerEvents, latestOrganizerEdition } = await vite.environments.ssr.runner.import("/app/organizer-event-groups.ts");
-const { groupAdminEvents, candidateCalendar, activityTime, candidateHref } = await vite.environments.ssr.runner.import("/app/admin/admin-event-groups.ts");
+const { groupAdminEvents, candidateCalendar, activityTime, candidateHref, editionStandings } = await vite.environments.ssr.runner.import("/app/admin/admin-event-groups.ts");
 after(() => vite.close());
 const event = (id, eventId, edition, createdAt, updatedAt = createdAt) => ({ id, eventId, edition, createdAt, updatedAt, tentativeName: id, version: 20, role: "owner", status: "draft", workspaceMode: "binder" });
 test("groups by event identity, picks newest edition rather than last edited candidate", () => {
@@ -39,6 +39,16 @@ test("Admin index preserves public dates beside exact workspace editions and pub
   assert.equal(groups.find(group => group.eventId === "b").editions.length, 0);
   assert.equal(candidateHref(amend.id, true), "/organizer?candidate=amend-old&section=review", "a selected older edition is not rewritten to the newest one");
   assert.equal(candidateHref(amend.id), "/organizer?candidate=amend-old");
+});
+
+test("Admin index marks only the newest published edition of a public activity as served", () => {
+  const editions = [{ ...event("draft", "a", 4, 4), status: "draft" }, { ...event("served", "a", 3, 3), status: "published" },
+    { ...event("abandoned", "a", 2, 2), status: "abandoned" }, { ...event("old", "a", 1, 1), status: "published" }];
+  const standings = group => Object.fromEntries(editionStandings(group));
+  const [publicGroup] = groupAdminEvents(editions, [{ id: "a", name: "a", eventEndsAt: "2026-12-01T23:59:59+08:00", days: [{ dateLabel: "2026-12-01" }] }], "2026-10-04");
+  assert.deepEqual(standings(publicGroup), { draft: "pending", served: "live", abandoned: "earlier", old: "earlier" });
+  const [unlisted] = groupAdminEvents(editions, [], "2026-10-04");
+  assert.equal(standings(unlisted).served, "current", "without a public page the newest published edition is not claimed as served");
 });
 
 test("Admin activity timing uses Taipei calendar dates without inventing an empty draft date", () => {

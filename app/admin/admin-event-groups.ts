@@ -25,6 +25,18 @@ export function candidateHref(id: string, review = false) {
   return `/organizer?candidate=${encodeURIComponent(id)}${review ? "&section=review" : ""}`;
 }
 
+export type EditionStanding = "live" | "current" | "pending" | "failed" | "earlier";
+
+/** An edition reaches published only after production is verified, so the newest
+ * published edition of a public activity is the one being served. Without a public
+ * page that edition stays visible but unconfirmed; older and abandoned ones fold away. */
+export function editionStandings(group: AdminEventGroup) {
+  const newest = group.editions.find(item => item.status === "published");
+  return new Map<string, EditionStanding>(group.editions.map(item => [item.id, item === newest ? group.published ? "live" : "current"
+    : item.status === "published" || item.status === "abandoned" ? "earlier"
+    : item.status === "failed" ? "failed" : "pending"]));
+}
+
 /** Published dates stay attached to the public edition while each workspace keeps its own dates. */
 export function groupAdminEvents(candidates: readonly OrganizerEventSummary[], published: readonly EventDefinition[], today: string): AdminEventGroup[] {
   const groups = new Map<string, AdminEventGroup>();
