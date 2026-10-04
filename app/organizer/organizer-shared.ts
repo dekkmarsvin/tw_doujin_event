@@ -55,8 +55,10 @@ export function organizerSectionStateLabel(
   if (status === "submitted") return "審閱中";
   if (status === "approved") return "等待發布";
   if (status === "publishing") return "發布中";
+  // Who may press 送出審閱 is the panel's to say; the rail only reports that
+  // this version passed, which is true whoever is reading it.
   if ((status === "draft" || status === "changes_requested")
-    && !detail.workspace.readiness.blockers.some((blocker) => blocker.code === "validation_required")) return "可送審";
+    && !detail.workspace.readiness.blockers.some((blocker) => blocker.code === "validation_required")) return "檢查通過";
   return READINESS_LABEL[item.state];
 }
 export const STATUS_LABEL: Record<OrganizerEventSummary["status"], string> = {

@@ -274,7 +274,7 @@ try {
   await openSection(owner, /^檢查與發布/);
   await owner.getByText("0 項必須修正", { exact: true }).waitFor();
   // Passing the check is visible on the rail even though the section completes only on publication.
-  await owner.getByRole("group", { name: "活動項目" }).getByRole("button", { name: /^檢查與發布/ }).getByText("可送審", { exact: true }).waitFor();
+  await owner.getByRole("group", { name: "活動項目" }).getByRole("button", { name: /^檢查與發布/ }).getByText("檢查通過", { exact: true }).waitFor();
   await journey.capture(owner,"amendment-real-d1-ready-to-submit");
   await owner.getByRole("button", { name: "建立預覽", exact: true }).click();
   await owner.locator('[data-slot-code="S02"]').click();

@@ -177,8 +177,8 @@ test("the 檢查與發布 row shows passing the check and each later stage befor
     return organizerSectionStateLabel({ event: { status }, workspace: { readiness } }, readiness.sections.find((section) => section.id === "review"));
   };
   assert.equal(label("draft", null), "可開始");
-  assert.equal(label("draft"), "可送審");
-  assert.equal(label("changes_requested"), "可送審");
+  assert.equal(label("draft"), "檢查通過");
+  assert.equal(label("changes_requested"), "檢查通過");
   assert.equal(label("submitted"), "審閱中");
   assert.equal(label("approved"), "等待發布");
   assert.equal(label("publishing"), "發布中");
