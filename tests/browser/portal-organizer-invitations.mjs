@@ -135,6 +135,78 @@ try {
   await page.getByRole("heading", { name: "成員與權限", exact: true }).waitFor({ state: "hidden" });
   assert.equal(await page.getByText("找不到活動。", { exact: true }).count(), 0);
   await journey.capture(page, "owner-leaves-activity");
+  await page.close();
+
+  // The account-management link names the candidate and its members surface.
+  // Both a remembered candidate and the saved content section must yield to it,
+  // including after the existing email login and session expiry.
+  const memberPath = "/organizer?candidate=invitation-fixture&section=members";
+  const memberNow = Date.now(), week = 7 * 24 * 60 * 60 * 1000;
+  let signedIn = false, allowed = true, requestedLink, memberExpiresAt = memberNow + week;
+  const readCandidates = [];
+  const memberSession = () => ({ email: "member-manager@example.test", isAdmin: true, isMapContributor: false, hasOrganizerAccess: true, expiresAt: memberExpiresAt });
+  const memberDetail = { ...detail, event: { ...detail.event, role: "admin", status: "draft" }, publicationAvailable: false,
+    workspace: { ...detail.workspace, resume: { ...detail.workspace.resume, section: "event" } } };
+  const members = await journey.page({ url: `${base}${memberPath}`, routes: async page => {
+    await page.clock.install({ time: memberNow });
+    await page.addInitScript(() => localStorage.setItem("organizer.resumeCandidate:member-manager@example.test", "other-candidate"));
+    await page.route("https://challenges.cloudflare.com/turnstile/**", route => route.fulfill({ contentType: "text/javascript", body: `
+      window.turnstile = { render: (host, options) => { setTimeout(() => options.callback("journey-token")); return "widget"; }, remove: () => {} };
+      window.__ff47TurnstileReady();` }));
+    await page.route("**/api/**", route => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === "/api/auth/session") return route.fulfill({ status: signedIn ? 200 : 401, json: signedIn ? memberSession() : { error: "尚未登入。" } });
+      if (path === "/api/auth/config") return route.fulfill({ json: { turnstileSitekey: "journey-sitekey" } });
+      if (path === "/api/auth/request-link") { requestedLink = route.request().postDataJSON(); return route.fulfill({ status: 202, json: { ok: true } }); }
+      if (path === "/api/auth/verify") { signedIn = true; return route.fulfill({ json: memberSession() }); }
+      if (path === "/api/organizer/events") return route.fulfill({ json: { events: [
+        ...(allowed ? [memberDetail.event] : []), { ...memberDetail.event, id: "other-candidate", tentativeName: "另一個工作區" },
+      ] } });
+      if (path.startsWith("/api/organizer/events/")) {
+        const candidateId = path.split("/")[4]; readCandidates.push(candidateId);
+        return route.fulfill(candidateId === "invitation-fixture" && allowed ? { json: memberDetail } : { status: 404, json: { error: "找不到活動。" } });
+      }
+      throw new Error(`Unexpected member destination request: ${path}`);
+    });
+  } });
+  const requestMembersLink = async () => {
+    await members.getByLabel("Email", { exact: true }).fill("member-manager@example.test");
+    await members.waitForFunction(() => [...document.querySelectorAll("button")].some(button => button.textContent === "寄出登入連結" && !button.disabled));
+    await members.getByRole("button", { name: "寄出登入連結", exact: true }).click();
+    await members.getByText("若帳號可使用，登入連結已寄出。", { exact: true }).waitFor();
+    assert.equal(requestedLink.audience, "organizer");
+    assert.deepEqual(requestedLink.destination, { candidate: "invitation-fixture", section: "members" });
+    await members.goto(`${base}/organizer?${new URLSearchParams({ ...requestedLink.destination, login: "member-login-token" })}`);
+    await members.getByRole("heading", { name: "成員與權限", exact: true }).waitFor();
+    assert.equal(await members.getByRole("textbox", { name: "協作者 Email", exact: true }).isEnabled(), true);
+    assert.equal(new URL(members.url()).searchParams.get("candidate"), "invitation-fixture");
+    assert.equal(new URL(members.url()).searchParams.get("section"), "members");
+    assert.equal(new URL(members.url()).searchParams.has("login"), false);
+    assert.ok(readCandidates.length > 0 && readCandidates.every(candidate => candidate === "invitation-fixture"), "no fallback to the remembered candidate");
+  };
+  await requestMembersLink();
+  await journey.capture(members, "members-exact-destination-after-login");
+  await members.clock.fastForward(week);
+  await members.getByText("登入已到期，請重新登入。", { exact: true }).waitFor();
+  assert.equal(await members.getByRole("heading", { name: "成員與權限", exact: true }).count(), 0);
+  memberExpiresAt += week;
+  await requestMembersLink();
+  await journey.capture(members, "members-exact-destination-after-expiry");
+  await members.setViewportSize({ width: 390, height: 844 });
+  await members.getByText("成員管理請改用桌機。請在桌機開啟同一個連結，接續這個工作區。", { exact: true }).waitFor();
+  assert.equal(await members.getByRole("textbox", { name: "協作者 Email", exact: true }).count(), 0);
+  assert.equal(new URL(members.url()).searchParams.get("candidate"), "invitation-fixture");
+  assert.equal(new URL(members.url()).searchParams.get("section"), "members");
+  await journey.capture(members, "members-exact-destination-mobile");
+  await members.setViewportSize({ width: 1440, height: 900 });
+  await members.getByRole("heading", { name: "成員與權限", exact: true }).waitFor();
+  allowed = false;
+  await members.reload();
+  await members.getByText("找不到信件指定的工作區，或此帳號已無權限。請從活動列表選擇可使用的活動。", { exact: true }).waitFor();
+  assert.equal(await members.getByRole("heading", { name: "成員與權限", exact: true }).count(), 0);
+  assert.ok(readCandidates.every(candidate => candidate === "invitation-fixture"), "missing explicit members target never opens another candidate");
+  await journey.capture(members, "members-exact-destination-unavailable");
+  await members.close();
   await journey.finish();
 } catch (error) {
   await journey.abort(error);

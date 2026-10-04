@@ -26,7 +26,7 @@ test("Admin precise routes take precedence over legacy event links while old des
   assert.equal(route("/admin?event=sample").view, "claims");
   assert.equal(route("/admin?section=events&view=maps&event=sample&draft=chosen").draft, "chosen");
   assert.equal(route("/admin?section=events&view=maps&event=sample").view, "maps");
-  for (const [hash, section, view] of [["#overview", "overview", ""], ["#admin", "circles", "claims"], ["#map-review", "events", "maps"], ["#takedown", "circles", "search"], ["#accounts", "accounts", ""], ["#review-notifications", "notifications", ""]]) {
+  for (const [hash, section, view] of [["#overview", "overview", ""], ["#admin", "circles", "claims"], ["#map-review", "events", "maps"], ["#takedown", "circles", "search"], ["#accounts", "accounts", "admins"], ["#review-notifications", "notifications", ""]]) {
     const result = route(`/admin?event=sample${hash}`);
     assert.deepEqual([result.section, result.view, result.event], [section, view, "sample"]);
   }
@@ -34,6 +34,9 @@ test("Admin precise routes take precedence over legacy event links while old des
   assert.equal(route("/admin?section=events&view=list").unavailable, true);
   const search = route(adminHref("circles", { view: "search", event: "sample", q: "測試社團" }));
   assert.equal(search.q, "測試社團");
+  const account = route(adminHref("accounts", { view: "search", email: "user@example.test" }));
+  assert.equal(account.view, "search");
+  assert.equal(account.email, "user@example.test");
 });
 after(() => vite.close());
 
@@ -198,6 +201,28 @@ test("organizer login preserves an unselected application panel without relaxing
   }
 });
 
+test("organizer member destinations survive emailed login with a fixed candidate selector", async () => {
+  assert.equal(notificationParameters({ candidate: "candidate-one", section: "members", returnUrl: "https://evil.test", email: "other@example.test" }, "organizer").toString(), "candidate=candidate-one&section=members");
+  assert.equal(notificationParameters({ candidate: "candidate-one", section: "other-panel" }, "organizer").toString(), "candidate=candidate-one");
+  const previousWindow = globalThis.window;
+  try {
+    globalThis.window = { location: { search: "?candidate=candidate-one&section=members" } };
+    await client.requestLoginLink("organizer@example.test", "solved", "organizer");
+    assert.deepEqual(JSON.parse(captured.at(-1).init.body).destination, { candidate: "candidate-one", section: "members" });
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
+test("admin account email continuation is namespaced and uses existing email normalization", () => {
+  const entry = new URL(adminLoginEntry(`${ORIGIN}/admin?section=accounts&view=search&email=USER%40Example.test`), ORIGIN);
+  assert.equal(entry.searchParams.get("adminEmail"), "user@example.test");
+  assert.equal(entry.searchParams.has("email"), false);
+  assert.equal(adminLoginDestination(entry.searchParams), "/admin?section=accounts&view=search&email=user%40example.test");
+  assert.equal(notificationParameters({ admin: "1", adminEmail: "//evil.test" }, "circle").has("adminEmail"), false);
+  assert.equal(notificationParameters({ adminEmail: "user@example.test" }, "organizer").has("adminEmail"), false);
+});
+
 test("JSON and map background API refusals expire a session only on 401, even without JSON", async () => {
   const originalWindow = globalThis.window;
   const window = new EventTarget();
@@ -321,6 +346,18 @@ test("a client that names no event is left alone, which is the single-event depl
   client.setPortalEventId("");
   await client.listMyClaims();
   assert.equal(captured[0].path, "/api/claims");
+});
+
+test("admin account lookup and map grant actions remain global when another panel chose an event", async () => {
+  try {
+    client.setPortalEventId("ff48");
+    await client.readAdminAccountDetail("target@example.com");
+    assert.equal(captured[0].path, "/api/admin/accounts?email=target%40example.com");
+    captured = [];
+    await client.manageMapContributor("target@example.com", "grant");
+    assert.equal(captured[0].path, "/api/admin/map-contributors");
+    assert.deepEqual(JSON.parse(captured[0].init.body), { email: "target@example.com", action: "grant" });
+  } finally { client.setPortalEventId(""); }
 });
 
 test("the admin review queue uses its local event filter and never inherits another panel's event", async () => {

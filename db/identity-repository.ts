@@ -375,6 +375,20 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return id;
   }
 
+  async function getAccountForAdmin(email: string) {
+    await ensureTables();
+    return database.prepare(
+      `SELECT a.id, a.email, a.created_at, a.disabled_at, a.deletion_started_at,
+              EXISTS (SELECT 1 FROM admins WHERE email = a.email) AS is_admin,
+              m.granted_at AS map_granted_at, m.revoked_at AS map_revoked_at, m.suspended_at AS map_suspended_at
+       FROM accounts a LEFT JOIN map_contributor_grants m ON m.account_id = a.id
+       WHERE a.email = ?1`,
+    ).bind(email).first<{
+      id: string; email: string; created_at: number; disabled_at: number | null; deletion_started_at: number | null;
+      is_admin: number; map_granted_at: number | null; map_revoked_at: number | null; map_suspended_at: number | null;
+    }>();
+  }
+
   async function createSession(accountId: string, now: number, expiresAt: number, id: string) {
     await ensureTables();
     const result = await database.prepare(
@@ -723,6 +737,15 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     const result = await database.prepare(
       `SELECT * FROM circle_claims WHERE account_id = ?1 AND event_id = ?2 ORDER BY created_at DESC`,
     ).bind(accountId, eventId).all<ClaimRow>();
+    return result.results;
+  }
+
+  async function listAccountClaimsForAdmin(accountId: string) {
+    await ensureTables();
+    const result = await database.prepare(
+      `SELECT id, event_id, circle_id, circle_name_at_claim, status, created_at
+       FROM circle_claims WHERE account_id = ?1 ORDER BY created_at DESC, id`,
+    ).bind(accountId).all<Pick<ClaimRow, "id" | "event_id" | "circle_id" | "circle_name_at_claim" | "status" | "created_at">>();
     return result.results;
   }
 
@@ -2040,6 +2063,19 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       id: string; tentative_name: string; event_id: string | null; status: OrganizerCandidateStatus;
       current_version: number; updated_at: number; last_updated_role: string; role: OrganizerRole;
       workspace_mode: "guided" | "binder"; publication_operation: "CREATE" | "AMEND"; created_at: number; edition: number;
+    }>();
+    return rows.results;
+  }
+
+  async function listAccountOrganizerGrantsForAdmin(accountId: string) {
+    await ensureTables();
+    const rows = await database.prepare(
+      `SELECT c.id, c.tentative_name, c.event_id, ${organizerCandidateEdition} AS edition, g.role
+       FROM organizer_event_candidates c JOIN organizer_event_grants g ON g.candidate_id = c.id
+       WHERE g.account_id = ?1 AND g.revoked_at IS NULL
+       ORDER BY c.updated_at DESC, c.id`,
+    ).bind(accountId).all<{
+      id: string; tentative_name: string; event_id: string | null; edition: number; role: OrganizerRole;
     }>();
     return rows.results;
   }
@@ -3674,10 +3710,10 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     ensureTables, writeAudit, getOrganizerModerationEventId, getOrganizerModerationCandidateForEvent,
     listAdmins, isAdminEmail, addAdmin, removeAdmin,
     countLoginTokensSince, createLoginToken, deleteLoginToken, consumeLoginToken, consumeLoginTokenDetails,
-    upsertAccount, createSession, getSession, revokeSession, disableAccount, beginAccountDeletion, isAccountWritable, deleteAccount,
+    upsertAccount, getAccountForAdmin, createSession, getSession, revokeSession, disableAccount, beginAccountDeletion, isAccountWritable, deleteAccount,
     listSoleOwnerOrganizerCandidates,
     listHostedThumbnailKeysForAccount, listHostedThumbnailKeys, listUnsubmittedMapDraftObjectKeysForAccount,
-    createClaim, getClaim, withdrawClaim, listClaimsForAccount, listClaimScopesForAccount, listClaimsByStatus, listPendingEventClaims, listAdminReviewSummary, listPendingAdminClaims,
+    createClaim, getClaim, withdrawClaim, listClaimsForAccount, listAccountClaimsForAdmin, listClaimScopesForAccount, listClaimsByStatus, listPendingEventClaims, listAdminReviewSummary, listPendingAdminClaims,
     hasVerifiedClaim, ownsCircle, markClaimVerified, setClaimStatus, recordChallengeAttempt,
     getOverride, listCircleClaimsForAdmin, listCircleModerationHistory,
     putOverride, deleteOverride, takedownOverride, listLiveOverrides, getPublicOverride, setPostEventHidden,
@@ -3694,7 +3730,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     listOrganizerReferenceRecords, createOrganizerReferenceRecord, completeOrganizerVenueAddress,
     organizerRole, hasOrganizerAccess, createOrganizerCandidate, acceptOrganizerInvitations,
     countOrganizerInvitationsSince,
-    listOrganizerCandidatesForAccount, getOrganizerCandidate, listOrganizerCandidateRevisions,
+    listOrganizerCandidatesForAccount, listAccountOrganizerGrantsForAdmin, getOrganizerCandidate, listOrganizerCandidateRevisions,
     getOrganizerWorkspace, saveOrganizerWorkspacePreference, completeOrganizerOnboarding, markOrganizerValidated,
     manageOrganizerCollaborator, manageOrganizerOwner,
     listOrganizerMapDrafts, getOrganizerMapDraft, createOrganizerMapDraft, saveOrganizerMapDraft,

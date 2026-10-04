@@ -13,6 +13,8 @@ import type { MapAuthoringState } from "./map-authoring-state";
 import type { NotificationPreferences } from "./review-notifications";
 import type { AdminCircleDetail } from "./admin-circle-detail";
 export type { AdminCircleDetail, AdminCircleClaim, AdminCircleHistory } from "./admin-circle-detail";
+import type { AdminAccountDetailResponse } from "./admin-account-detail";
+export type { AdminAccountDetailResponse, AdminAccountDetail, AdminAccountOrganizerGrant, AdminAccountClaim } from "./admin-account-detail";
 
 export function readAccountNotificationPreferences() {
   return call<AccountNotificationPreferences>("/api/account/notification-preferences");
@@ -323,6 +325,16 @@ export function uploadCatalogImage(circleId: string, file: Blob, preview: Blob, 
 
 export function disableAccount(email: string) {
   return call<{ ok: true }>("/api/admin/accounts", { method: "POST", body: JSON.stringify({ email }) });
+}
+
+export function readAdminAccountDetail(email: string) {
+  return call<AdminAccountDetailResponse>(`/api/admin/accounts?email=${encodeURIComponent(email)}`, undefined, "");
+}
+
+export function manageMapContributor(email: string, action: "grant" | "revoke" | "suspend") {
+  return call<{ ok: true; result: "granted" | "revoked" | "suspended" }>(
+    "/api/admin/map-contributors", { method: "POST", body: JSON.stringify({ email, action }) }, "",
+  );
 }
 
 export type MapDraftStatus = "draft" | "submitted" | "changes_requested" | "approved" | "rejected" | "exported" | "withdrawn";

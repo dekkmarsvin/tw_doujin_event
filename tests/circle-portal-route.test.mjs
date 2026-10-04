@@ -53,6 +53,7 @@ const TABLES = [
   "organizer_event_grants",
   "organizer_event_revisions",
   "organizer_event_candidates",
+  "map_contributor_grants",
   "login_tokens",
   "sessions",
   "accounts",
@@ -403,6 +404,137 @@ test("an admin can disable a non-admin account and revoke its live session", asy
   assert.equal((await handlers.adminDisableAccount(post("/api/admin/accounts", { email: "disabled-route@example.com" }, admin))).status, 200);
   assert.equal((await handlers.session(get("/api/auth/session", target))).status, 401);
   assert.equal((await handlers.adminDisableAccount(post("/api/admin/accounts", { email: "admin@example.com" }, admin))).status, 409);
+});
+
+test("admin account detail is private, normalizes Email and leaves missing or unrelated accounts untouched", async () => {
+  const admin = await signIn("admin@example.com");
+  const stranger = await signIn("account-reader@example.com");
+  const path = "/api/admin/accounts?email=absent%40example.com&event=not-served";
+  assert.equal((await handlers.adminAccountDetail(get(path))).status, 401);
+  assert.equal((await handlers.adminAccountDetail(get(path, stranger))).status, 403);
+  assert.equal((await handlers.adminAccountDetail(get("/api/admin/accounts?email=invalid", admin))).status, 400);
+  const mailCount = sent.length;
+  const missing = await handlersForEvent("not-served").adminAccountDetail(get(path, admin));
+  assert.equal(missing.status, 200);
+  assert.equal(missing.headers.get("cache-control"), "no-store");
+  assert.deepEqual(await missing.json(), { email: "absent@example.com", account: null });
+  assert.equal((await database.prepare("SELECT COUNT(*) AS count FROM accounts WHERE email = 'absent@example.com'").first()).count, 0);
+  assert.equal((await database.prepare("SELECT COUNT(*) AS count FROM map_contributor_grants").first()).count, 0);
+  assert.equal(sent.length, mailCount);
+
+  const response = await handlers.adminAccountDetail(get("/api/admin/accounts?email=%20ACCOUNT-READER%40EXAMPLE.COM%20", admin));
+  const detail = await response.json();
+  assert.equal(detail.email, "account-reader@example.com");
+  assert.equal(detail.account.email, detail.email);
+  assert.equal(detail.account.status, "active");
+  assert.equal(detail.account.isAdmin, false);
+  assert.deepEqual(detail.account.mapContributor, { status: "none", grantedAt: null, revokedAt: null, suspendedAt: null });
+  assert.deepEqual(detail.account.organizerGrants, []);
+  assert.deepEqual(detail.account.claims, []);
+  assert.equal((await (await handlers.adminAccountDetail(get("/api/admin/accounts?email=admin%40example.com", admin))).json()).account.isAdmin, true);
+
+  const unavailable = createCirclePortalHandlers({ ...handlerOptions, repository: {
+    ...repository, getAccountForAdmin: async () => { throw new Error("D1 unavailable"); },
+  } });
+  await assert.rejects(unavailable.adminAccountDetail(get(path, admin)), /D1 unavailable/,
+    "a failed read must reach the existing route guard rather than appear as a missing account");
+});
+
+test("admin account detail shows the target's actual grants, editions and all scoped claim results", async () => {
+  const admin = await signIn("admin@example.com");
+  const email = "account-relations@example.com";
+  const targetId = await repository.upsertAccount(email, clock);
+  const otherId = await repository.upsertAccount("other-account@example.com", clock);
+  const adminId = await repository.upsertAccount("admin@example.com", clock);
+  const candidates = [
+    { id: "target-owner", eventId: "ff47", role: "owner", accountId: targetId, operation: "CREATE" },
+    { id: "target-editor", eventId: "ff47", role: "editor", accountId: targetId, operation: "AMEND" },
+    { id: "target-revoked", eventId: null, role: "owner", accountId: targetId, revokedAt: clock },
+    { id: "caller-only", eventId: "ff48", role: "owner", accountId: adminId },
+    { id: "target-invitation", eventId: null },
+  ];
+  for (const [index, candidate] of candidates.entries()) {
+    await repository.createOrganizerCandidate({ id: candidate.id, tentativeName: "同名工作區", ownerEmail: email,
+      createdByAccountId: adminId, draftJson: '{}', now: clock + index });
+    await database.prepare("UPDATE organizer_event_candidates SET event_id = ?2, publication_operation = ?3 WHERE id = ?1")
+      .bind(candidate.id, candidate.eventId, candidate.operation ?? "CREATE").run();
+    if (candidate.accountId) await database.prepare(`INSERT INTO organizer_event_grants
+      (id, candidate_id, account_id, role, granted_by, granted_at, revoked_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`)
+      .bind(`grant-${candidate.id}`, candidate.id, candidate.accountId, candidate.role, "admin@example.com", clock, candidate.revokedAt ?? null).run();
+  }
+  const claims = [
+    { id: "target-pending", eventId: "ff47", circleId: "ff47-site", status: "pending" },
+    { id: "target-verified", eventId: "ff48", circleId: "ff47-social", status: "verified" },
+    { id: "target-rejected", eventId: "ff47", circleId: "removed-circle", status: "rejected" },
+    { id: "target-revoked-claim", eventId: "retired", circleId: "past-circle", status: "revoked" },
+    { id: "target-withdrawn", eventId: "ff48", circleId: "ff47-domain", status: "withdrawn" },
+  ];
+  const create = (claim, accountId) => repository.createClaim({ ...claim, accountId,
+    circleNameKey: claim.circleId, circleNameAtClaim: `原社團名-${claim.id}`, sourceRowAtClaim: null,
+    method: "admin", targetUrl: null, challengeTokenHash: null, challengeExpiresAt: null,
+    evidenceUrl: "https://private.example/evidence", evidenceNote: "私人佐證", now: clock });
+  for (const claim of claims) await create(claim, targetId);
+  await create({ id: "other-pending", eventId: "ff47", circleId: "ff47-site", status: "pending" }, otherId);
+
+  const scoped = handlersForEvent("ff48");
+  const response = await scoped.adminAccountDetail(get(`/api/admin/accounts?email=${encodeURIComponent(email)}&event=ff48`, admin));
+  assert.equal(response.status, 200);
+  const { account } = await response.json();
+  assert.deepEqual(account.organizerGrants.map(grant => [grant.candidateId, grant.role, grant.eventId, grant.edition]), [
+    ["target-editor", "editor", "ff47", 2], ["target-owner", "owner", "ff47", 1],
+  ]);
+  assert.ok(account.organizerGrants.every(grant => grant.name === "同名工作區"
+    && grant.membersHref === `/organizer?candidate=${grant.candidateId}&section=members`));
+  assert.deepEqual(account.claims.map(claim => claim.id).sort(), claims.map(claim => claim.id).sort());
+  for (const claim of account.claims) {
+    const source = claims.find(row => row.id === claim.id);
+    assert.equal(claim.eventId, source.eventId);
+    assert.equal(claim.circleId, source.circleId);
+    assert.equal(claim.circleName, `原社團名-${claim.id}`);
+    assert.equal(claim.status, source.status);
+    assert.equal(claim.reviewHref, source.status === "pending"
+      ? `/admin?section=circles&view=claims&event=${source.eventId}&claim=${source.id}` : null);
+    assert.equal(claim.detailHref, CIRCLES[source.circleId] && source.eventId !== "retired"
+      ? `/admin?section=circles&view=search&event=${source.eventId}&circle=${source.circleId}` : null);
+  }
+  assert.doesNotMatch(JSON.stringify(account), /私人佐證|private\.example|other-pending|caller-only|target-invitation/);
+  assert.equal((await database.prepare("SELECT COUNT(*) AS count FROM organizer_event_grants").first()).count, 4,
+    "reading does not accept pending invitations or add grants");
+});
+
+test("admin account detail distinguishes map grant states and existing disabled or deleting restrictions", async () => {
+  const admin = await signIn("admin@example.com");
+  const email = "account-map@example.com";
+  await repository.upsertAccount(email, clock);
+  const read = async (target = email) => (await (await handlers.adminAccountDetail(
+    get(`/api/admin/accounts?email=${encodeURIComponent(target)}`, admin))).json()).account;
+  const write = (action, target = email) => handlers.adminManageMapContributor(post("/api/admin/map-contributors", { email: target, action }, admin));
+  assert.equal((await read()).mapContributor.status, "none");
+  for (const [action, expected] of [["grant", "active"], ["revoke", "revoked"], ["grant", "active"], ["suspend", "suspended"], ["grant", "active"]]) {
+    assert.equal((await write(action)).status, 200);
+    assert.equal((await read()).mapContributor.status, expected);
+  }
+  assert.equal((await write("grant")).status, 409);
+  await repository.addAdmin(email, "admin@example.com", clock);
+  assert.equal((await read()).isAdmin, true);
+  assert.equal((await handlers.adminDisableAccount(post("/api/admin/accounts", { email }, admin))).status, 409);
+  await repository.removeAdmin(email);
+  assert.equal((await handlers.adminDisableAccount(post("/api/admin/accounts", { email }, admin))).status, 200);
+  const disabled = await read();
+  assert.equal(disabled.status, "disabled");
+  assert.equal(disabled.disabledAt, clock);
+  assert.equal(disabled.isAdmin, false);
+  for (const action of ["grant", "revoke", "suspend"]) assert.equal((await write(action)).status, 404);
+  assert.equal((await read()).status, "disabled");
+
+  const deletingEmail = "account-deleting@example.com";
+  const deletingId = await repository.upsertAccount(deletingEmail, clock);
+  await repository.beginAccountDeletion({ accountId: deletingId, email: deletingEmail, now: clock });
+  const deleting = await read(deletingEmail);
+  assert.equal(deleting.status, "deleting");
+  assert.equal(deleting.deletionStartedAt, clock);
+  for (const action of ["grant", "revoke", "suspend"]) assert.equal((await write(action, deletingEmail)).status, 404);
+  assert.equal((await handlers.adminDisableAccount(post("/api/admin/accounts", { email: deletingEmail }, admin))).status, 409);
 });
 
 test("every write refuses an anonymous caller", async () => {

@@ -1,6 +1,8 @@
+import { isEmailShaped, normalizeEmail } from "./portal-crypto";
+
 const ADMIN_SELECTORS = {
   adminSection: "section", adminView: "view", adminEvent: "event", adminClaim: "claim",
-  adminCircle: "circle", adminDraft: "draft", adminSearch: "q",
+  adminCircle: "circle", adminDraft: "draft", adminSearch: "q", adminEmail: "email",
 } as const;
 const ADMIN_HASHES = new Set(["overview", "admin", "map-review", "takedown", "accounts", "review-notifications"]);
 const SELECTOR_ID = /^[\p{L}\p{N}_.:-]{1,200}$/u;
@@ -14,7 +16,11 @@ export function notificationParameters(value: unknown, audience: "circle" | "org
     output.set("admin", "1");
     for (const key of Object.keys(ADMIN_SELECTORS)) {
       const item = input[key];
-      if (typeof item === "string" && (key === "adminSearch" ? item.length <= 100 : SELECTOR_ID.test(item))) output.set(key, item);
+      if (typeof item !== "string") continue;
+      if (key === "adminEmail") {
+        const email = normalizeEmail(item);
+        if (isEmailShaped(email)) output.set(key, email);
+      } else if (key === "adminSearch" ? item.length <= 100 : SELECTOR_ID.test(item)) output.set(key, item);
     }
     if (typeof input.adminHash === "string" && ADMIN_HASHES.has(input.adminHash)) output.set("adminHash", input.adminHash);
     if (input.adminNotifications === "1") output.set("adminNotifications", "1");
@@ -25,7 +31,7 @@ export function notificationParameters(value: unknown, audience: "circle" | "org
     const item = input[key];
     if (typeof item === "string" && (SELECTOR_ID.test(item) || audience === "organizer" && key === "application" && item === "")) output.set(key, item);
   }
-  if (audience === "organizer" && input.section === "review") output.set("section", "review");
+  if (audience === "organizer" && (input.section === "review" || input.section === "members")) output.set("section", input.section);
   if (input.notifications === "1") output.set("notifications", "1");
   return output;
 }
