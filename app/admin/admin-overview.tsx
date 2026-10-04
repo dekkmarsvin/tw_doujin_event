@@ -3,7 +3,8 @@ import { listOrganizerEvents, type OrganizerEventSummary } from "../organizer-cl
 import { PUBLISHED_EVENTS, getPublishedEvent } from "../event-catalog";
 import { eventsByProximity, taipeiDate } from "../event-calendar";
 import { adminHref } from "./admin-navigation";
-import { useAdminReviewQueue } from "./use-admin-review-queue";
+import { ADMIN_REFRESH_INTERVAL, useAdminReviewQueue } from "./use-admin-review-queue";
+import { useVisibleRefresh } from "./use-visible-refresh";
 import { useAdminSiteStatus } from "./use-admin-site-status";
 import { adminDate, publicationProgress, ServiceResults } from "./admin-service-status";
 import { groupAdminEvents, activityTime, candidateCalendar, candidateHref } from "./admin-event-groups";
@@ -40,7 +41,8 @@ function AdminDashboard({ queueState, mode }: { queueState?: ReturnType<typeof u
     } catch (failure) { if (request === sequence.current.value) setError(failure instanceof Error ? failure.message : "無法取得活動工作版次。"); }
   }, []);
   useEffect(() => { const requests = sequence.current; queueMicrotask(() => void loadCandidates()); return () => { ++requests.value; }; }, [loadCandidates]);
-  const refresh = () => { queueState?.refresh(true); void operations.load(); void loadCandidates(); };
+  // The queue refreshes itself; the dashboard keeps its other two reads on the same rhythm.
+  useVisibleRefresh(() => { void operations.load(true); void loadCandidates(); }, ADMIN_REFRESH_INTERVAL);
   const queue = queueState?.queue;
   const counts = queue?.claimCounts ?? [];
   const { data } = operations;
@@ -57,8 +59,7 @@ function AdminDashboard({ queueState, mode }: { queueState?: ReturnType<typeof u
   </section>;
   return <>
     {/* Under 活動管理 the selected tab already names this view; only the overview titles itself. */}
-    <div className={ui.title}>{overview && <h2 id="overview-heading">管理總覽</h2>}
-      <button type="button" className={styles.secondaryButton} onClick={refresh} disabled={queueState?.loading}>重新整理</button></div>
+    {overview && <div className={ui.title}><h2 id="overview-heading">管理總覽</h2></div>}
     {overview && <div className={ui.summary} aria-label="待審工作">
       <a href="/organizer?application">活動申請<strong>{queue ? queue.organizer.applications : "—"}</strong></a>
       <a href={adminHref("events", { view: "publication" })}>活動內容<strong>{queue ? queue.organizer.submissions : "—"}</strong></a>
@@ -110,9 +111,9 @@ function AdminDashboard({ queueState, mode }: { queueState?: ReturnType<typeof u
           {operations.error && <><p className={styles.error} role="alert">營運狀態更新失敗：{operations.error}</p>
             {operations.updatedAt && <p className={ui.status}>營運狀態更新於 {adminDate(operations.updatedAt)}</p>}</>}
         </section>
-        <section className={styles.card} aria-labelledby="services-heading"><h3 id="services-heading">服務檢查</h3>
+        <section className={styles.card} aria-labelledby="services-heading"><div className={ui.actionRow}><h3 id="services-heading">服務檢查</h3>
+          <button type="button" className={styles.secondaryButton} disabled={!data || operations.checking} onClick={() => void operations.checkServices()}>{operations.checking ? "檢查中…" : "檢查服務"}</button></div>
           {data ? <ServiceResults data={data} checking={operations.checking} /> : <p>無法確認</p>}
-          <button type="button" disabled={!data || operations.checking} onClick={() => void operations.checkServices()}>{operations.checking ? "檢查中…" : "檢查服務"}</button>
         </section>
       </div>}
     </div>

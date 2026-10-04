@@ -1,8 +1,8 @@
 import { isAccountNotificationCadence } from "./account-notifications";
 import { canSubmitEventApplication, contactSettingsProblem, parseSiteSettings } from "./site-settings";
 import type { AdminCircleDetail } from "./admin-circle-detail";
-import type { AdminAccountDetailResponse } from "./admin-account-detail";
-import type { CircleViewRecord } from "./circle-records";
+import type { AdminAccountCircleSearchResponse, AdminAccountDetailResponse } from "./admin-account-detail";
+import { normalizeCircleName, type CircleViewRecord } from "./circle-records";
 import { notificationParameters } from "./notification-navigation";
 import identityRuntimeVersion from "../db/identity-runtime-version.json";
 import { createAdminReferenceHandlers } from "./admin-reference-handlers";
@@ -181,6 +181,7 @@ export function emailAuditSubjectId(secret: string, email: string) {
 
 const SEARCH_MIN_LENGTH = 2;
 const SEARCH_LIMIT = 8;
+const ACCOUNT_SEARCH_LIMIT = 20;
 
 function json(body: unknown, status = 200, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
@@ -1848,8 +1849,13 @@ export function createCirclePortalHandlers({
     const body = await readJson(request);
     const claimId = typeof body?.claimId === "string" ? body.claimId : "";
     const decision = body?.decision;
-    if (decision !== "approve" && decision !== "reject" && (authority || decision !== "revoke")) {
+    if (decision !== "approve" && decision !== "reject" && decision !== "revoke") {
       return json({ error: authority ? "請選擇核准或婉拒。" : "decision 必須是 approve、reject 或 revoke。" }, 400);
+    }
+    // Withdrawing an approved owner is an Owner decision on the organizer side;
+    // the SQL write rechecks the Owner grant so a downgrade cannot slip through.
+    if (authority && decision === "revoke" && actorRole === "organizer_editor") {
+      return json({ error: "只有活動負責人可以撤銷認領。" }, 403);
     }
 
     const claim = await repository.getClaim(claimId);
@@ -1857,6 +1863,13 @@ export function createCirclePortalHandlers({
     // claim from here would withdraw ownership in that event while leaving its
     // document — and so the revoked content — standing.
     if (!claim || claim.event_id !== eventId) return json({ error: "找不到這筆認領。" }, 404);
+    // The rebuild below uses the decided event's own dates, resolved before
+    // anything changes. `dataUpdatedAt()` follows the request's `?event=`, which
+    // on the organizer route need not be the candidate's event: a mismatch
+    // would fail after the write and leave revoked content public.
+    const published = config.publishedEvent ? await config.publishedEvent(eventId)
+      : { dataUpdatedAt: await dataUpdatedAt(), eventEndsAt: await eventEndsAt() };
+    if (!published) return json({ error: "找不到這筆認領。" }, 404);
 
     const now = config.now();
     const method: ClaimMethod = authority ? "organizer" : "admin";
@@ -1865,16 +1878,18 @@ export function createCirclePortalHandlers({
     // rejection that landed on a claim approved meanwhile would withdraw the
     // owner's content under the name of a rejection. Withdrawing an owner is
     // what revoke is for.
+    // Revoke withdraws an approved owner and nothing else: a claim withdrawn or
+    // rejected since the reviewer looked keeps that result.
     const ok = decision === "approve"
       ? await repository.markClaimVerified(claimId, method, now, session.email, authority)
       : await repository.setClaimStatus(claimId, decision === "reject" ? "rejected" : "revoked", now, session.email,
-        decision === "reject" ? "pending" : undefined, authority);
+        decision === "reject" ? "pending" : "verified", authority && decision === "revoke" ? { ...authority, ownerOnly: true } : authority);
 
     // Revoking ownership withdraws that circle's content in the same step. The
     // phase has to be the current one: rebuilding as "during" after the event
     // would republish every circle that had opted out of the post-event window.
-    if (decision !== "approve" && ok && !authority) {
-      await repository.rebuildOverridesDoc(eventId, await dataUpdatedAt(), now, await currentPhase());
+    if (ok && (decision === "revoke" || (decision === "reject" && !authority))) {
+      await repository.rebuildOverridesDoc(eventId, published.dataUpdatedAt, now, now > Date.parse(published.eventEndsAt) ? "after" : "during");
     }
     await repository.writeAudit({
       at: now, actorAccountId: session.accountId, actorRole,
@@ -1888,8 +1903,10 @@ export function createCirclePortalHandlers({
       const access = await organizerClaimAccess(request, authority.candidateId);
       if (!access.ok) return access.response;
       if (access.eventId !== eventId) return json({ error: "找不到這筆認領。" }, 404);
+      if (decision === "revoke" && organizerAuditRole(access) === "organizer_editor") return json({ error: "只有活動負責人可以撤銷認領。" }, 403);
     }
-    return json({ error: decision !== "revoke" && claim.status !== "pending" ? "這筆認領已不在待審中。" : "此社團已有通過的認領。" }, 409);
+    return json({ error: decision === "revoke" ? "這筆認領已不是通過狀態。"
+      : claim.status !== "pending" ? "這筆認領已不在待審中。" : "此社團已有通過的認領。" }, 409);
   }
 
   async function adminListAdmins(request: Request) {
@@ -2027,6 +2044,20 @@ export function createCirclePortalHandlers({
     return json(result);
   }
 
+  /** Finds accounts through their claims: a partial match on the normalized circle name, across events. */
+  async function adminSearchAccountsByCircle(request: Request) {
+    const gate = await requireAdmin(request);
+    if (!gate.ok) return gate.response;
+    const query = (new URL(request.url).searchParams.get("circle") ?? "").normalize("NFKC").trim();
+    if (!query) return json({ error: "請填寫社團名稱。" }, 400);
+    if (query.length > 100) return json({ error: "社團名稱不可超過 100 字。" }, 400);
+    const rows = await repository.searchClaimAccountsForAdmin(normalizeCircleName(query), ACCOUNT_SEARCH_LIMIT);
+    return json({ query, matches: rows.map(row => ({
+      email: row.email, circleName: row.circle_name_at_claim, eventId: row.event_id,
+      eventName: getEventDefinition(row.event_id)?.name ?? row.event_id, status: row.status,
+    })) } satisfies AdminAccountCircleSearchResponse);
+  }
+
   async function adminDisableAccount(request: Request) {
     const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
@@ -2140,7 +2171,9 @@ export function createCirclePortalHandlers({
       const override = await repository.getOverride(eventId, circle.id);
       const cleanupPending = override?.status === "takendown" && thumbnailStore
         ? (await thumbnailStore.list(circleObjectPrefix(eventId, circle.id))).length > 0 : false;
-      return { circleId: circle.id, name: circle.name, status: override?.status ?? "none", ...(cleanupPending ? { cleanupPending: true } : {}) };
+      const claimId = await repository.verifiedClaimId(eventId, circle.id);
+      return { circleId: circle.id, name: circle.name, status: override?.status ?? "none", ...(cleanupPending ? { cleanupPending: true } : {}),
+        ...(claimId ? { verifiedClaimId: claimId } : {}) };
     }));
     return json({ circles });
   }
@@ -3841,7 +3874,7 @@ export function createCirclePortalHandlers({
     // before an event is chosen.
     authConfig, requestLink, verify, session, signOut, deleteMyAccount,
     listEventApplications, submitEventApplication, reviewEventApplication,
-    adminListAdmins, adminManageAdmins, adminAccountDetail, adminDisableAccount, adminManageMapContributor,
+    adminListAdmins, adminManageAdmins, adminAccountDetail, adminSearchAccountsByCircle, adminDisableAccount, adminManageMapContributor,
     // Cross-event and read-only; it filters to served events itself.
     adminReviewQueue,
     adminProbeGitHubInstallation,

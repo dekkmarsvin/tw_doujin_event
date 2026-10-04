@@ -565,7 +565,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
       </div>
         : surface === "members" ? <MembersPanel key={detail.event.id} session={session} detail={detail} onChanged={refresh} onClose={() => setSurface("data")} />
         : surface !== "data" && detail.claimReviewAvailable && detail.event.eventId
-          ? surface === "claims" ? <OrganizerClaimsPanel key={detail.event.id} candidateId={detail.event.id} eventId={detail.event.eventId} onQueueLoaded={onQueueLoaded} />
+          ? surface === "claims" ? <OrganizerClaimsPanel key={detail.event.id} candidateId={detail.event.id} eventId={detail.event.eventId} canRevoke={detail.event.role !== "editor" || session.isAdmin} onQueueLoaded={onQueueLoaded} />
             : <OrganizerTakedownPanel key={detail.event.id} candidateId={detail.event.id} eventId={detail.event.eventId} />
           : <WorkspaceSurface
           key={detail.event.id}

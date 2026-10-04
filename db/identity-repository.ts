@@ -30,7 +30,8 @@ export type OverridesPhase = "during" | "after";
 /** `withdrawn` is the claimant's own doing; reviewers reject, only admins revoke. */
 type ClaimStatus = "pending" | "verified" | "rejected" | "revoked" | "withdrawn";
 export type ClaimMethod = "email_domain" | "link_token" | "admin" | "organizer";
-type OrganizerClaimAuthority = { candidateId: string; accountId: string };
+/** `ownerOnly` limits the organizer side to Owner grants: revoking an approved claim is an Owner decision. */
+type OrganizerClaimAuthority = { candidateId: string; accountId: string; ownerOnly?: boolean };
 export type MapDraftStatus = "draft" | "submitted" | "changes_requested" | "approved" | "rejected" | "exported" | "withdrawn";
 export type OrganizerRole = "owner" | "editor";
 export type OrganizerCandidateStatus = "draft" | "changes_requested" | "submitted" | "approved" | "publishing" | "published" | "failed" | "abandoned";
@@ -749,6 +750,20 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return result.results;
   }
 
+  /** Claims whose normalized circle name contains `nameKey`, newest first, with
+   * the claimant's email. Any claim status matches: the search finds accounts. */
+  async function searchClaimAccountsForAdmin(nameKey: string, limit: number) {
+    await ensureTables();
+    const pattern = `%${nameKey.replace(/[!%_]/gu, "!$&")}%`;
+    const result = await database.prepare(
+      `SELECT a.email, c.event_id, c.circle_name_at_claim, c.status
+       FROM circle_claims c JOIN accounts a ON a.id = c.account_id
+       WHERE c.circle_name_key LIKE ?1 ESCAPE '!'
+       ORDER BY c.created_at DESC, c.id LIMIT ?2`,
+    ).bind(pattern, limit).all<{ email: string } & Pick<ClaimRow, "event_id" | "circle_name_at_claim" | "status">>();
+    return result.results;
+  }
+
   /** All historical scopes matter when deleting an account: staged R2 objects
    * are keyed by event/circle even when they were never published to D1. */
   async function listClaimScopesForAccount(accountId: string) {
@@ -808,7 +823,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       .bind(eventId).first<{ id: string }>();
   }
 
-  function organizerClaimAuthoritySql(candidateParam: number, accountParam: number, eventColumn = "circle_claims.event_id") {
+  function organizerClaimAuthoritySql(candidateParam: number, accountParam: number, eventColumn = "circle_claims.event_id", ownerOnly = false) {
     return `EXISTS (SELECT 1 FROM organizer_event_candidates candidate
       JOIN accounts actor ON actor.id = ?${accountParam}
       WHERE candidate.id = ?${candidateParam} AND candidate.event_id = ${eventColumn}
@@ -816,7 +831,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
         AND actor.disabled_at IS NULL AND actor.deletion_started_at IS NULL
         AND (EXISTS (SELECT 1 FROM admins WHERE email = actor.email)
           OR EXISTS (SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = candidate.id
-            AND g.account_id = actor.id AND g.role IN ('owner', 'editor') AND g.revoked_at IS NULL)))`;
+            AND g.account_id = actor.id AND g.role IN (${ownerOnly ? "'owner'" : "'owner', 'editor'"}) AND g.revoked_at IS NULL)))`;
   }
 
   /** Counts discover every event with work, without a bounded list hiding it. */
@@ -858,12 +873,16 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return rows.results;
   }
 
-  async function hasVerifiedClaim(eventId: string, circleId: string) {
+  async function verifiedClaimId(eventId: string, circleId: string) {
     await ensureTables();
     const row = await database.prepare(
       `SELECT id FROM circle_claims WHERE event_id = ?1 AND circle_id = ?2 AND status = 'verified'`,
     ).bind(eventId, circleId).first<{ id: string }>();
-    return !!row;
+    return row?.id ?? null;
+  }
+
+  async function hasVerifiedClaim(eventId: string, circleId: string) {
+    return await verifiedClaimId(eventId, circleId) !== null;
   }
 
   async function ownsCircle(accountId: string, eventId: string, circleId: string) {
@@ -903,7 +922,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     await ensureTables();
     const [result] = await database.batch([database.prepare(
       `UPDATE circle_claims SET status = ?1, reviewed_by = ?2, reviewed_at = ?3 WHERE id = ?4 AND status <> ?1 AND (?5 IS NULL OR status = ?5)
-        ${authority ? `AND ${organizerClaimAuthoritySql(6, 7)}` : ""}`,
+        ${authority ? `AND ${organizerClaimAuthoritySql(6, 7, undefined, authority.ownerOnly)}` : ""}`,
     ).bind(status, reviewedBy, now, id, from ?? null, ...(authority ? [authority.candidateId, authority.accountId] : [])),
       ...(status === "rejected" || status === "revoked" ? notify({ kind: status === "rejected" ? "claim.rejected" : "claim.revoked", occurrence: crypto.randomUUID(), now },
         `${claimNotificationSource} WHERE c.id = ?1 AND changes() = 1`, [id]) : []),
@@ -960,7 +979,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
             (SELECT id FROM circle_claims WHERE event_id = ?1 AND circle_id = ?2)
             AND json_extract(l.detail_json, '$.circleId') = ?2
             AND l.action IN ('claim.admin_approve', 'claim.admin_reject', 'claim.admin_revoke',
-              'claim.organizer_approve', 'claim.organizer_reject')))
+              'claim.organizer_approve', 'claim.organizer_reject', 'claim.organizer_revoke')))
       ORDER BY l.at DESC, l.id DESC`)
       .bind(eventId, circleId).all<{
         at: number; action: string; subject_type: "override" | "claim"; subject_id: string;
@@ -3717,8 +3736,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     upsertAccount, getAccountForAdmin, createSession, getSession, revokeSession, disableAccount, beginAccountDeletion, isAccountWritable, deleteAccount,
     listSoleOwnerOrganizerCandidates,
     listHostedThumbnailKeysForAccount, listHostedThumbnailKeys, listUnsubmittedMapDraftObjectKeysForAccount,
-    createClaim, getClaim, withdrawClaim, listClaimsForAccount, listAccountClaimsForAdmin, listClaimScopesForAccount, listClaimsByStatus, listPendingEventClaims, listAdminReviewSummary, listPendingAdminClaims,
-    hasVerifiedClaim, ownsCircle, markClaimVerified, setClaimStatus, recordChallengeAttempt,
+    createClaim, getClaim, withdrawClaim, listClaimsForAccount, listAccountClaimsForAdmin, searchClaimAccountsForAdmin, listClaimScopesForAccount, listClaimsByStatus, listPendingEventClaims, listAdminReviewSummary, listPendingAdminClaims,
+    hasVerifiedClaim, verifiedClaimId, ownsCircle, markClaimVerified, setClaimStatus, recordChallengeAttempt,
     getOverride, listCircleClaimsForAdmin, listCircleModerationHistory,
     putOverride, deleteOverride, takedownOverride, listLiveOverrides, getPublicOverride, setPostEventHidden,
     rebuildOverridesDoc, getOverridesDoc,

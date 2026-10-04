@@ -12,7 +12,7 @@
 /* Section headings open their card flush, like the claim queue's. */
 .content section > h3:first-child { margin-top: 0; }
 /* Loose text links in ink, like the row links beside them, not browser blue. */
-.content :is(p, .detailSection, .detailActions) > a:not([class]) { color: var(--ink); text-underline-offset: 2px; }
+.content :is(p, .detailSection, .detailActions, .detailList li) > a:not([class]) { color: var(--ink); text-underline-offset: 2px; }
 .title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .title h2 { font-size: 20px; }
 .title > button:only-child { margin-left: auto; }
@@ -65,9 +65,13 @@
 .detailMedia { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
 .detailMedia img { display: block; width: 120px; max-height: 180px; object-fit: contain; border: 1px solid var(--line); background: #fff; }
 .accountDetail { overflow-wrap: anywhere; }
-.accountActions { align-items: center; }
-.accountActions button { flex: 0 0 auto; }
-.accountActions p { margin: 0; }
+/* A status or sentence with the action that changes it on the same line,
+   instead of a button alone on the row below. */
+.actionRow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.actionRow > div { display: grid; gap: 2px; min-width: 0; }
+.actionRow :is(h3, p) { margin: 0; }
+.content .actionRow button { flex: 0 0 auto; margin-top: 0; }
+.actionButtons { display: flex !important; flex-wrap: wrap; gap: 8px; }
 .eventList { min-width: 0; }
 .eventDashboard { min-width: 0; }
 .eventDashboard > section, .eventDashboard .eventRow { max-width: none; margin-inline: 0; }

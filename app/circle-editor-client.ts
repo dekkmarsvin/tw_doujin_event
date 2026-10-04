@@ -13,8 +13,8 @@ import type { MapAuthoringState } from "./map-authoring-state";
 import type { NotificationPreferences } from "./review-notifications";
 import type { AdminCircleDetail } from "./admin-circle-detail";
 export type { AdminCircleDetail, AdminCircleClaim, AdminCircleHistory } from "./admin-circle-detail";
-import type { AdminAccountDetailResponse } from "./admin-account-detail";
-export type { AdminAccountDetailResponse, AdminAccountDetail, AdminAccountOrganizerGrant, AdminAccountClaim } from "./admin-account-detail";
+import type { AdminAccountCircleSearchResponse, AdminAccountDetailResponse } from "./admin-account-detail";
+export type { AdminAccountDetailResponse, AdminAccountDetail, AdminAccountOrganizerGrant, AdminAccountClaim, AdminAccountCircleMatch } from "./admin-account-detail";
 
 export function readAccountNotificationPreferences() {
   return call<AccountNotificationPreferences>("/api/account/notification-preferences");
@@ -277,7 +277,7 @@ export function takedownOverride(circleId: string, reason: string, eventId?: str
   return call<{ ok: true }>("/api/admin/overrides", { method: "POST", body: JSON.stringify({ circleId, reason }) }, eventId);
 }
 
-export type TakedownCircle = { circleId: string; name: string; status: "live" | "takendown" | "none"; cleanupPending?: boolean };
+export type TakedownCircle = { circleId: string; name: string; status: "live" | "takendown" | "none"; cleanupPending?: boolean; verifiedClaimId?: string };
 export function searchTakedownCircles(query: string, eventId: string) {
   return call<{ circles: TakedownCircle[] }>(`/api/admin/overrides?q=${encodeURIComponent(query)}`, undefined, eventId);
 }
@@ -329,6 +329,10 @@ export function disableAccount(email: string) {
 
 export function readAdminAccountDetail(email: string) {
   return call<AdminAccountDetailResponse>(`/api/admin/accounts?email=${encodeURIComponent(email)}`, undefined, "");
+}
+
+export function searchAdminAccountsByCircle(circleName: string) {
+  return call<AdminAccountCircleSearchResponse>(`/api/admin/accounts?circle=${encodeURIComponent(circleName)}`, undefined, "");
 }
 
 export function manageMapContributor(email: string, action: "grant" | "revoke" | "suspend") {

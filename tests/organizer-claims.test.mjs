@@ -94,6 +94,8 @@ for (const [email, account] of [["owner@example.test", "ownerId"], ["editor@exam
     const authority = { candidateId: "attacker", accountId: ids[account] };
     assert.equal(await repo.markClaimVerified("target-pending", "organizer", now, email, authority), false);
     assert.equal(await repo.setClaimStatus("target-pending", "rejected", now, email, "pending", authority), false);
+    assert.equal(await repo.setClaimStatus("protected-owner", "revoked", now, email, "verified", { ...authority, ownerOnly: true }), false);
+    assert.equal((await repo.getClaim("protected-owner")).status, "verified");
     assert.equal(await repo.takedownOverride({ eventId, circleId: "c-1", reason: "attack", by: email, now, authority }), false);
     assert.equal((await repo.getClaim("target-pending")).status, "pending");
     assert.equal(await repo.ownsCircle(ids[account], eventId, "self-circle"), false);
@@ -139,7 +141,8 @@ for (const [email, role] of [["owner@example.test", "organizer_owner"], ["editor
     handlers = takedownHandlers();
     const search = await handlers.organizerSearchTakedownCircles(overridesRequest("candidate-a", cookie), "candidate-a");
     assert.equal(search.status, 200);
-    assert.deepEqual((await search.json()).circles, [{ circleId: "c-1", name: "社團 event-a", status: "live" }]);
+    assert.deepEqual((await search.json()).circles, [{ circleId: "c-1", name: "社團 event-a", status: "live", verifiedClaimId: "claim-a" }],
+      "the candidate event's approved claim is named so an Owner can revoke it; event-b's is not");
     const result = await handlers.organizerTakedown(overridesRequest("candidate-a", cookie, { circleId: "c-1", eventId: "event-b", reason: "權利人要求" }), "candidate-a");
     assert.equal(result.status, 200);
     assert.equal((await repo.getOverride("event-a", "c-1")).status, "takendown");
@@ -296,15 +299,62 @@ test("anonymous, strangers, other events, and unpublished events cannot be revie
   assert.equal((await repo.getClaim("claim-b")).status, "pending");
 });
 
-test("rejection cannot withdraw an approved owner, and organizer routes never revoke", async () => {
+test("rejection cannot withdraw an approved owner, and editors cannot revoke", async () => {
   const cookie = await signIn("editor@example.test");
   assert.equal((await handlers.organizerDecideClaim(request("candidate-a", cookie, "approve"), "candidate-a")).status, 200);
   assert.equal((await handlers.organizerDecideClaim(request("candidate-a", cookie, "reject"), "candidate-a")).status, 409);
-  assert.equal((await handlers.organizerDecideClaim(request("candidate-a", cookie, "revoke"), "candidate-a")).status, 400);
+  assert.equal((await handlers.organizerDecideClaim(request("candidate-a", cookie, "revoke"), "candidate-a")).status, 403);
   assert.equal((await repo.getClaim("claim-a")).status, "verified");
   await claim("reject-me", "event-a", "c-2");
   assert.equal((await handlers.organizerDecideClaim(request("candidate-a", cookie, "reject", "reject-me"), "candidate-a")).status, 200);
   assert.equal((await repo.getClaim("reject-me")).status, "rejected");
+});
+
+test("an owner revokes an approved claim in their event, which withdraws its content and is audited", async () => {
+  await repo.markClaimVerified("claim-a", "admin", now, "admin@example.test");
+  await repo.putOverride({ eventId: "event-a", circleId: "c-1", fieldsJson: '{"saleInfo":"wrong owner"}', updatedBy: "admin@example.test", accountId: ids.adminId, now });
+  await repo.rebuildOverridesDoc("event-a", "2026-10-01", now, "during");
+  assert.match(JSON.stringify(await repo.getOverridesDoc("event-a")), /wrong owner/);
+  const cookie = await signIn("owner@example.test");
+  assert.equal((await handlers.organizerDecideClaim(request("candidate-a", cookie, "revoke", "claim-b"), "candidate-a")).status, 404, "another event's claim stays out of reach");
+  assert.equal((await handlers.organizerDecideClaim(request("candidate-a", cookie, "revoke"), "candidate-a")).status, 200);
+  assert.equal((await repo.getClaim("claim-a")).status, "revoked");
+  assert.doesNotMatch(JSON.stringify(await repo.getOverridesDoc("event-a")), /wrong owner/, "the public document drops the revoked owner's content");
+  const audit = await database.prepare("SELECT actor_role, detail_json FROM audit_log WHERE action = 'claim.organizer_revoke'").first();
+  assert.equal(audit.actor_role, "organizer_owner");
+  assert.equal(JSON.parse(audit.detail_json).candidateId, "candidate-a");
+  assert.equal((await handlers.organizerDecideClaim(request("candidate-a", cookie, "revoke"), "candidate-a")).status, 409, "only an approved claim can be revoked");
+  assert.equal((await handlers.organizerDecideClaim(request("candidate-a", cookie, "revoke", "claim-pending"), "candidate-a")).status, 404);
+  await claim("still-pending", "event-a", "c-2");
+  assert.equal((await handlers.organizerDecideClaim(request("candidate-a", cookie, "revoke", "still-pending"), "candidate-a")).status, 409);
+  assert.equal((await repo.getClaim("still-pending")).status, "pending", "revoke never decides a pending claim");
+});
+
+test("an organizer revoke rebuilds the candidate's event, whatever event the request names", async () => {
+  await repo.markClaimVerified("claim-a", "admin", now, "admin@example.test");
+  await repo.putOverride({ eventId: "event-a", circleId: "c-1", fieldsJson: '{"saleInfo":"wrong owner"}', updatedBy: "admin@example.test", accountId: ids.adminId, now });
+  await repo.rebuildOverridesDoc("event-a", "2026-10-01", now, "during");
+  const cookie = await signIn("owner@example.test");
+  // Production binds these to the request's `?event=`; an unserved one cannot be read at all.
+  handlers = createCirclePortalHandlers({ ...options, config: { ...options.config,
+    dataUpdatedAt: async () => { throw new Error("unserved request event"); },
+    eventEndsAt: async () => { throw new Error("unserved request event"); } } });
+  assert.equal((await handlers.organizerDecideClaim(request("candidate-a", cookie, "revoke"), "candidate-a")).status, 200);
+  assert.equal((await repo.getClaim("claim-a")).status, "revoked");
+  const doc = JSON.parse((await repo.getOverridesDoc("event-a")).json);
+  assert.equal(doc.generatedAt, "event-a", "the rebuild uses the candidate event's own published data");
+  assert.doesNotMatch(JSON.stringify(doc), /wrong owner/);
+});
+
+test("revoke rechecks the Owner grant at the SQL write", async () => {
+  await repo.markClaimVerified("claim-a", "admin", now, "admin@example.test");
+  const cookie = await signIn("owner@example.test");
+  handlers = createCirclePortalHandlers({ ...options, repository: { ...repo, setClaimStatus: async (...args) => {
+    await database.prepare("UPDATE organizer_event_grants SET role = 'editor' WHERE account_id = ?1").bind(ids.ownerId).run();
+    return repo.setClaimStatus(...args);
+  } } });
+  assert.equal((await handlers.organizerDecideClaim(request("candidate-a", cookie, "revoke"), "candidate-a")).status, 403);
+  assert.equal((await repo.getClaim("claim-a")).status, "verified", "a grant downgraded mid-request leaves the owner in place");
 });
 
 test("approval races preserve one owner and report circleClaimed in the shared queue", async () => {

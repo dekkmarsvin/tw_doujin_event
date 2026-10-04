@@ -131,7 +131,7 @@ export function listOrganizerClaims(candidateId: string) {
   return organizerCall<ReviewQueue>(`/api/organizer/events/${encodeURIComponent(candidateId)}/claims`);
 }
 
-export function decideOrganizerClaim(candidateId: string, claimId: string, decision: "approve" | "reject") {
+export function decideOrganizerClaim(candidateId: string, claimId: string, decision: "approve" | "reject" | "revoke") {
   return organizerCall<{ ok: true }>(`/api/organizer/events/${encodeURIComponent(candidateId)}/claims`, {
     method: "POST", body: JSON.stringify({ claimId, decision }),
   });

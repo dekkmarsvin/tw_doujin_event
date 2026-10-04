@@ -11,19 +11,24 @@ export function useAdminSiteStatus(onLoaded?: (answer: AdminSiteSettings) => voi
   const mounted = useRef(false);
   const diagnosticInFlight = useRef(false);
   const version = useRef({ value: 0 });
-  const applySaved = useCallback((answer: AdminSiteSettings) => {
+  const applySaved = useCallback((answer: AdminSiteSettings, resumeCheck = true) => {
     if (!mounted.current) return;
     setData(answer); setUpdatedAt(Date.now()); setError("");
     // A saved request remains pending across navigation; resume its existing
     // bounded, read-only wait rather than presenting it as never checked.
-    if (!diagnosticInFlight.current) setChecking(answer.services?.checkedAt === null);
+    // Background re-reads may end a wait (a finished result also stops the
+    // poll) but never start one, or each would restart a timed-out wait.
+    if (!diagnosticInFlight.current) {
+      if (answer.services?.checkedAt !== null) setChecking(false);
+      else if (resumeCheck) setChecking(true);
+    }
     onLoaded?.(answer);
   }, [onLoaded]);
-  const load = useCallback(async () => {
+  const load = useCallback(async (background = false) => {
     const request = ++version.current.value;
     try {
       const answer = await readAdminSiteSettings();
-      if (request === version.current.value) applySaved(answer);
+      if (request === version.current.value) applySaved(answer, !background);
     } catch (failure) {
       if (mounted.current && request === version.current.value) setError(failure instanceof Error ? failure.message : "無法取得營運設定。");
     }
@@ -31,7 +36,7 @@ export function useAdminSiteStatus(onLoaded?: (answer: AdminSiteSettings) => voi
   useEffect(() => {
     mounted.current = true;
     const requests = version.current;
-    void load();
+    queueMicrotask(() => void load());
     return () => { mounted.current = false; ++requests.value; };
   }, [load]);
   const requestedAt = data?.services?.requestedAt;

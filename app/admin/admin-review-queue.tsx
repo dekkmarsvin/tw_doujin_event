@@ -241,7 +241,8 @@ export function AdminReviewQueue({ initialEventId, initialClaimId, onEventChange
     <section className={`${styles.card} ${styles.admin}${claimScope ? ` ${styles.eventClaimPanel}` : ""}`} id="admin" aria-labelledby="claims-heading">
       <div className={styles.queueHeading}>
         <h2 id="claims-heading">社團認領</h2>
-        <button type="button" className={styles.secondaryButton} onClick={() => refresh(true)} disabled={loading || working}>{loading ? "更新中…" : "重新整理"}</button>
+        {/* Admin re-reads the queue in the background; the organizer panel keeps its own button. */}
+        {claimScope && <button type="button" className={styles.secondaryButton} onClick={() => refresh(true)} disabled={loading || working}>{loading ? "更新中…" : "重新整理"}</button>}
         {!claimScope && <div role="group" aria-label="依活動篩選" className={styles.filterChips}>
           {chips.map((chip) => <button key={chip.id || "all"} type="button" className={styles.filterChip}
             aria-pressed={filter === chip.id} disabled={working} onClick={() => showClaims(chip.id)}>{chip.label} <span>{queue ? chip.count : "—"}</span></button>)}

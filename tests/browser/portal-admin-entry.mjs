@@ -69,12 +69,13 @@ async function open(role, entry = "/admin", implicitMapDraft = false, pendingSer
     } };
   };
   const supplementals = new Map();
+  const revokedClaims = new Set();
   const circleDetail = eventId => {
     const supplemental = supplementals.get(eventId) ?? { status: "live", fields: { pen: eventId === "sample-two" ? "第二場作者" : "第一場作者", saleInfo: "已保存的品書介紹" }, updatedAt: now,
       postEventHidden: false, publicState: "public", publicReason: null, phase: "during", cleanupState: "not_required", takedown: null };
     return { eventId, circleId: "c-900001", name: "待審測試社", placements: [{ day: "1", area: "A", boothCode: "A01", status: "active" }],
       publicHref: `/events/${eventId}/circles/c-900001/`, organizerHref: null,
-      claims: [{ id: "verified-one", status: "verified", method: "manual", accountEmail: "owner@example.test", accountStatus: "active", createdAt: now,
+      claims: [{ id: "verified-one", status: revokedClaims.has(eventId) ? "revoked" : "verified", method: "manual", accountEmail: "owner@example.test", accountStatus: "active", createdAt: now,
         verifiedAt: now, reviewedAt: now, reviewedBy: "admin@example.test", reviewHref: null }], supplemental,
       history: supplemental.takedown ? [{ action: "override.takendown", at: now, claimId: null, reason: supplemental.takedown.reason, by: "admin@example.test", retryCleanup: false }] : [] };
   };
@@ -86,7 +87,7 @@ async function open(role, entry = "/admin", implicitMapDraft = false, pendingSer
     await page.route("**/api/**", async route => {
       const request = route.request(), url = new URL(request.url()), path = url.pathname, method = request.method();
       const body = method === "GET" ? null : request.postDataJSON();
-      requests.push({ path, method, event: url.searchParams.get("event"), body });
+      requests.push({ path, method, event: url.searchParams.get("event"), ...(url.searchParams.has("circle") ? { circle: url.searchParams.get("circle") } : {}), body });
       const reply = (body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
       if (path === "/api/auth/session") return role === "anonymous" ? reply({ error: "尚未登入。" }, 401)
         : reply({ email: `${role}@example.test`, isAdmin: role === "admin", isMapContributor: false, expiresAt: now + 86400000 });
@@ -94,6 +95,7 @@ async function open(role, entry = "/admin", implicitMapDraft = false, pendingSer
       if (path === "/api/claims") return reply({ claims: [], eventId: url.searchParams.get("event") });
       if (path === "/api/admin/claims" && method === "POST") {
         if (failure) return reply({ error: "登入已失效。" }, failure);
+        if (body.decision === "revoke" && body.claimId === "verified-one") { revokedClaims.add(url.searchParams.get("event")); return reply({ ok: true }); }
         const index = pending.findIndex(x => x.id === body.claimId && x.eventId === url.searchParams.get("event"));
         if (index < 0) return reply({ error: "找不到這筆認領。" }, 404);
         pending.splice(index, 1);
@@ -152,6 +154,9 @@ async function open(role, entry = "/admin", implicitMapDraft = false, pendingSer
         return partialTakedown ? reply({ error: "補充資料已撤下，但圖片清除尚未完成，請重試。" }, 503) : reply({ ok: true });
       }
       if (path === "/api/admin/accounts") {
+        if (method === "GET" && url.searchParams.has("circle")) return reply({ query: url.searchParams.get("circle"), matches: url.searchParams.get("circle") === "待審" ? [
+          { email: "contributor@example.test", circleName: "待審測試社", eventId: "sample", eventName: "範例創作市集", status: "verified" },
+        ] : [] });
         if (method === "GET") return accountFailure ? reply({ error: "無法取得帳號明細。" }, accountFailure) : reply(accountDetail(url.searchParams.get("email")));
         if (admins.some(admin => admin.email === body.email)) return reply({ error: "請先移出管理者名單。" }, 409);
         accountStatuses.set(body.email, "disabled");
@@ -194,6 +199,10 @@ async function navigate(page, label) {
   await nav.waitFor();
   if (!(await link.isVisible()) && await nav.locator("summary").isVisible()) await nav.locator("summary").click();
   await link.click();
+}
+/** Admin panels re-read on focus instead of offering a 重新整理 button. */
+async function refreshInBackground(page) {
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
 }
 async function assertNoOverflow(page) {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "the management page stays inside the viewport");
@@ -260,7 +269,8 @@ try {
   assert.equal(await page.locator("#admin, #map-review, #takedown, #accounts").count(), 0);
   await page.getByText("第 1 版 · 發布中 · 部署網站", { exact: true }).waitFor();
   await page.getByText("第 1 版 · 已排程 · 等待開始", { exact: true }).waitFor();
-  await page.getByRole("button", { name: "重新整理", exact: true }).click();
+  assert.equal(await page.getByRole("button", { name: "重新整理", exact: true }).count(), 0, "the overview refreshes in the background");
+  await refreshInBackground(page);
   await summary.getByRole("link", { name: /社團認領2/ }).waitFor();
   assert.equal(requests.filter(x => x.path === "/api/admin/service-check").length, 0);
   await assertNoOverflow(page);
@@ -324,9 +334,34 @@ try {
   assert.deepEqual(takedownRequest.body, { circleId: "c-900001", reason: "測試撤下" });
   assert.equal(takedownRequest.event, "sample");
   assert.ok(requests.filter(x => x.path === "/api/admin/circles/c-900001").every(x => x.event === "sample"), "detail reloads keep the selected event");
+  const circleClaims = takedown.locator('section[aria-labelledby="circle-claims-heading"]');
+  await circleClaims.getByRole("button", { name: "撤銷owner@example.test的認領", exact: true }).click();
+  await takedown.getByRole("dialog").getByText("該帳號不能再編輯這個社團", { exact: false }).waitFor();
+  await takedown.getByRole("dialog").getByRole("button", { name: "確認撤銷", exact: true }).click();
+  await takedown.getByText("已撤銷認領。", { exact: true }).waitFor();
+  const revokeRequest = requests.find(x => x.path === "/api/admin/claims" && x.body?.decision === "revoke");
+  assert.deepEqual(revokeRequest.body, { claimId: "verified-one", decision: "revoke" });
+  assert.equal(revokeRequest.event, "sample");
+  assert.equal(await circleClaims.getByRole("button", { name: /撤銷.*的認領/ }).count(), 0, "a revoked claim offers no second revoke");
   await navigate(page, "帳號管理");
   const accountPanel = page.locator('section[aria-labelledby="account-query-heading"]');
-  await accountPanel.getByLabel("帳號 Email", { exact: true }).fill("  CONTRIBUTOR@EXAMPLE.TEST  ");
+  await accountPanel.getByLabel("Email 或社團名稱", { exact: true }).fill("無此社團");
+  await accountPanel.getByRole("button", { name: "查詢", exact: true }).click();
+  await accountPanel.getByText("找不到名稱含「無此社團」的社團認領。", { exact: true }).waitFor();
+  await accountPanel.getByLabel("Email 或社團名稱", { exact: true }).fill("Millet@半米紀行");
+  await accountPanel.getByRole("button", { name: "查詢", exact: true }).click();
+  await accountPanel.getByText("找不到名稱含「Millet@半米紀行」的社團認領。", { exact: true }).waitFor();
+  assert.ok(requests.some(x => x.path === "/api/admin/accounts" && x.method === "GET" && x.circle === "Millet@半米紀行"), "an @ in a circle name is a name search, not an invalid Email");
+  await accountPanel.getByLabel("Email 或社團名稱", { exact: true }).fill(" 待審 ");
+  await accountPanel.getByRole("button", { name: "查詢", exact: true }).click();
+  const circleMatches = accountPanel.locator('section[aria-label="社團名稱搜尋結果"]');
+  await circleMatches.getByText("contributor@example.test", { exact: true }).waitFor();
+  assert.equal(new URL(page.url()).searchParams.get("q"), "待審", "a circle-name search is kept in the address");
+  await page.reload();
+  await circleMatches.getByText("範例創作市集・已認領", { exact: true }).waitFor();
+  assert.equal(await circleMatches.getByRole("link", { name: "查看帳號", exact: true }).getAttribute("href"),
+    "/admin?section=accounts&view=search&email=contributor%40example.test");
+  await accountPanel.getByLabel("Email 或社團名稱", { exact: true }).fill("  CONTRIBUTOR@EXAMPLE.TEST  ");
   await accountPanel.getByRole("button", { name: "查詢", exact: true }).click();
   await accountPanel.getByRole("heading", { name: "contributor@example.test", exact: true }).waitFor();
   assert.equal(new URL(page.url()).searchParams.get("email"), "contributor@example.test");
@@ -362,8 +397,8 @@ try {
   await mapGrant.getByText("有效", { exact: true }).waitFor();
   await journey.capture(page, "admin-account-detail-desktop");
   await page.screenshot({ path: `${output}/issue509-desktop.png`, fullPage: true,
-    mask: [page.locator('[class*="identityWho"]'), accountPanel.getByLabel("帳號 Email", { exact: true }), accountPanel.getByRole("heading", { name: "contributor@example.test", exact: true })] });
-  await accountPanel.getByLabel("帳號 Email", { exact: true }).fill("disabled@example.test");
+    mask: [page.locator('[class*="identityWho"]'), accountPanel.getByLabel("Email 或社團名稱", { exact: true }), accountPanel.getByRole("heading", { name: "contributor@example.test", exact: true })] });
+  await accountPanel.getByLabel("Email 或社團名稱", { exact: true }).fill("disabled@example.test");
   await accountPanel.getByRole("button", { name: "查詢", exact: true }).click();
   await accountPanel.getByRole("heading", { name: "disabled@example.test", exact: true }).waitFor();
   await accountPanel.getByRole("button", { name: "停用帳號", exact: true }).click();
@@ -407,9 +442,8 @@ try {
   assert.equal(await review.getByLabel("活動", { exact: true }).inputValue(), "sample-two");
   await navigate(page, "管理總覽");
   await summary.getByRole("link", { name: /社團認領0/ }).waitFor();
-  await page.waitForFunction(() => [...document.querySelectorAll("button")].some(button => button.textContent === "重新整理" && !button.disabled));
   expire();
-  await page.getByRole("button", { name: "重新整理", exact: true }).click();
+  await refreshInBackground(page);
   await page.getByRole("link", { name: "前往社團入口登入", exact: true }).waitFor();
   assert.equal(await page.locator("#admin, #map-review").count(), 0);
   assert.equal(await page.getByRole("button", { name: "登出", exact: true }).count(), 0);
@@ -436,7 +470,7 @@ try {
   const localFailure = await open("admin");
   await localFailure.page.locator('[aria-label="待審工作"]').getByRole("link", { name: /社團認領2/ }).waitFor();
   localFailure.failSettings();
-  await localFailure.page.getByRole("button", { name: "重新整理", exact: true }).click();
+  await refreshInBackground(localFailure.page);
   await localFailure.page.getByRole("alert").filter({ hasText: "營運狀態更新失敗" }).waitFor();
   await localFailure.page.locator('[aria-label="待審工作"]').getByRole("link", { name: /社團認領2/ }).waitFor();
   assert.equal(await localFailure.page.getByText("待審活動內容", { exact: true }).count(), 1);
@@ -449,6 +483,8 @@ try {
   assert.equal(await services.getByRole("button", { name: "檢查中…", exact: true }).isDisabled(), true);
   assert.equal(pendingCheck.requests.filter(x => x.path === "/api/admin/service-check").length, 0, "loading an existing pending check only resumes its read-only wait");
   pendingCheck.completeChecks();
+  // A background read that lands before the next poll still ends the wait.
+  await refreshInBackground(pendingCheck.page);
   await services.getByText("最近檢查可用", { exact: true }).first().waitFor();
   assert.equal(await services.getByRole("button", { name: "檢查服務", exact: true }).isEnabled(), true);
   assert.ok(pendingCheck.requests.filter(x => x.path === "/api/admin/site-settings" && x.method === "GET").length >= 2);
@@ -549,7 +585,7 @@ try {
   await mobileGrant.getByRole("button", { name: "撤銷", exact: true }).click();
   await mobileAccount.getByText("權限已變更，請重新讀取。", { exact: true }).waitFor();
   await mobileGrant.getByText("有效", { exact: true }).waitFor();
-  assert.equal(await mobileAccount.getByLabel("帳號 Email", { exact: true }).inputValue(), "contributor@example.test", "a failed grant operation keeps its target");
+  assert.equal(await mobileAccount.getByLabel("Email 或社團名稱", { exact: true }).inputValue(), "contributor@example.test", "a failed grant operation keeps its target");
   accountMobile.failGrant(0);
   await mobileGrant.getByRole("button", { name: "停權", exact: true }).click();
   await mobileGrant.getByText("已停權", { exact: true }).waitFor();
@@ -568,7 +604,7 @@ try {
   await accountMobile.page.locator('nav[aria-label="管理項目"] details:not([open])').waitFor();
   await journey.capture(accountMobile.page, "admin-account-detail-mobile");
   await accountMobile.page.screenshot({ path: `${output}/issue509-mobile.png`, fullPage: true,
-    mask: [accountMobile.page.locator('[class*="identityWho"]'), mobileAccount.getByLabel("帳號 Email", { exact: true }), mobileAccount.getByRole("heading", { name: "contributor@example.test", exact: true })] });
+    mask: [accountMobile.page.locator('[class*="identityWho"]'), mobileAccount.getByLabel("Email 或社團名稱", { exact: true }), mobileAccount.getByRole("heading", { name: "contributor@example.test", exact: true })] });
   accountMobile.failAccount(503);
   await accountMobile.page.reload();
   await mobileAccount.getByText("無法取得帳號明細。", { exact: true }).waitFor();
@@ -577,7 +613,7 @@ try {
   await mobileAccount.getByRole("button", { name: "重新讀取", exact: true }).click();
   await mobileGrant.getByText("有效", { exact: true }).waitFor();
   for (const [email, expected] of [["empty@example.test", "無活動工作區權限。"], ["missing@example.test", "查無此帳號。"], ["deleting@example.test", "帳號正在刪除，無法停用。"], ["admin@example.test", "請先移出管理者名單。"]]) {
-    await mobileAccount.getByLabel("帳號 Email", { exact: true }).fill(email);
+    await mobileAccount.getByLabel("Email 或社團名稱", { exact: true }).fill(email);
     await mobileAccount.getByRole("button", { name: "查詢", exact: true }).click();
     await mobileAccount.getByText(expected, { exact: email !== "admin@example.test" }).waitFor();
   }
@@ -635,7 +671,7 @@ try {
   await sampleEntry.getByText("認領待審 123", { exact: true }).waitFor();
   eventDesktop.failEvents(503);
   eventDesktop.failQueue(503);
-  await eventDesktop.page.getByRole("button", { name: "重新整理", exact: true }).click();
+  await refreshInBackground(eventDesktop.page);
   await eventDesktop.page.getByRole("alert").filter({ hasText: "活動內容更新失敗" }).waitFor();
   await eventDesktop.page.getByRole("alert").filter({ hasText: "待審摘要更新失敗" }).waitFor();
   await sampleEntry.getByText("認領待審 123", { exact: true }).waitFor();

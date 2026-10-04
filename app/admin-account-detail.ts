@@ -40,3 +40,17 @@ export type AdminAccountDetailResponse = {
   email: string;
   account: AdminAccountDetail | null;
 };
+
+/** A claim whose circle name matched an admin's search, with the account that made it. */
+export type AdminAccountCircleMatch = {
+  email: string;
+  circleName: string;
+  eventId: string;
+  eventName: string;
+  status: AdminAccountClaim["status"];
+};
+
+export type AdminAccountCircleSearchResponse = {
+  query: string;
+  matches: AdminAccountCircleMatch[];
+};
