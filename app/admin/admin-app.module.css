@@ -55,6 +55,10 @@
 .contentText { white-space: pre-wrap; }
 .detailMedia { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
 .detailMedia img { display: block; width: 120px; max-height: 180px; object-fit: contain; border: 1px solid var(--line); background: #fff; }
+.accountDetail { overflow-wrap: anywhere; }
+.accountActions { align-items: center; }
+.accountActions button { flex: 0 0 auto; }
+.accountActions p { margin: 0; }
 @media (max-width: 1050px) { .dashboard { grid-template-columns: 1fr; } }
 @media (max-width: 760px) {
   .layout { grid-template-columns: 1fr; gap: 16px; margin-top: 16px; }

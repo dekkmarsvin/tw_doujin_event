@@ -5,6 +5,7 @@ import { nearestEvent, taipeiDate } from "../event-calendar";
 import { adminLoginEntry } from "../notification-navigation";
 import { SessionDeadline, useSessionExpiry } from "../circle-portal/session-status";
 import { AdminRoster } from "./admin-panels";
+import { AdminAccountPanel } from "./admin-account-panel";
 import { AdminCirclePanel } from "./admin-circle-panel";
 import { AdminMapReviewPanel } from "./admin-map-review-panel";
 import { AdminNotificationPanel } from "./admin-notification-panel";
@@ -53,7 +54,8 @@ export default function AdminApp() {
   const scoped = route.section === "circles" || (route.section === "events" && route.view === "maps");
   const unavailable = route.unavailable || (scoped && !event);
   const tabs = route.section === "events" ? [["publication", "審核與發布"], ["maps", "地圖投稿"]]
-    : route.section === "circles" ? [["claims", "認領審核"], ["search", "社團查詢"]] : [];
+    : route.section === "circles" ? [["claims", "認領審核"], ["search", "社團查詢"]]
+      : route.section === "accounts" ? [["search", "帳號查詢"], ["admins", "網站管理者"]] : [];
   return <div className={`${styles.page} ${ui.workspace}`}>
     <header className={styles.masthead}><h1>網站管理</h1>
       {session && <div className={styles.accountBar}>
@@ -73,7 +75,7 @@ export default function AdminApp() {
           </details></nav>
           <main className={ui.content}>
             {route.section !== "overview" && <div className={ui.title}><h2>{labels[route.section]}</h2></div>}
-            {tabs.length > 0 && <nav className={ui.tabs} aria-label={`${labels[route.section]}頁籤`}>{tabs.map(([view, label]) => <a key={view} href={adminHref(route.section, { view, event: route.event })} aria-current={route.view === view ? "page" : undefined}>{label}</a>)}</nav>}
+            {tabs.length > 0 && <nav className={ui.tabs} aria-label={`${labels[route.section]}頁籤`}>{tabs.map(([view, label]) => <a key={view} href={adminHref(route.section, { view, ...(route.section === "accounts" ? { email: route.email } : { event: route.event }) })} aria-current={route.view === view ? "page" : undefined}>{label}</a>)}</nav>}
             {unavailable ? <section className={styles.card}><h3>無法開啟指定頁面</h3><p>這個入口或活動目前無法使用。</p><a href="/admin">返回管理總覽</a></section>
               : route.section === "overview" ? <AdminOverview />
                 : route.section === "events" ? route.view === "publication" ? <AdminPublicationPanel />
@@ -82,7 +84,8 @@ export default function AdminApp() {
                     : <AdminCirclePanel key={event!.id} event={event!} initialQuery={route.q} circleId={route.circle}
                       onEventChange={id => replaceRoute({ event: id, q: "", circle: "" })} onSearchChange={q => replaceRoute({ event: event!.id, q, circle: "" })}
                       onSelectCircle={circle => replaceRoute({ event: event!.id, circle })} />
-                    : route.section === "accounts" ? <AdminRoster />
+                    : route.section === "accounts" ? route.view === "admins" ? <AdminRoster /> : <AdminAccountPanel key={route.email} initialEmail={route.email}
+                      onSearchChange={email => replaceRoute({ email, event: "" })} />
                       : route.section === "data" ? <AdminReferencePanel initialView={route.view as ReferenceView} onViewChange={view => replaceRoute({ view })} />
                         : route.section === "settings" ? <AdminSiteSettingsPanel /> : <AdminNotificationPanel email={session.email} />}
           </main>

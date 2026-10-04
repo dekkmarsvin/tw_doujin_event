@@ -431,6 +431,31 @@ try {
   assert.ok(detail.claims.some(claim => claim.status === "verified" && claim.accountEmail === CIRCLE));
   await admin.locator("#takedown").getByText(PEN_NAME, { exact: true }).waitFor();
   await journey.capture(admin, "admin-circle-real-detail");
+
+  const accountResponse = admin.waitForResponse(response => {
+    const url = new URL(response.url());
+    return response.request().method() === "GET" && url.pathname === "/api/admin/accounts" && url.searchParams.get("email") === CIRCLE;
+  });
+  await admin.goto(`${base}/admin?${new URLSearchParams({ section: "accounts", view: "search", email: CIRCLE, event: "sample" })}`);
+  const accountResult = await accountResponse;
+  assert.equal(accountResult.status(), 200, "the real Pages account read is wired to Admin's signed-in session");
+  const accountDetail = (await accountResult.json()).account;
+  assert.equal(accountDetail.email, CIRCLE);
+  assert.equal(accountDetail.status, "active");
+  assert.equal(accountDetail.isAdmin, false, "the target does not inherit the viewing admin's membership");
+  assert.ok(accountDetail.claims.some(claim => claim.eventId === "sample" && claim.circleId === CIRCLE_ID && claim.status === "verified"));
+  const accountPanel = admin.locator('section[aria-labelledby="account-query-heading"]');
+  await accountPanel.getByRole("heading", { name: CIRCLE, exact: true }).waitFor();
+  await accountPanel.locator('section[aria-labelledby="account-claims-heading"]').getByText(CIRCLE_NAME, { exact: true }).waitFor();
+  const mapQualification = accountPanel.locator('section[aria-labelledby="account-map-heading"]');
+  await mapQualification.getByText("未授權", { exact: true }).waitFor();
+  const grantResponse = admin.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/admin/map-contributors");
+  await mapQualification.getByRole("button", { name: "授予", exact: true }).click();
+  assert.equal((await grantResponse).status(), 200);
+  await mapQualification.getByText("有效", { exact: true }).waitFor();
+  await journey.capture(admin, "admin-account-real-detail");
+  await mapQualification.getByRole("button", { name: "撤銷", exact: true }).click();
+  await mapQualification.getByText("已撤銷", { exact: true }).waitFor();
   await admin.close();
 
   await journey.finish();

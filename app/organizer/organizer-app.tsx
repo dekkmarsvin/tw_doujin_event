@@ -49,8 +49,10 @@ export default function OrganizerApp() {
 
   useEffect(() => {
     const token = takeLoginToken();
-    if (!token && new URL(window.location.href).searchParams.has("reauth")) {
-      window.history.replaceState(null, "", "/organizer");
+    const destination = new URL(window.location.href);
+    if (!token && destination.searchParams.has("reauth")) {
+      destination.searchParams.delete("reauth");
+      window.history.replaceState(null, "", destination);
       queueMicrotask(() => setReady(true));
       return;
     }
@@ -115,7 +117,9 @@ function MobileNotificationResult() {
     {error ? <p role="alert">{error}</p> : detail ? <><h2>{detail.event.tentativeName}</h2>
       <p>目前狀態：{STATUS_LABEL[detail.event.status]}</p>
       {detail.publication && <p>發布狀態：{detail.publication.status === "published" ? "已公開" : detail.publication.status === "failed" ? "發布未完成" : "正在處理"}</p>}
-      <p>活動資料與地圖編輯請改用桌機。請在桌機開啟同一封信的連結，接續這個工作區。</p></> : <p role="status">載入結果…</p>}
+      <p>{new URLSearchParams(window.location.search).get("section") === "members"
+        ? "成員管理請改用桌機。請在桌機開啟同一個連結，接續這個工作區。"
+        : "活動資料與地圖編輯請改用桌機。請在桌機開啟同一封信的連結，接續這個工作區。"}</p></> : <p role="status">載入結果…</p>}
     <p className={styles.linkActions}><a href="/organizer">返回主辦單位工作區</a></p>
   </section>;
 }
@@ -212,7 +216,8 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   // -- the map above all -- are what that width is for.
   const [eventListOpen, setEventListOpen] = useState(true);
   const [expandedEvents, setExpandedEvents] = useState<Record<string, boolean>>({});
-  const [surface, setSurface] = useState<"data" | "members" | "claims" | "takedown">("data");
+  const [surface, setSurface] = useState<"data" | "members" | "claims" | "takedown">(() =>
+    entry.has("candidate") && entry.get("section") === "members" ? "members" : "data");
   const { pendingClaims, onQueueLoaded } = useOrganizerPendingClaims(
     detail?.claimReviewAvailable ? detail.event.id : null, detail?.event.eventId ?? null, surface === "claims",
   );
@@ -245,7 +250,10 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
       } else setSelectedId((current) => entry.has("candidate") ? current : latestOrganizerEdition(next, current) ?? latestOrganizerEdition(next));
       return next;
     }
-    setSelectedId((current) => current === null ? null
+    const missingMemberTarget = entry.has("candidate") && entry.get("section") === "members" && currentSelection.current === entry.get("candidate")
+      && !next.some(item => item.id === entry.get("candidate"));
+    if (missingMemberTarget) setNotice({ kind: "error", message: "找不到信件指定的工作區，或此帳號已無權限。請從活動列表選擇可使用的活動。" });
+    setSelectedId((current) => current === null ? null : missingMemberTarget ? null
       : next.some((item) => item.id === current) ? current : latestOrganizerEdition(next));
     return next;
   }, [entry]);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { disableAccount, listAdmins, manageAdmin, PortalError, searchTakedownCircles, takedownOverride, type AdminEntry, type TakedownCircle } from "../circle-editor-client";
+import { listAdmins, manageAdmin, PortalError, searchTakedownCircles, takedownOverride, type AdminEntry, type TakedownCircle } from "../circle-editor-client";
 import { useModalFocus } from "../use-modal-focus";
 import { PUBLISHED_EVENTS } from "../event-catalog";
 import { eventsByProximity, taipeiDate } from "../event-calendar";
@@ -133,8 +133,6 @@ export function AdminRoster() {
   const [self, setSelf] = useState("");
   const [email, setEmail] = useState("");
   const [rosterStatus, setRosterStatus] = useState<Status>(IDLE);
-  const [disableStatus, setDisableStatus] = useState<Status>(IDLE);
-  const [disableEmail, setDisableEmail] = useState("");
 
   const refresh = useCallback(() => {
     void listAdmins()
@@ -156,7 +154,7 @@ export function AdminRoster() {
   };
 
   return <section className={`${styles.card} ${styles.admin}`} id="accounts" aria-labelledby="accounts-heading">
-    <h2 id="accounts-heading">管理者名單</h2>
+    <h2 id="accounts-heading">網站管理者</h2>
     <ul className={styles.claimList}>
       {admins.map((admin) => <li key={admin.email}>
         <div>
@@ -174,22 +172,5 @@ export function AdminRoster() {
 
     {rosterStatus.kind !== "idle" && rosterStatus.kind !== "busy" && <p className={rosterStatus.kind === "error" ? styles.error : styles.notice}>{rosterStatus.message}</p>}
 
-    <h3>停用帳號</h3>
-    <p>停用會立即撤銷該帳號的登入狀態，但保留資料供身分確認或後續刪除請求。</p>
-    <label htmlFor="disable-account-email">帳號 email</label>
-    <input id="disable-account-email" type="email" value={disableEmail} onChange={(event) => setDisableEmail(event.target.value)} />
-    <button
-      type="button"
-      disabled={!disableEmail || disableStatus.kind === "busy"}
-      onClick={() => {
-        setDisableStatus({ kind: "busy", message: "處理中…" });
-        void disableAccount(disableEmail)
-          .then(() => { setDisableStatus({ kind: "ok", message: "帳號已停用。" }); setDisableEmail(""); })
-          .catch((error: unknown) => {
-            setDisableStatus({ kind: "error", message: errorMessage(error) });
-          });
-      }}
-    >停用</button>
-    {disableStatus.kind !== "idle" && disableStatus.kind !== "busy" && <p className={disableStatus.kind === "error" ? styles.error : styles.notice}>{disableStatus.message}</p>}
   </section>;
 }

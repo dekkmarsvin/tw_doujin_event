@@ -1,6 +1,7 @@
 import { isAccountNotificationCadence } from "./account-notifications";
 import { canSubmitEventApplication, contactSettingsProblem, parseSiteSettings } from "./site-settings";
 import type { AdminCircleDetail } from "./admin-circle-detail";
+import type { AdminAccountDetailResponse } from "./admin-account-detail";
 import type { CircleViewRecord } from "./circle-records";
 import { notificationParameters } from "./notification-navigation";
 import identityRuntimeVersion from "../db/identity-runtime-version.json";
@@ -1975,6 +1976,56 @@ export function createCirclePortalHandlers({
     return json({ error: result === "last" ? "這是最後一位管理者，無法移除。" : "找不到這位管理者。" }, 409);
   }
 
+  async function adminAccountDetail(request: Request) {
+    const gate = await requireAdmin(request);
+    if (!gate.ok) return gate.response;
+    const email = normalizeEmail(new URL(request.url).searchParams.get("email") ?? "");
+    if (!isEmailShaped(email)) return json({ error: "email 格式無效。" }, 400);
+    const account = await repository.getAccountForAdmin(email);
+    if (!account) return json({ email, account: null } satisfies AdminAccountDetailResponse);
+
+    const [organizerGrants, claims] = await Promise.all([
+      repository.listAccountOrganizerGrantsForAdmin(account.id),
+      repository.listAccountClaimsForAdmin(account.id),
+    ]);
+    const eventIds = [...new Set(claims.map(claim => claim.event_id))];
+    const served = new Set((await Promise.all(eventIds.map(async eventId =>
+      (config.publishedEvent ? await config.publishedEvent(eventId) : eventId === config.eventId) ? eventId : null)))
+      .filter((eventId): eventId is string => eventId !== null));
+    const claimSummaries = await Promise.all(claims.map(async claim => {
+      const circle = served.has(claim.event_id) ? await lookupCircle(claim.circle_id, claim.event_id) : null;
+      return {
+        id: claim.id, eventId: claim.event_id, eventName: getEventDefinition(claim.event_id)?.name ?? claim.event_id,
+        circleId: claim.circle_id, circleName: claim.circle_name_at_claim, status: claim.status, createdAt: claim.created_at,
+        detailHref: circle
+          ? `/admin?section=circles&view=search&event=${encodeURIComponent(claim.event_id)}&circle=${encodeURIComponent(claim.circle_id)}` : null,
+        reviewHref: served.has(claim.event_id) && claim.status === "pending"
+          ? `/admin?section=circles&view=claims&event=${encodeURIComponent(claim.event_id)}&claim=${encodeURIComponent(claim.id)}` : null,
+      };
+    }));
+    const result: AdminAccountDetailResponse = {
+      email,
+      account: {
+        email: account.email,
+        status: account.deletion_started_at !== null ? "deleting" : account.disabled_at !== null ? "disabled" : "active",
+        createdAt: account.created_at, disabledAt: account.disabled_at, deletionStartedAt: account.deletion_started_at,
+        isAdmin: !!account.is_admin,
+        mapContributor: {
+          status: account.map_granted_at === null ? "none" : account.map_revoked_at !== null ? "revoked"
+            : account.map_suspended_at !== null ? "suspended" : "active",
+          grantedAt: account.map_granted_at, revokedAt: account.map_revoked_at, suspendedAt: account.map_suspended_at,
+        },
+        organizerGrants: organizerGrants.map(candidate => ({
+          candidateId: candidate.id, eventId: candidate.event_id, name: candidate.tentative_name,
+          edition: candidate.edition, role: candidate.role,
+          membersHref: `/organizer?candidate=${encodeURIComponent(candidate.id)}&section=members`,
+        })),
+        claims: claimSummaries,
+      },
+    };
+    return json(result);
+  }
+
   async function adminDisableAccount(request: Request) {
     const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
@@ -3779,7 +3830,7 @@ export function createCirclePortalHandlers({
     // before an event is chosen.
     authConfig, requestLink, verify, session, signOut, deleteMyAccount,
     listEventApplications, submitEventApplication, reviewEventApplication,
-    adminListAdmins, adminManageAdmins, adminDisableAccount, adminManageMapContributor,
+    adminListAdmins, adminManageAdmins, adminAccountDetail, adminDisableAccount, adminManageMapContributor,
     // Cross-event and read-only; it filters to served events itself.
     adminReviewQueue,
     adminProbeGitHubInstallation,
