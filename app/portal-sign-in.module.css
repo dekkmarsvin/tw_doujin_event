@@ -1,0 +1,108 @@
+/* The one signed-out screen of `/circle` and `/organizer`. Each workspace's
+   page stylesheet styles bare elements under its own root, so every rule here
+   carries two classes: the form also sits inside the organizer's invitation
+   card and has to look the same there. Colours are DESIGN.md's tokens. */
+
+/* `/circle` keeps the browser's body margin for its signed-in page; the
+   full-width header here must not sit inside it. */
+:global(body):has(.screen) { margin: 0; }
+.screen {
+  min-height: 100vh;
+  background: #f8f7f2;
+  color: #202a35;
+  font-family: Geist, system-ui, "Noto Sans TC", sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.screen *, .screen *::before, .screen *::after { box-sizing: border-box; }
+.screen :is(h1, h2, p, form) { margin: 0; }
+
+/* Full width like the public header the "登入" came from: the workspace's
+   name on the left, the way back on the right. */
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 24px;
+  min-height: 72px;
+  padding: 14px 24px;
+  border-bottom: 1px solid #dfe3df;
+  background: #f9faf8;
+}
+.head h1 { font-size: 20px; line-height: 1.2; letter-spacing: .02em; }
+.head a[href] {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid #dfe3df;
+  border-radius: 7px;
+  background: #f9faf8;
+  color: #202a35;
+  font-weight: 700;
+  text-decoration: none;
+}
+.head a[href]:hover { border-color: #aeb6b3; background: #f2f0e8; }
+
+.column { display: grid; gap: 16px; width: min(520px, calc(100% - 32px)); margin: 8vh auto 0; padding-bottom: 48px; }
+
+/* Flat: a resting card takes a line, not a shadow (DESIGN.md, Flat-By-Default). */
+.card { padding: 24px; border: 1px solid #dfe3df; border-radius: 12px; background: #f9faf8; }
+.card h2 { font-size: 20px; line-height: 1.2; }
+.card > p { margin-top: 6px; color: #59626c; }
+
+.form, .form form { display: grid; gap: 10px; }
+.card .form { margin-top: 18px; }
+.form .label { display: block; color: #202a35; font-size: 14px; font-weight: 700; letter-spacing: normal; }
+.form .input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid #c9cfcb;
+  border-radius: 7px;
+  background: #fff;
+  color: #202a35;
+  font: inherit;
+  /* 16px avoids the iOS zoom-on-focus jump. */
+  font-size: 16px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .form .input { font-size: 14px; }
+}
+.form .input::placeholder { color: #59626c; }
+.form .input:focus-visible { outline: 0; border-color: #9aa5a0; box-shadow: 0 0 0 3px #dfe8e3; }
+.form .fixedEmail { margin: 0; color: #202a35; font-size: 14px; }
+.form .submit {
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 8px 14px;
+  border: 1px solid #202a35;
+  border-radius: 7px;
+  background: #202a35;
+  color: #f9faf8;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.form .submit:hover:not(:disabled) { background: #34404c; }
+.form .submit:focus-visible { outline: 3px solid #8fac9c; outline-offset: 2px; }
+.form .submit:disabled { border-color: #dfe3df; background: #f2f0e8; color: #59626c; cursor: not-allowed; }
+
+:is(.form, .card) .fine { margin: 0; color: #59626c; font-size: 12px; line-height: 1.7; }
+:is(.form, .card) .fine a { color: #202a35; text-underline-offset: 3px; }
+:is(.form, .card) .fine code { font-family: "Geist Mono", ui-monospace, monospace; font-size: 12px; }
+
+:is(.column, .form) :is(.notice, .error) { margin: 0; padding: 9px 12px; border: 1px solid; border-radius: 9px; font-size: 14px; }
+:is(.column, .form) .notice { border-color: #b8d8ca; background: #edf8f3; color: #306d59; }
+:is(.column, .form) .error { border-color: #edc5bf; background: #fff3f1; color: #a43e30; }
+
+@media (max-width: 760px) {
+  .head { min-height: 64px; padding: 12px 16px; }
+  .column { margin-top: 24px; }
+  .card { padding: 18px; }
+}

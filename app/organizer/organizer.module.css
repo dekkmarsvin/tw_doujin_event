@@ -61,13 +61,11 @@
 .secondary:hover:not(:disabled), .ghost:hover:not(:disabled) { border-color: #aeb6b3 !important; background: var(--map-paper) !important; }
 .textButton { border-color: transparent !important; padding: 4px 0 !important; background: transparent !important; color: var(--ink) !important; text-decoration: underline; text-underline-offset: 3px; }
 
-.centerCard { width: min(520px, calc(100% - 32px)); margin: 12vh auto 0; padding: 34px; border-radius: 18px; background: var(--surface); box-shadow: 0 28px 80px #11182022; }
+/* Same flat card and column as the sign-in screen (`portal-sign-in.module.css`). */
+.centerCard { width: min(520px, calc(100% - 32px)); margin: 8vh auto 0; padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .centerCard h2 { font-size: 20px; }
 .centerCard p { max-width: 68ch; color: var(--muted); font-size: 14px; line-height: 1.65; }
 .stack { display: grid; gap: 10px; margin-top: 24px; }
-/* Signed out, the workspace entries sit in the sign-in card's column. */
-.signInEntries { width: min(520px, calc(100% - 32px)); margin: 8vh auto 0; }
-.signInEntries + .centerCard { margin-top: 16px; }
 /* The ways back from an account with no organizer access, as buttons. */
 .linkActions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
 .linkActions a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); font-size: 14px; font-weight: 700; text-decoration: none; }
@@ -80,8 +78,6 @@
 .page :global(input), .page :global(textarea), .page :global(select) { width: 100%; min-width: 0; min-height: 38px; border: 1px solid #c9cfcb; border-radius: 7px; padding: 9px 10px; background: var(--surface); color: var(--ink); }
 .page :global(input::placeholder), .page :global(textarea::placeholder) { color: #59626c; }
 .page :global(textarea) { min-height: 90px; resize: vertical; }
-.finePrint { font-size: 12px !important; }
-.finePrint a { color: var(--ink); text-underline-offset: 3px; }
 .notice, .error { margin: 12px 24px; border: 1px solid; border-radius: 9px; padding: 9px 12px; font-size: 14px; }
 .notice { border-color: #b8d8ca; background: var(--success-soft); color: var(--success); }
 .error { border-color: #edc5bf; background: var(--danger-soft); color: var(--danger); }

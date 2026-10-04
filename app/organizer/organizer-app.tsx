@@ -14,7 +14,7 @@ import { OrganizerMapPanel } from "./organizer-map-panel";
 import { ImportPanel } from "./organizer-import-panel";
 import { DraftForm } from "./organizer-draft-form";
 import { MembersPanel } from "./organizer-members-panel";
-import { PortalError, readSession, readTurnstileSitekey, requestLoginLink, signOut, verifyLoginToken, type PortalSession } from "../circle-editor-client";
+import { PortalError, readSession, signOut, verifyLoginToken, type PortalSession } from "../circle-editor-client";
 import { createOrganizerEvent, completeOrganizerOnboarding, listOrganizerEvents, readOrganizerEvent, saveOrganizerWorkspacePreference, startOrganizerAmendment, type OrganizerEventDetail, type OrganizerEventSummary, type OrganizerMapLocation } from "../organizer-client";
 import { type OrganizerVenueCatalog } from "../organizer-venue-catalog";
 
@@ -23,10 +23,10 @@ import { organizerIssueTarget, RequiredMark, type FieldRequest } from "./organiz
 import { type OrganizerEventDraft } from "../organizer-event";
 import { ORGANIZER_GUIDED_TASKS, ORGANIZER_WORKSPACE_SECTIONS, type OrganizerGuidedTask, type OrganizerWorkspaceSection } from "../organizer-workspace";
 
-import { TurnstileWidget } from "../circle-portal/turnstile-widget";
 import { SessionDeadline, useSessionExpiry } from "../circle-portal/session-status";
 import { AccountNotificationSettings } from "../account-notification-settings";
-import { ContactLink, WorkspaceEntries, WorkspaceSwitch } from "../workspace-nav";
+import { ContactLink, WorkspaceSwitch } from "../workspace-nav";
+import { LoginLinkForm, SignInScreen } from "../portal-sign-in";
 
 
 import { UiIcon } from "../ui-icons";
@@ -67,9 +67,15 @@ export default function OrganizerApp() {
       .finally(() => setReady(true));
   }, []);
 
+  if (ready && !session) return <SignInScreen
+    title="主辦工作區"
+    current="organizer"
+    notice={notice.kind === "ok" || notice.kind === "error" ? { kind: notice.kind, message: notice.message } : null}
+  />;
+
   return <div className={styles.page}>
     <header className={styles.header}>
-      <div><h1>主辦單位工作區</h1><p>場刊 Map 活動資料建置</p></div>
+      <div><h1>主辦工作區</h1><p>場刊 Map 活動資料建置</p></div>
       {session && <div className={styles.identity}>
         <WorkspaceSwitch current="organizer" />
         <span>{session.email}{session.isAdmin ? "・網站管理者" : ""}</span>
@@ -81,15 +87,7 @@ export default function OrganizerApp() {
       </div>}
     </header>
     {notice.kind !== "idle" && <p role="status" className={notice.kind === "error" ? styles.error : styles.notice}>{notice.message}</p>}
-    {!ready ? <main className={styles.centerCard}><p>載入工作區…</p></main>
-      : !session ? <main>
-        <WorkspaceEntries current="organizer" className={styles.signInEntries} />
-        <section className={styles.centerCard}>
-          <h2>主辦單位登入</h2>
-          <p>使用 email 取得 15 分鐘內有效的一次性登入連結。</p>
-          <OrganizerLoginLink />
-        </section>
-      </main>
+    {!ready || !session ? <main className={styles.centerCard}><p>載入工作區…</p></main>
         : !session.isAdmin && !session.hasOrganizerAccess && !session.canApplyForEvent && !session.hasEventApplications
           ? <main><OrganizerNoAccess session={session} /></main>
         : !session.isAdmin && !session.hasOrganizerAccess ? <main className={styles.applicationMain}><OrganizerApplicationsPanel session={session} /></main>
@@ -120,7 +118,7 @@ function MobileNotificationResult() {
       <p>{new URLSearchParams(window.location.search).get("section") === "members"
         ? "成員管理請改用桌機。請在桌機開啟同一個連結，接續這個工作區。"
         : "活動資料與地圖編輯請改用桌機。請在桌機開啟同一個連結，接續這個工作區。"}</p></> : <p role="status">載入結果…</p>}
-    <p className={styles.linkActions}><a href="/organizer">返回主辦單位工作區</a></p>
+    <p className={styles.linkActions}><a href="/organizer">返回主辦工作區</a></p>
   </section>;
 }
 
@@ -130,42 +128,6 @@ function NarrowScreenBlocker({ onSignedOut }: { onSignedOut: () => void }) {
     <p>活動資料與地圖編輯需要較寬的畫面。</p>
     <button type="button" className={styles.ghost} onClick={() => void signOut().finally(onSignedOut)}>登出</button>
   </section>;
-}
-
-/**
- * The organizer's one-time link. `email` fixes the address to the account
- * already signed in, which only needs a link of this audience: signing in
- * through one is what accepts a pending organizer invitation.
- */
-function OrganizerLoginLink({ email: signedInEmail }: { email?: string }) {
-  const [email, setEmail] = useState(signedInEmail ?? "");
-  const [sitekey, setSitekey] = useState<string | null>(null);
-  const [humanToken, setHumanToken] = useState<string | null>(null);
-  const [generation, setGeneration] = useState(0);
-  const [notice, setNotice] = useState<Notice>(IDLE);
-  useEffect(() => { void readTurnstileSitekey().then(setSitekey).catch((error) => setNotice({ kind: "error", message: message(error) })); }, []);
-  const unavailable = useCallback(() => setNotice({ kind: "error", message: "真人驗證載入失敗，請檢查網路後重新整理。" }), []);
-
-  return <>
-    <form className={styles.stack} onSubmit={(event) => {
-      event.preventDefault();
-      if (!humanToken) return;
-      setNotice({ kind: "busy", message: "寄送中…" });
-      void requestLoginLink(email, humanToken, "organizer")
-        .then(() => setNotice({ kind: "ok", message: "若帳號可使用，登入連結已寄出。" }))
-        .catch((error: unknown) => setNotice({ kind: "error", message: message(error) }))
-        .finally(() => { setHumanToken(null); setGeneration((value) => value + 1); });
-    }}>
-      {signedInEmail ? <p>寄到 {signedInEmail}</p> : <>
-        <label htmlFor="organizer-email">Email</label>
-        <input id="organizer-email" type="email" required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} />
-      </>}
-      {sitekey && <TurnstileWidget key={generation} sitekey={sitekey} onToken={setHumanToken} onUnavailable={unavailable} />}
-      <button type="submit" disabled={!humanToken || notice.kind === "busy"}>寄出登入連結</button>
-    </form>
-    <p className={styles.finePrint}>登入前請閱讀<a href="/privacy">隱私權與資料使用告知</a>。</p>
-    {notice.kind !== "idle" && <p role="status" className={notice.kind === "error" ? styles.error : styles.notice}>{notice.message}</p>}
-  </>;
 }
 
 /**
@@ -187,7 +149,7 @@ function OrganizerNoAccess({ session }: { session: PortalSession }) {
     <div className={styles.invitation}>
       {asking ? <>
         <h3>寄送主辦登入連結</h3>
-        <OrganizerLoginLink email={session.email} />
+        <LoginLinkForm audience="organizer" email={session.email} />
       </> : <p>收到主辦邀請？<button type="button" className={styles.ghost} onClick={() => setAsking(true)}>寄送主辦登入連結</button></p>}
     </div>
   </section>;

@@ -3,7 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   createClaim, deleteMyAccount, deleteMyOverride, listMyClaims, PortalError, readMyOverride,
-  previewOverride, readSession, readTurnstileSitekey, readClaimCircle, setPostEventVisibility, requestLoginLink, runChallenge, saveOverride, searchCircles, signOut, uploadThumbnail, verifyLoginToken, withdrawClaim,
+  previewOverride, readSession, readClaimCircle, setPostEventVisibility, runChallenge, saveOverride, searchCircles, signOut, uploadThumbnail, verifyLoginToken, withdrawClaim,
   setPortalEventId,
   type CircleMatch, type ClaimSummary, type PortalSession,
 } from "../circle-editor-client";
@@ -22,8 +22,8 @@ import { PUBLISHED_EVENTS, getPublishedEvent, type EventDefinition } from "../ev
 import { eventCalendar, eventsByProximity, nearestEvent, taipeiDate } from "../event-calendar";
 import { AccountNotificationSettings } from "../account-notification-settings";
 import { adminLoginDestination } from "../notification-navigation";
-import { ContactLink, WorkspaceEntries, WorkspaceSwitch } from "../workspace-nav";
-import { TurnstileWidget } from "./turnstile-widget";
+import { ContactLink, WorkspaceSwitch } from "../workspace-nav";
+import { SignInFinePrint, SignInScreen } from "../portal-sign-in";
 import { MapContributorPanel } from "./map-contribution-panel";
 import { CirclePageShare } from "./circle-page-share";
 import { selectedCircleShareImage } from "../circle-share-image";
@@ -336,6 +336,17 @@ export default function CirclePortalApp() {
     <main className={styles.card}><h2>找不到指定的活動</h2><p className={styles.backLink}><a href="/circle">返回社團資料</a></p></main>
   </div>;
 
+  // The public header's "登入" lands here, organizers included; the sign-in
+  // screen is the one `/organizer` shows too.
+  if (ready && !session) return <SignInScreen
+    title="社團資料"
+    current="circle"
+    circleId={targetCircleId}
+    notice={status.kind === "ok" || status.kind === "error" ? { kind: status.kind, message: status.message } : null}
+  >
+    <SignInFinePrint>個資與著作權爭議請寄 <code>maintain@kotoban.top</code>，控制面使用問題請寄 <code>circle@kotoban.top</code>。</SignInFinePrint>
+  </SignInScreen>;
+
   return <div className={styles.page}>
     <header className={styles.masthead}>
       {/* Who is signed in, beside the page and its event when they fit and
@@ -363,27 +374,24 @@ export default function CirclePortalApp() {
         <h1>社團資料</h1>
         {/* The event is the page's context, not a task of its own: the picker
             sits where its name would, and one event needs no picker at all. */}
-        {session && PUBLISHED_EVENTS.length > 1
+        {/* Signed out, no event is named: the browser's last event is only
+            where the session will open, and naming it on the sign-in read as
+            a sign-in for that event alone. */}
+        {session && (PUBLISHED_EVENTS.length > 1
           ? <EventPicker
             eventId={event.id}
             claimsByEvent={claimsByEvent}
             onReach={() => readClaimsFor(PUBLISHED_EVENTS.map((item) => item.id).filter((id) => !(id in claimsByEvent)))}
             onChoose={(next) => { setEventId(next); setClaims([]); setClaimsLoadedFor(""); setClaimsFailedFor(""); setStatus(IDLE); }}
           />
-          : <p>{event.name}・{eventCalendar(event).label}</p>}
+          : <p>{event.name}・{eventCalendar(event).label}</p>)}
         <a className={styles.backLink} href={mapHref(event.id)}>返回活動地圖</a>
       </div>
     </header>
 
     {status.kind !== "idle" && <p className={status.kind === "error" ? styles.error : styles.notice} role="status">{status.message}</p>}
 
-    {!ready ? <p className={styles.notice}>載入中…</p>
-      : !session ? <>
-        {/* The public header's "登入" lands here, organizers included, so the
-            sign-in says which workspace this is and where the other one is. */}
-        <WorkspaceEntries current="circle" className={styles.entryNav} />
-        <SignIn circleId={targetCircleId} />
-      </>
+    {!ready || !session ? <p className={styles.notice}>載入中…</p>
         : <div className={styles.workspace}>
           {/* Keyed on the event: claims, drafts and editor drafts all belong to
               one event, and carrying them across a switch would show one
@@ -471,62 +479,6 @@ function AccountDeletion({ session, onDeleted }: { session: PortalSession; onDel
       </>}
     {status.kind === "error" && <p className={styles.error}>{status.message}</p>}
     </details>
-  </section>;
-}
-
-function SignIn({ circleId }: { circleId: string }) {
-  const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<Status>(IDLE);
-  const [sitekey, setSitekey] = useState<string | null>(null);
-  const [humanToken, setHumanToken] = useState<string | null>(null);
-  // A Turnstile token is single-use and short-lived. Remounting the widget is
-  // what issues the next one, so every submit bumps this.
-  const [widgetGeneration, setWidgetGeneration] = useState(0);
-
-  // Only the sign-in view asks for the sitekey; a signed-in circle never pays
-  // for the round trip, and the reader entry never imports this module at all.
-  useEffect(() => {
-    void readTurnstileSitekey()
-      .then(setSitekey)
-      .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
-  }, []);
-
-  const onUnavailable = useCallback(() => setStatus({
-    kind: "error",
-    message: "真人驗證元件載入失敗，請檢查網路或內容封鎖設定後重新整理。",
-  }), []);
-
-  return <section className={styles.card}>
-    <h2>登入</h2>
-    <p>輸入 email 取得 15 分鐘內有效的一次性登入連結。</p>
-    <form onSubmit={(event) => {
-      event.preventDefault();
-      if (!humanToken) return;
-      setStatus({ kind: "busy", message: "寄送中…" });
-      void requestLoginLink(email, humanToken, "circle", circleId || undefined)
-        .then(() => setStatus({ kind: "ok", message: "若這個 email 可以使用，登入連結已寄出。請一併檢查垃圾郵件匣。" }))
-        .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }))
-        .finally(() => {
-          // Spent either way: the server verifies the token before it decides
-          // anything else, so it is never reusable for a second attempt.
-          setHumanToken(null);
-          setWidgetGeneration((generation) => generation + 1);
-        });
-    }}>
-      <label htmlFor="portal-email">Email</label>
-      <input id="portal-email" type="email" required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" />
-      {sitekey && <TurnstileWidget key={widgetGeneration} sitekey={sitekey} onToken={setHumanToken} onUnavailable={onUnavailable} />}
-      <button type="submit" disabled={!humanToken || status.kind === "busy"}>{status.kind === "busy" ? "寄送中…" : "寄出登入連結"}</button>
-    </form>
-    {/* Before the address is handed over, not after. A notice that lives only
-        in the repo does not exist for the person filling in this field
-        (ADR-0011, #30). Plain anchor rather than a router link: the page is
-        static and is not part of this bundle. */}
-    <p className={styles.policyLink}>
-      送出即表示你已閱讀<a href="/privacy">隱私權與資料使用告知</a>。
-      個資與著作權爭議請寄 <code>maintain@kotoban.top</code>，控制面使用問題請寄 <code>circle@kotoban.top</code>。
-    </p>
-    {status.kind !== "idle" && status.kind !== "busy" && <p className={status.kind === "error" ? styles.error : styles.notice}>{status.message}</p>}
   </section>;
 }
 
