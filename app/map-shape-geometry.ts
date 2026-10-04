@@ -93,6 +93,52 @@ export function shapeInterior(shape: MapShape): MapPoint & { radius: number } {
   return best;
 }
 
+/** About one point every 7.5°: a curve that reads as smooth at any zoom
+ * without spending much of a shape's vertex budget. */
+const ARC_STEP = Math.PI / 24;
+/** Points a full circle is drawn with. */
+export const MAP_CIRCLE_POINTS = 48;
+
+function circleThrough(a: MapPoint, b: MapPoint, c: MapPoint) {
+  const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+  if (Math.abs(d) < EPSILON) return null;
+  const sq = (p: MapPoint) => p.x * p.x + p.y * p.y;
+  const center = { x: (sq(a) * (b.y - c.y) + sq(b) * (c.y - a.y) + sq(c) * (a.y - b.y)) / d, y: (sq(a) * (c.x - b.x) + sq(b) * (a.x - c.x) + sq(c) * (b.x - a.x)) / d };
+  return { center, radius: Math.hypot(a.x - center.x, a.y - center.y), angle: (p: MapPoint) => Math.atan2(p.y - center.y, p.x - center.x) };
+}
+
+/** The arc from `a` through `b` to `c`, as points that start at `a` and end at
+ * `c`, using at most `maxPoints`. Null when the three points are on one line
+ * and so describe no arc. */
+export function arcThroughPoints(a: MapPoint, b: MapPoint, c: MapPoint, maxPoints = Infinity): MapPoint[] | null {
+  const circle = circleThrough(a, b, c);
+  if (!circle) return null;
+  const turn = Math.PI * 2;
+  const counter = (from: number, to: number) => ((to - from) % turn + turn) % turn;
+  const start = circle.angle(a);
+  let sweep = counter(start, circle.angle(c));
+  // Going the positive way from a reaches c before b: the arc runs the other way.
+  if (counter(start, circle.angle(b)) > sweep) sweep -= turn;
+  const segments = Math.max(2, Math.min(maxPoints - 1, Math.ceil(Math.abs(sweep) / ARC_STEP)));
+  return Array.from({ length: segments + 1 }, (_, i) => {
+    if (i === 0) return { ...a };
+    if (i === segments) return { ...c };
+    const angle = start + sweep * i / segments;
+    return { x: circle.center.x + circle.radius * Math.cos(angle), y: circle.center.y + circle.radius * Math.sin(angle) };
+  });
+}
+
+/** The circle through three points, starting at `a`; null when they are on one line. */
+export function circleThroughPoints(a: MapPoint, b: MapPoint, c: MapPoint): MapPoint[] | null {
+  const circle = circleThrough(a, b, c);
+  if (!circle) return null;
+  const start = circle.angle(a);
+  return Array.from({ length: MAP_CIRCLE_POINTS }, (_, i) => {
+    const angle = start + Math.PI * 2 * i / MAP_CIRCLE_POINTS;
+    return { x: circle.center.x + circle.radius * Math.cos(angle), y: circle.center.y + circle.radius * Math.sin(angle) };
+  });
+}
+
 /** Used by every move/resize path so the bounding box and vertices stay together. */
 export function assignShapeBox(shape: MapShape, box: MapRect): void {
   if (shape.points) shape.points = shape.points.map((point) => ({ x: box.x + (point.x - shape.x) * box.width / shape.width, y: box.y + (point.y - shape.y) * box.height / shape.height }));

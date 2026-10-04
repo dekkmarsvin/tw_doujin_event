@@ -5,7 +5,7 @@ import { resolveMapLandmarkKind, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, MAP
 import { clamp, confirmedDraftSlots, contiguousSegment, defaultNumberingStart, formatSlotCode, frameNumbering, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, resizeRectUniformly, rowOrientationFromEndpoints, segmentSlotRects, snapRectToAdjacentRects, type ResizeCorner, type RowAnchor, type RowDefinition, type RowDraft, type RowFrameDefinition, type RowNumberingStart, type SnapGuide } from "./map-layout-editor-geometry";
 import { alignBoxesToEdge, isPointSelection, appendRowSegment, applySelectionBoxes, applySlotMerge, autoArrangeBoxes, boundingBox, boxFor, mergeSelections, planSelectedSegmentEdges, planSlotMerge, rectFor, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsOutsideSelection, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection } from "./map-layout-editor-selection";
 import { overlappingSlotCodes } from "./map-contribution-draft";
-import { assignShapeBox, cloneShape, isSimplePolygon, polygonBounds, shapeInterior, type MapShape } from "./map-shape-geometry";
+import { arcThroughPoints, assignShapeBox, circleThroughPoints, cloneShape, isSimplePolygon, polygonBounds, shapeInterior, type MapShape } from "./map-shape-geometry";
 import { MapShapeDrawing } from "./map-shape-drawing";
 import { annotationBoothConflicts, MAP_NOTE_MAX_LENGTH, MAP_PATH_MAX_POINTS, transformPath, validNoteText, validPathPoints } from "./map-annotations";
 import { MapNoteDrawing, MapPathDrawing } from "./map-annotation-drawing";
@@ -673,6 +673,29 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
     const id = uniqueId("path", (layout.paths ?? []).map(path => path.id));
     commit(draft => { (draft.paths ??= []).push({ id, points: pathDraft.map(point => ({ ...point })) }); });
     setPathTool(false); setPathDraft([]); setSelections([{ kind: "path", itemIndex }]);
+  };
+  // A curve is three clicks — its start, any point on it and its end — rather
+  // than many hand-placed vertices that never line up.
+  // Generated vertices are kept to a tenth of a unit, so the vertex fields
+  // read as numbers someone could have typed; on a tiny curve that can land
+  // neighbours on the same spot, and the repeat is dropped. A curve that would
+  // leave the canvas, or a circle that no longer closes cleanly, keeps the
+  // clicked points rather than becoming a shape that cannot be saved.
+  const replaceWithCurve = (draft: MapPoint[], curve: MapPoint[] | null, keep: number, action: string) => {
+    if (!curve) { setRowErrors([`這 3 點在同一直線上，無法${action}。`]); return draft; }
+    const rounded = curve.map(point => ({ x: Math.round(point.x * 10) / 10, y: Math.round(point.y * 10) / 10 }));
+    if (rounded.some(point => point.x < 0 || point.y < 0 || point.x > layout.width || point.y > layout.height)) { setRowErrors([`${action}後會超出畫布，請把 3 點往畫布內移。`]); return draft; }
+    const same = (a?: MapPoint, b?: MapPoint) => !!a && !!b && a.x === b.x && a.y === b.y;
+    const points = rounded.filter((point, index) => !same(point, index ? rounded[index - 1] : draft[keep - 1]));
+    const closed = keep === 0;
+    while (closed && points.length > 1 && same(points[0], points.at(-1))) points.pop();
+    if (closed && !isSimplePolygon(points)) { setRowErrors([`這 3 點太近，無法${action}；請把點分開一些。`]); return draft; }
+    setRowErrors([]);
+    return [...draft.slice(0, keep), ...points];
+  };
+  const curveLastThree = (draft: MapPoint[], maxPoints: number) => {
+    const [a, b, c] = draft.slice(-3);
+    return replaceWithCurve(draft, arcThroughPoints(a, b, c, maxPoints - (draft.length - 3)), draft.length - 3, "連成弧線");
   };
   const startShapeDrawing = (target?: ShapeSelection) => {
     cancelPlacement(); setSelections([]); setSelectedGuideId(null); setSelectedAreaRegionId(""); setRowErrors([]);
@@ -1664,9 +1687,9 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
     {overlaps.length > 0 && <div className={styles.overlapNotice}>攤位重疊{overlaps.map(code => <button type="button" key={code} onClick={() => focusSlotCode(code)}>{code}</button>)}</div>}
     {annotationConflicts.length > 0 && <div className={styles.overlapNotice} role="alert">{annotationConflicts.map((message, index) => <p key={index}>{message}</p>)}</div>}
     {layout.notes?.some(note => !validNoteText(note.text)) && <p className={styles.rowErrors} role="alert">文字註記須有內容，最多 120 字、3 行。</p>}
-    {pathTool && <div className={styles.areaStatus} role="status"><span>依序點選動線的起點、拐點與終點；箭頭朝向最後一點。</span><button disabled={pathDraft.length < 2} onClick={finishPathDrawing}>完成箭頭（{pathDraft.length} 點）</button><button onClick={cancelPlacement}>取消</button></div>}
-    {shapeTool && <div className={styles.areaStatus} role="status"><span>依序點選頂點，至少 3 點；曲線可用多個頂點近似。Escape 取消。</span><button disabled={shapeDraft.length < 3} onClick={finishShapeDrawing}>完成多邊形（{shapeDraft.length} 點）</button><button onClick={cancelPlacement}>取消</button></div>}
-    {!!rowErrors.length && (shapeTool || selectedShape?.points) && <p className={styles.rowErrors} role="alert">{rowErrors[0]}</p>}
+    {pathTool && <div className={styles.areaStatus} role="status"><span>依序點選動線的起點、拐點與終點；箭頭朝向最後一點。彎曲處點 3 點後按「最後 3 點連成弧線」。</span><button disabled={pathDraft.length < 3} onClick={() => setPathDraft(curveLastThree(pathDraft, MAP_PATH_MAX_POINTS))}>最後 3 點連成弧線</button><button disabled={pathDraft.length < 2} onClick={finishPathDrawing}>完成箭頭（{pathDraft.length} 點）</button><button onClick={cancelPlacement}>取消</button></div>}
+    {shapeTool && <div className={styles.areaStatus} role="status"><span>依序點選頂點，至少 3 點。曲線：點起點、弧上一點與終點，再按「最後 3 點連成弧線」。Escape 取消。</span><button disabled={shapeDraft.length < 3} onClick={() => setShapeDraft(curveLastThree(shapeDraft, 200))}>最後 3 點連成弧線</button>{shapeDraft.length === 3 && <button onClick={() => setShapeDraft(replaceWithCurve(shapeDraft, circleThroughPoints(shapeDraft[0], shapeDraft[1], shapeDraft[2]), 0, "畫成圓形"))}>3 點畫成圓形</button>}<button disabled={shapeDraft.length < 3} onClick={finishShapeDrawing}>完成多邊形（{shapeDraft.length} 點）</button><button onClick={cancelPlacement}>取消</button></div>}
+    {!!rowErrors.length && (shapeTool || pathTool || selectedShape?.points) && <p className={styles.rowErrors} role="alert">{rowErrors[0]}</p>}
     {areaTool && <div className={styles.areaStatus} role="status"><span>在地圖上依序點選範圍的頂點，至少 3 點；可跨排畫不規則形狀。</span><label>展區<select value={areaId} onChange={(event) => setAreaId(event.target.value)}>{scope?.areaIds?.map((id) => <option key={id} value={id}>{areaName(id)}</option>)}</select></label><label>顏色<select value={layout.areaRegions?.find((region) => region.areaId === areaId)?.color ?? areaColor} disabled={!!layout.areaRegions?.some((region) => region.areaId === areaId)} onChange={(event) => setAreaColor(event.target.value as MapAreaColor)}>{Object.entries(MAP_AREA_COLORS).map(([id, color]) => <option key={id} value={id}>{id} · {color}</option>)}</select></label><button disabled={areaDraft.length < 3} onClick={finishAreaDrawing}>完成範圍（{areaDraft.length} 點）</button><button onClick={cancelPlacement}>取消</button></div>}
     {placementTool && <p className={styles.placementStatus} role="status">
       目前工具：{PLACEMENT_LABELS[placementTool]}。{guideTool || isPointFacilityTool(facilityTool) ? "在畫布點一下放置。" : isAreaFacilityTool(facilityTool) ? "在畫布上按住拖曳出範圍，放開後建立。" : facilityTool ? "拖曳外框，或點一下以預設大小置中放置。" : "拖曳外框後放開建立。"} Escape 取消。

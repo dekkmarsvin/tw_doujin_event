@@ -3,7 +3,7 @@ import test, { after } from "node:test";
 import { createServer } from "vite";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
-const { assignShapeBox, cloneShape, isSimplePolygon, pointInPolygon, polygonBounds, rectInsidePolygon, shapeInterior } = await vite.environments.ssr.runner.import("/app/map-shape-geometry.ts");
+const { arcThroughPoints, assignShapeBox, circleThroughPoints, cloneShape, isSimplePolygon, pointInPolygon, polygonBounds, rectInsidePolygon, shapeInterior } = await vite.environments.ssr.runner.import("/app/map-shape-geometry.ts");
 const { createBlankEventMapLayout, validateEventMapLayout, scaleEventMapLayout } = await vite.environments.ssr.runner.import("/app/event-map.ts");
 const { parseMapContributionDraftContent } = await vite.environments.ssr.runner.import("/app/map-contribution-draft.ts");
 const { applySelectionBoxes } = await vite.environments.ssr.runner.import("/app/map-layout-editor-selection.ts");
@@ -63,6 +63,20 @@ test("shared area name and facility locator lie inside a concave area", () => {
   assert.ok(label); assert.equal(pointInPolygon(label, points), true);
   const directory = mapFacilityDirectory(layout);
   assert.equal(pointInPolygon(directory.entries[0].point, points), true);
+});
+
+test("three clicks make an arc that bends toward the middle click and ends on the outer two", () => {
+  const onCircle = (points, x, y, r) => points.every(p => Math.abs(Math.hypot(p.x - x, p.y - y) - r) < 1e-9);
+  const up = arcThroughPoints({ x: -10, y: 0 }, { x: 0, y: -10 }, { x: 10, y: 0 });
+  assert.deepEqual([up[0], up.at(-1)], [{ x: -10, y: 0 }, { x: 10, y: 0 }]);
+  assert.ok(onCircle(up, 0, 0, 10) && up.every(p => p.y <= 1e-9), "the arc runs on the middle click's side");
+  assert.ok(arcThroughPoints({ x: -10, y: 0 }, { x: 0, y: 10 }, { x: 10, y: 0 }).every(p => p.y >= -1e-9));
+  const wide = arcThroughPoints({ x: 0, y: -10 }, { x: -10, y: 0 }, { x: 10, y: 0 });
+  assert.ok(wide.some(p => p.y > 9), "an arc longer than half a turn still passes the middle click");
+  assert.equal(arcThroughPoints({ x: 0, y: 0 }, { x: 5, y: 5 }, { x: 10, y: 10 }), null);
+  assert.equal(arcThroughPoints({ x: -10, y: 0 }, { x: 0, y: -10 }, { x: 10, y: 0 }, 5).length, 5, "the arc fits the vertices left");
+  const circle = circleThroughPoints({ x: 10, y: 0 }, { x: 0, y: 10 }, { x: -10, y: 0 });
+  assert.ok(onCircle(circle, 0, 0, 10) && isSimplePolygon(circle));
 });
 
 test("a box is inside a concave area only when no edge of the area cuts it", () => {
