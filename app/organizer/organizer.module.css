@@ -113,11 +113,16 @@
 .activityIdentity { flex: 1; min-width: 200px; }
 .activityIdentity p { margin: 0 0 7px; color: var(--muted); font-size: 12px; }
 .activityIdentity h2 { font-size: 20px; overflow-wrap: anywhere; }
-.activityStatus { display: flex; gap: 28px; margin: 0; padding-left: 24px; border-left: 1px solid var(--line); }
-.activityStatus dt { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
-.activityStatus dd { margin: 0; font-size: 14px; font-weight: 700; }
-.activityStatus dd[data-state="published"], .activityStatus dd[data-state="approved"] { color: var(--success); }
-.activityStatus dd[data-state="failed"], .activityStatus dd[data-state="changes_requested"] { color: var(--danger); }
+/* Each status is the way in to the panel that changes it. The groups stay
+   quiet text until pointed at, so the header still reads as a status line. */
+.activityStatus { display: flex; gap: 8px; margin: 0; padding-left: 16px; border-left: 1px solid var(--line); }
+.activityStatus button { display: grid; gap: 6px; border-color: transparent !important; padding: 6px 10px !important; background: transparent !important; color: var(--ink) !important; text-align: left; }
+.activityStatus button:hover:not(:disabled) { border-color: var(--line) !important; background: var(--paper) !important; }
+.activityStatus button[aria-current="page"] { border-color: var(--line) !important; background: var(--map-paper) !important; }
+.activityStatus span { color: var(--muted); font-size: 12px; font-weight: 400; }
+.activityStatus strong { font-size: 14px; font-weight: 700; }
+.activityStatus strong[data-state="published"], .activityStatus strong[data-state="approved"] { color: var(--success); }
+.activityStatus strong[data-state="failed"], .activityStatus strong[data-state="changes_requested"] { color: var(--danger); }
 .eventButton, .eventActive { display: grid; gap: 5px; width: 100%; padding: 11px !important; border-color: transparent !important; text-align: left; background: transparent !important; color: var(--ink) !important; }
 .eventButton:hover { border-color: var(--line) !important; background: var(--paper) !important; }
 .eventActive { border-color: var(--line) !important; background: var(--map-paper) !important; }

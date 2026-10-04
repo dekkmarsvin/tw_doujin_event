@@ -1,26 +1,27 @@
-/** The five things the review panel does, one component each.
+/** 檢查與發布：檢查、送審、審閱與發布進度，一個動作一個元件。
  *
  * They were a single 46-line `<section>` sharing one `act()` and one notice,
  * which is why "已寄出邀請" and "已要求修改" came out of the same place at the
- * top of the workspace (#224). Splitting them is structural: each section owns
- * its own field state and renders the same markup, and they still share the
- * shell's `act` and `pending` so this change moves no behaviour. Giving each
- * action its own feedback is #220; disabling instead of hiding is #217. Both
- * now have somewhere to land.
+ * top of the workspace (#224). Each section owns its own field state and
+ * feedback (#220) and is disabled rather than hidden when the role withholds
+ * it (#217). Member management left for its own surface, reached from the
+ * activity header (organizer-members-panel.tsx).
  */
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { ActionNotice, useActionFeedback } from "./organizer-feedback";
 import { publicationProgress, publicationFailureMessage } from "../organizer-publication-presentation";
 import { type PortalSession } from "../circle-editor-client";
 import {
-  manageOrganizerEditor, manageOrganizerOwner, reopenOrganizerEvent, retryOrganizerPublication,
+  reopenOrganizerEvent, retryOrganizerPublication,
   abandonOrganizerAmendment,
   reviewOrganizerEvent, submitOrganizerEvent, type OrganizerEventDetail,
 } from "../organizer-client";
 import { STATUS_LABEL, PUBLICATION_STATUS_LABEL } from "./organizer-shared";
+import { CheckSection } from "./organizer-validation-panel";
+import type { OrganizerWorkspaceSection } from "../organizer-workspace";
 import styles from "./organizer.module.css";
 
-type SectionProps = {
+export type SectionProps = {
   detail: OrganizerEventDetail;
   onChanged: () => Promise<void>;
   onUnauthorized: () => void;
@@ -33,36 +34,12 @@ type SectionProps = {
 /** One action, its own result line, its own busy flag. Reloading the workspace
  * happens only after the action succeeded, so a failure leaves the panel as it
  * was with the reason beside the control that produced it. */
-function useSectionAction({ onChanged, onUnauthorized }: Pick<SectionProps, "onChanged" | "onUnauthorized">) {
+export function useSectionAction({ onChanged, onUnauthorized }: Pick<SectionProps, "onChanged" | "onUnauthorized">) {
   const feedback = useActionFeedback(onUnauthorized);
   const act = <T,>(promise: Promise<T>, success: string | ((value: T) => string)) => {
     void feedback.run(promise, success).then((ok) => (ok ? onChanged() : undefined));
   };
   return { act, notice: feedback.notice, pending: feedback.pending };
-}
-
-function invitationMessage(result: { invitationDelivery?: "sent" | "failed" | "unknown" }) {
-  if (result.invitationDelivery === "sent") return "邀請信已寄出。";
-  // Creation succeeded, but the action's mail failure still needs error feedback.
-  throw new Error(result.invitationDelivery === "failed"
-    ? "邀請已建立，邀請信未寄出。請按「重寄邀請信」。"
-    : "邀請已建立，無法確認邀請信是否寄出。你可以重寄邀請信。");
-}
-
-function CollaboratorSection(props: SectionProps) {
-  const [editorEmail, setEditorEmail] = useState("");
-  const { detail } = props;
-  const { act, notice, pending: busy } = useSectionAction(props);
-  const pending = busy || props.blocked === true;
-  return <div className={styles.subpanel}><h4>協作者</h4><form className={styles.invitationForm} onSubmit={(event: FormEvent) => { event.preventDefault(); act(manageOrganizerEditor(detail.event.id, editorEmail, "invite"), invitationMessage); }}><input aria-label="協作者 Email" type="email" required disabled={pending} placeholder="editor@example.com" value={editorEmail} onChange={(event) => setEditorEmail(event.target.value)} /><button type="submit" disabled={pending}>邀請協作者</button><button type="button" disabled={!editorEmail || pending} onClick={() => act(manageOrganizerEditor(detail.event.id, editorEmail, "resend"), invitationMessage)}>重寄邀請信</button><button type="button" className={styles.dangerText} disabled={!editorEmail || pending} onClick={() => act(manageOrganizerEditor(detail.event.id, editorEmail, "revoke"), "已移除這位協作者。")}>移除此協作者</button></form><ActionNotice notice={notice} /></div>;
-}
-
-function OwnerSection(props: SectionProps) {
-  const [ownerEmail, setOwnerEmail] = useState("");
-  const { detail } = props;
-  const { act, notice, pending: busy } = useSectionAction(props);
-  const pending = busy || props.blocked === true;
-  return <div className={styles.subpanel}><h4>負責人</h4><p>每場活動至少保留一位已接受邀請的負責人。</p><form className={styles.invitationForm} onSubmit={(event: FormEvent) => { event.preventDefault(); act(manageOrganizerOwner(detail.event.id, ownerEmail, "invite"), invitationMessage); }}><input aria-label="負責人 Email" type="email" required disabled={pending} placeholder="owner@example.com" value={ownerEmail} onChange={(event) => setOwnerEmail(event.target.value)} /><button type="submit" disabled={pending}>新增負責人</button><button type="button" disabled={!ownerEmail || pending} onClick={() => act(manageOrganizerOwner(detail.event.id, ownerEmail, "resend"), invitationMessage)}>重寄邀請信</button><button type="button" className={styles.dangerText} disabled={!ownerEmail || pending} onClick={() => act(manageOrganizerOwner(detail.event.id, ownerEmail, "revoke"), "已移除這位負責人。")}>移除此負責人</button></form><ActionNotice notice={notice} /></div>;
 }
 
 function SubmitSection(props: SectionProps) {
@@ -120,10 +97,11 @@ function RecoverySection(props: SectionProps) {
   </div>;
 }
 
-export function ReviewPanel({ session, detail, onChanged }: {
+export function ReviewPanel({ session, detail, onChanged, onSection }: {
   session: PortalSession;
   detail: OrganizerEventDetail;
   onChanged: () => Promise<void>;
+  onSection?: (section: OrganizerWorkspaceSection, target?: string) => void;
 }) {
   // An expired session is the one cause the whole panel shares, so it stays
   // here rather than repeating under every action that hit the same 401.
@@ -136,25 +114,18 @@ export function ReviewPanel({ session, detail, onChanged }: {
     && detail.publication.candidateVersion === detail.event.version
     && detail.publication.started === true;
   const section = { detail, onChanged, onUnauthorized };
-  // One line per cause, not one per blocked control.
-  const stage = detail.event.status;
-  const missingRoles = [
-    !owner && (stage === "draft" || stage === "changes_requested" || stage === "submitted" || stage === "failed")
-      ? session.isAdmin
-        ? "送出審閱與管理協作者需要這個活動的負責人身分。"
-        : "管理成員與送出審閱需要負責人身分，請聯絡這個活動的負責人。" : null,
-  ].filter((reason): reason is string => reason !== null);
+  const submittable = detail.event.status === "draft" || detail.event.status === "changes_requested";
   return <section className={styles.panel}>
-    <h3>送審與發布狀態</h3>
+    <h3>檢查與發布</h3>
     {needsLogin && <p><a href="/organizer?reauth=1">重新登入並返回這個活動</a></p>}
     <div className={styles.statusBoard}><span>目前狀態</span><strong>{STATUS_LABEL[detail.event.status]}</strong><span>活動代碼</span><strong>{detail.draft.event.id ?? "尚未設定"}</strong></div>
-    {/* Stated once, above the controls it governs. #216 was this panel going
+    <CheckSection detail={detail} onChanged={onChanged} onSection={onSection} />
+    {/* Stated once, above the control it governs. #216 was this panel going
         blank on an admin who never got the owner grant: nothing on the page
         said what was missing, so the work looked finished and stuck. */}
-    {missingRoles.map((reason) => <p key={reason} className={styles.warning}>{reason}</p>)}
-    <CollaboratorSection {...section} blocked={!owner} />
-    {(owner || session.isAdmin) && <OwnerSection {...section} />}
-    {(detail.event.status === "draft" || detail.event.status === "changes_requested") && <SubmitSection {...section} blocked={!owner} />}
+    {submittable && !owner && <p className={styles.warning}>{session.isAdmin
+      ? "送出審閱需要這個活動的負責人身分。" : "送出審閱需要負責人身分，請聯絡這個活動的負責人。"}</p>}
+    {submittable && <SubmitSection {...section} blocked={!owner} />}
     {session.isAdmin && detail.event.status === "submitted" && <AdminReviewSection {...section} />}
     {session.isAdmin && detail.recoveryAvailable ? <RecoverySection {...section} />
       : (session.isAdmin || owner) && detail.event.status === "failed" && !historicalPublication && <ReopenSection {...section} reopenBlockedByRemoteState={reopenBlockedByRemoteState} />}

@@ -51,8 +51,8 @@ function fixtureRoutes(role, existing = false, delayStart = false) {
         sourceRow: index + 1, dayId: String(day.day), venueSpaceId: baseline.draft.venue.assignments[0].venueSpaceId,
         areaId: booth.areaId, codes: booth.codes, circleName: booth.name, stableKey: null, identityGroup: null }))) },
     workspace: { mode: "binder", onboardingCompletedAt: fixture.now, resume: { guidedTask: "identity_source", section: state.sections[id] },
-      readiness: { completed: 3, total: 6, suggestedNextSection: "import", blockers: [],
-        sections: ["event", "venue", "import", "map", "validate", "review"].map((id) => ({ id, state: "available" })) } } });
+      readiness: { completed: 3, total: 5, suggestedNextSection: "import", blockers: [],
+        sections: ["event", "venue", "import", "map", "review"].map((id) => ({ id, state: "available" })) } } });
   return { state, startSeen, releaseStart: () => releaseStart?.(), routes: async (page) => {
     await page.route("**/api/**", async (route) => {
       const req = route.request(); const path = new URL(req.url()).pathname; const method = req.method();
@@ -85,6 +85,8 @@ function fixtureRoutes(role, existing = false, delayStart = false) {
         state.otherDraft = body.draft; state.otherVersion++;
         return reply({ ok: true, candidateId: "other", version: state.otherVersion });
       }
+      // Opening 檢查與發布 runs the check once.
+      if (path.endsWith("/validate") && method === "POST") return reply({ ok: true, version: state.version, issues: [] });
       if (/\/events\/(source|amendment|other)$/.test(path)) return reply(detail(path.split("/").at(-1)));
       throw new Error(`Unexpected synthetic UI request: ${method} ${path}`);
     });
@@ -131,7 +133,7 @@ try {
   await add("withdrawn", "S01"); await add("released", "S02", "接手社");
   await add("moved", "S03", null, "S05"); await add("added", null, "新增社", "S06");
   // Navigation must not silently throw away any declaration.
-  await page.getByRole("button", { name: /送審與發布/ }).first().click();
+  await page.getByRole("button", { name: /檢查與發布/ }).first().click();
   const dialog = page.getByRole("dialog", { name: "尚有未儲存變更" });
   await dialog.waitFor(); await dialog.getByRole("button", { name: "取消", exact: true }).click();
   await page.getByRole("button", { name: "儲存修正並檢視影響", exact: true }).click();
@@ -181,15 +183,16 @@ try {
   ownerRoutes.state.conflict = false;
   await page.getByRole("button", { name: "捨棄未儲存修正並讀取最新版本", exact: true }).click();
   await page.getByRole("heading", { name: "4. 新增", exact: true }).waitFor();
-  await page.getByRole("button", { name: /送審與發布/ }).first().click();
-  await page.getByRole("heading", { name: "送審與發布狀態", exact: true }).waitFor();
+  await page.getByRole("button", { name: /檢查與發布/ }).first().click();
+  await page.getByRole("heading", { name: "檢查與發布", exact: true }).waitFor();
+  await page.getByText("0 項必須修正", { exact: true }).waitFor();
   assert.equal(await page.getByRole("button", { name: "送出審閱", exact: true }).isDisabled(), true);
   await journey.capture(page, "organizer-amendment-publication-not-enabled");
   await page.close();
   for (const role of ["editor", "admin"]) {
     const routes = fixtureRoutes(role);
     const actor = await journey.page({ url: `${base}/organizer`, routes: routes.routes, viewport: { width: 1100, height: 900 } });
-    await actor.getByRole("heading", { name: "送審與發布狀態", exact: true }).waitFor();
+    await actor.getByRole("heading", { name: "檢查與發布", exact: true }).waitFor();
     assert.equal(await actor.getByRole("button", { name: "開始修正已發布活動", exact: true }).count(), role === "admin" ? 1 : 0);
     await journey.capture(actor, `organizer-amendment-${role}-entry`); await actor.close();
   }

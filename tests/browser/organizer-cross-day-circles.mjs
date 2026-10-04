@@ -14,7 +14,7 @@ const detail = { event, publicationAvailable: false, publication: null, revision
     venue: { assignments: [{ venueId: "hall", venueSpaceId: "east", areaIds: ["ALL"], areaMode: "none", mapTemplate: "SAMPLE" }] },
     officialSource: { label: "活動公告", url: "https://organizer.example/" } },
   workspace: { mode: "binder", onboardingCompletedAt: now, resume: { guidedTask: "identity_source", section: "import" },
-    readiness: { completed: 2, total: 6, suggestedNextSection: "import", blockers: [], sections: ["event", "venue", "import", "map", "validate", "review"].map(id => ({ id, state: "available" })) } },
+    readiness: { completed: 2, total: 5, suggestedNextSection: "import", blockers: [], sections: ["event", "venue", "import", "map", "review"].map(id => ({ id, state: "available" })) } },
 };
 let writes = 0;
 try {

@@ -20,7 +20,7 @@ const detail = { event, publicationAvailable: false, publication: null, revision
     { dayId: "2", venueSpaceId: "east", codes: ["B01"], areaId: "B", circleName: "晚安電波" },
     { dayId: "1", venueSpaceId: "west", codes: ["A01"], areaId: "A", circleName: "窗邊的貓" },
   ].map((row, index) => ({ ...row, sourceRow: index + 2, stableKey: null, identityGroup: null })) },
-  workspace: { mode: "binder", onboardingCompletedAt: now, resume: { guidedTask: "identity_source", section: "import" }, readiness: { completed: 3, total: 6, suggestedNextSection: "map", blockers: [], sections: ["event", "venue", "import", "map", "validate", "review"].map(id => ({ id, state: "available" })) } },
+  workspace: { mode: "binder", onboardingCompletedAt: now, resume: { guidedTask: "identity_source", section: "import" }, readiness: { completed: 3, total: 5, suggestedNextSection: "map", blockers: [], sections: ["event", "venue", "import", "map", "review"].map(id => ({ id, state: "available" })) } },
 };
 let failNextRead = false, failNextPut = false, failReadAfterWrite = false, patchCount = 0, putCount = 0;
 try {
@@ -72,7 +72,7 @@ try {
   };
   await row.waitFor();
   // The next step stands beside the heading rather than inside the progress menu.
-  await page.locator("summary").filter({ hasText: "準備進度 3/6" }).waitFor();
+  await page.locator("summary").filter({ hasText: "準備進度 3/5" }).waitFor();
   await page.getByRole("button", { name: "下一步：地圖", exact: true }).waitFor();
   assert.equal(await list.getByText("· 已完成").count(), 0, "a list whose section is not complete is not marked finished");
   for (const width of selectMatrix([1040, 1280, 1440, 1920, 2560], [1040, 1440, 2560])) {

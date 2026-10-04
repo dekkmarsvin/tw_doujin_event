@@ -17,7 +17,7 @@ async function openWorkspace({ guided = false, fresh = false } = {}) {
     draft: { schema: "organizer-event-draft/1", event: { id: "sample", name: event.tentativeName, days: [{ id: "1", label: "第一天", date: "2026-11-07" }, { id: "2", label: "第二天", date: "2026-11-08" }] },
       venue: { assignments: [{ venueId: "test-hall", venueSpaceId: "test-space", areaIds: ["A"], mapTemplate: "SAMPLE", areaMode: "imported" }] }, officialSource: { label: "測試來源", url: "https://organizer.example/" } },
     import: { source: { fileName: "roster.csv", worksheet: null, sha256: "a".repeat(64), sourceDescription: "合成來源", mapping: {} }, rows: [{ sourceRow: 2, dayId: "1", venueSpaceId: "test-space", areaId: "A", codes: ["S01"], circleName: "測試社", stableKey: null, identityGroup: null }] },
-    workspace: { mode: event.workspaceMode, onboardingCompletedAt: guided ? null : now, resume: { guidedTask: "identity_source", section: "map" }, readiness: { completed: 3, total: 6, suggestedNextSection: "validate", blockers: [], sections: ["event", "venue", "import", "map", "validate", "review"].map(id => ({ id, state: "available" })) } },
+    workspace: { mode: event.workspaceMode, onboardingCompletedAt: guided ? null : now, resume: { guidedTask: "identity_source", section: "map" }, readiness: { completed: 3, total: 5, suggestedNextSection: "review", blockers: [], sections: ["event", "venue", "import", "map", "review"].map(id => ({ id, state: "available" })) } },
   };
   const state = { map: fresh ? null : { id: "test-map", periodKey: "1", venueSpaceId: "test-space", mapRevision: 1, layout: structuredClone(source), authoring: { guides: [] } }, attempts: 0, creates: 0, saves: 0, failSave: false, failBackground: false, uploads: [] };
   const page = await journey.page({ url: `${base}/organizer`, viewport: { width: 1600, height: 1100 }, routes: async page => {
@@ -79,12 +79,12 @@ try {
   await edit();
   const editedX = await x();
   assert.notEqual(editedX, originalX);
-  for (const target of [section("攤位名單"), section("檢查與預覽"), page.getByRole("button", { name: "下一步：檢查與預覽", exact: true }), page.getByRole("navigation", { name: "活動列表" }).getByRole("button", { name: /另一場活動/ })]) {
+  for (const target of [section("攤位名單"), section("檢查與發布"), page.getByRole("button", { name: "下一步：檢查與發布", exact: true }), page.getByLabel("活動審核與發布狀態").getByRole("button", { name: /^審核狀態/ }), page.getByRole("navigation", { name: "活動列表" }).getByRole("button", { name: /另一場活動/ })]) {
     await target.click(); await dialog.waitFor();
     await dialog.getByRole("button", { name: "取消", exact: true }).click();
     assert.equal(await x(), editedX, "cancel keeps the current map edit");
   }
-  journey.report.checks.push("unchanged map switches directly; section, next-step and event navigation cancel preserves edits");
+  journey.report.checks.push("unchanged map switches directly; section, next-step, header status and event navigation cancel preserves edits");
 
   // Exercise Chromium's actual leave prompt, not just a synthetic event listener.
   const reloadPrompt = page.waitForEvent("dialog");

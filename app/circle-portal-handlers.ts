@@ -39,6 +39,7 @@ import {
   getOrganizerWorkspacePrerequisiteIssues,
   isOrganizerGuidedTask,
   isOrganizerWorkspaceSection,
+  organizerWorkspaceSectionOrDefault,
   organizerOnboardingIssues,
   validateOrganizerImportedRowsAgainstDraft,
 } from "./organizer-workspace";
@@ -2505,8 +2506,7 @@ export function createCirclePortalHandlers({
     const { imported, maps, issues: validationIssues } = workspaceValidation;
     const guidedTask = isOrganizerGuidedTask(workspace.preference?.guided_task)
       ? workspace.preference.guided_task : "identity_source";
-    const section = isOrganizerWorkspaceSection(workspace.preference?.last_section)
-      ? workspace.preference.last_section : "event";
+    const section = organizerWorkspaceSectionOrDefault(workspace.preference?.last_section);
     const readiness = evaluateOrganizerWorkspaceReadiness({
       draft,
       importedRows: imported?.rows.length ?? 0,

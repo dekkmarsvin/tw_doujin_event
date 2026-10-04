@@ -20,8 +20,7 @@ export const SECTION_LABEL: Record<OrganizerWorkspaceSection, string> = {
   venue: "場館與場地",
   import: "攤位名單",
   map: "地圖",
-  validate: "檢查與預覽",
-  review: "送審與發布",
+  review: "檢查與發布",
 };
 export const organizerSectionLabel = (detail: OrganizerEventDetail, section: OrganizerWorkspaceSection) =>
   detail.event.operation === "AMEND" && section === "import" ? "名單修正" : SECTION_LABEL[section];
@@ -111,7 +110,7 @@ export function organizerDayLabel(days: readonly { id: string; label: string }[]
  * booth codes and nothing else -- no day label, no space name, no import file
  * -- so the sentence it can write is necessarily the poorer one. The wording
  * for this surface is built here, where that context exists, and both the
- * 待修正清單 sidebar and the 檢查與預覽 card read it from one place rather than
+ * 待修正清單 sidebar and the 檢查與發布 check card read it from one place rather than
  * showing two descriptions of the same problem side by side (#223). */
 export function organizerIssueMessage(
   issue: { code: string; message: string; target?: string; step?: string; section?: string; boothCodes?: readonly string[]; count?: number },

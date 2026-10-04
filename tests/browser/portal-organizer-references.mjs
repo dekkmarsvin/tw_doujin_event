@@ -396,8 +396,8 @@ try {
   await page.getByRole("region", { name: "攤位名單", exact: true }).getByRole("cell", { name: "無分區", exact: true }).waitFor();
   await journey.capture(page, "import-save-feedback");
   await page.locator("summary").filter({ hasText: "準備進度" }).click();
-  await page.getByRole("group", { name: "活動項目" }).getByRole("button", { name: /^檢查與預覽/ }).click();
-  await page.getByRole("button", { name: "執行檢查", exact: true }).click();
+  // Entering the section runs the check once without a press.
+  await page.getByRole("group", { name: "活動項目" }).getByRole("button", { name: /^檢查與發布/ }).click();
   await page.getByText("檢查完成。", { exact: true }).waitFor();
   await page.getByRole("button", { name: "建立預覽", exact: true }).click();
   await page.getByText("預覽已產生。", { exact: true }).waitFor();

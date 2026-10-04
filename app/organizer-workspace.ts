@@ -8,7 +8,7 @@ import {
 export const ORGANIZER_GUIDED_TASKS = ["identity_source", "days", "venue"] as const;
 export type OrganizerGuidedTask = typeof ORGANIZER_GUIDED_TASKS[number];
 
-export const ORGANIZER_WORKSPACE_SECTIONS = ["event", "venue", "import", "map", "validate", "review"] as const;
+export const ORGANIZER_WORKSPACE_SECTIONS = ["event", "venue", "import", "map", "review"] as const;
 export type OrganizerWorkspaceSection = typeof ORGANIZER_WORKSPACE_SECTIONS[number];
 type OrganizerWorkspaceSectionState = "complete" | "available" | "needs_attention" | "blocked";
 
@@ -16,7 +16,7 @@ type OrganizerWorkspaceMapScope = { periodKey: string; venueSpaceId: string };
 
 export type OrganizerWorkspaceReadiness = {
   completed: number;
-  total: 6;
+  total: 5;
   suggestedNextSection: OrganizerWorkspaceSection;
   blockers: Array<{ section: OrganizerWorkspaceSection; code: string; message: string; target?: string; count?: number }>;
   sections: Array<{ id: OrganizerWorkspaceSection; state: OrganizerWorkspaceSectionState }>;
@@ -39,6 +39,13 @@ export function isOrganizerGuidedTask(value: unknown): value is OrganizerGuidedT
 
 export function isOrganizerWorkspaceSection(value: unknown): value is OrganizerWorkspaceSection {
   return typeof value === "string" && (ORGANIZER_WORKSPACE_SECTIONS as readonly string[]).includes(value);
+}
+
+/** 檢查與預覽 was its own section until it merged into review. Stored
+ * preferences can still name it, and they resume where it went. */
+export function organizerWorkspaceSectionOrDefault(value: unknown): OrganizerWorkspaceSection {
+  if (value === "validate") return "review";
+  return isOrganizerWorkspaceSection(value) ? value : "event";
 }
 
 export function organizerGuidedTaskIssues(
@@ -204,12 +211,9 @@ export function evaluateOrganizerWorkspaceReadiness(input: {
           : "blocked",
     },
     {
-      id: "validate",
-      state: validationComplete ? "complete" : eventComplete && venueComplete && importComplete && mapComplete ? "available" : "blocked",
-    },
-    {
       id: "review",
-      state: reviewComplete ? "complete" : input.status === "failed" ? "needs_attention" : validationComplete ? "available" : "blocked",
+      state: reviewComplete ? "complete" : input.status === "failed" ? "needs_attention"
+        : eventComplete && venueComplete && importComplete && mapComplete ? "available" : "blocked",
     },
   ];
 
@@ -218,7 +222,7 @@ export function evaluateOrganizerWorkspaceReadiness(input: {
    * but without the count the sidebar cannot say the same sentence the check
    * card says, and the organizer reads two descriptions of one problem (#223). */
   const blockers: OrganizerWorkspaceReadiness["blockers"] = issues.map((issue) => ({
-    section: issue.step === "preview" ? "validate" : issue.step,
+    section: issue.step === "preview" ? "review" : issue.step,
     code: issue.code,
     message: issue.message,
     ...(issue.target ? { target: issue.target } : {}),
@@ -226,7 +230,7 @@ export function evaluateOrganizerWorkspaceReadiness(input: {
   }));
   if (!validationComplete) {
     blockers.push({
-      section: "validate",
+      section: "review",
       code: "validation_required",
       message: "目前這一版尚未通過檢查。",
     });
@@ -244,7 +248,7 @@ export function evaluateOrganizerWorkspaceReadiness(input: {
     ?? sections[sections.length - 1];
   return {
     completed: sections.filter((section) => section.state === "complete").length,
-    total: 6,
+    total: 5,
     suggestedNextSection: suggested.id,
     blockers,
     sections,

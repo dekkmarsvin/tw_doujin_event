@@ -50,8 +50,8 @@ try {
     venueCatalog: { venues: [] }, revisions: [], import: null,
     publication: { id: "poll-job", status: "publishing", step: "waiting_deployment", error: null, retryable: true, updatedAt: 1 },
     workspace: { mode: "binder", onboardingCompletedAt: 1, resume: { guidedTask: "identity_source", section: "review" },
-      readiness: { completed: 5, total: 6, suggestedNextSection: "review", blockers: [],
-        sections: ["event", "venue", "import", "map", "validate", "review"].map((id) => ({ id, state: "available" })) } } };
+      readiness: { completed: 5, total: 5, suggestedNextSection: "review", blockers: [],
+        sections: ["event", "venue", "import", "map", "review"].map((id) => ({ id, state: "available" })) } } };
   let readStatus = 200;
   let reads = 0;
   const previous = { ...event, id: "poll-original", status: "published", edition: 1, createdAt: 1 };
@@ -69,7 +69,7 @@ try {
   });
   await organizer.clock.install();
   await organizer.reload();
-  await organizer.getByRole("heading", { name: "送審與發布狀態" }).waitFor();
+  await organizer.getByRole("heading", { name: "檢查與發布" }).waitFor();
   await organizer.clock.runFor(5000);
   assert.equal(await organizer.getByRole("combobox", { name: "活動版本" }).inputValue(), "poll-fixture");
   assert.equal(await organizer.getByRole("option", { name: "第 2 版（最新）・發布中", exact: true }).count(), 1,
@@ -79,7 +79,7 @@ try {
   await organizer.getByText("登入已到期，請重新登入。", { exact: true }).waitFor();
   await organizer.getByRole("button", { name: "寄出登入連結", exact: true }).waitFor();
   assert.equal(await organizer.getByRole("button", { name: "登出", exact: true }).count(), 0);
-  assert.equal(await organizer.getByRole("heading", { name: "送審與發布狀態" }).count(), 0);
+  assert.equal(await organizer.getByRole("heading", { name: "檢查與發布" }).count(), 0);
   const after401 = reads;
   await organizer.clock.runFor(20_000);
   assert.equal(reads, after401, "401 stops polling");
@@ -87,7 +87,7 @@ try {
 
   readStatus = 200;
   await organizer.reload();
-  await organizer.getByRole("heading", { name: "送審與發布狀態" }).waitFor();
+  await organizer.getByRole("heading", { name: "檢查與發布" }).waitFor();
   readStatus = 503;
   for (let attempt = 0; attempt < 3; attempt++) {
     await Promise.all([organizer.waitForResponse((response) => response.url().endsWith("/poll-fixture") && response.status() === 503),
