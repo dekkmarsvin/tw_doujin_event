@@ -257,6 +257,7 @@ test("grant acceptance, role changes, self revocation and invitation-only cancel
   const own = sent.filter(mail => mail.to === "editor@example.test");
   assert.equal(own.length, 1, "lost grant cancels old grants, but own revocation remains");
   assert.match(own[0].subject, /曾被移除/); assert.doesNotMatch(own[0].text, /candidate=/);
+  assert.ok(sent.every(mail => !mail.text.includes("內容版本")), "permission notices carry no content version");
   await repo.manageOrganizerCollaborator({ role: "editor", candidateId: "candidate", email: "pending@example.test", action: "invite", actorAccountId: owner, now });
   await repo.manageOrganizerCollaborator({ role: "editor", candidateId: "candidate", email: "pending@example.test", action: "revoke", actorAccountId: owner, now });
   assert.equal((await items("kind = 'member.revoked'")).length, 2);
@@ -272,10 +273,14 @@ test("review results and actual published gate; latest result cancels obsolete p
   assert.equal(await repo.updateOrganizerPublicationJob({ jobId: job.id, leaseToken: lease.token, expectedStep: job.step, nextStep: "completed", status: "published", now }), false);
   assert.equal(await repo.updateOrganizerPublicationJob({ jobId: job.id, leaseToken: lease.token, expectedStep: job.step, nextStep: "verifying_production", status: "publishing", now }), true);
   assert.equal(await repo.updateOrganizerPublicationJob({ jobId: job.id, leaseToken: lease.token, expectedStep: "verifying_production", nextStep: "completed", status: "published", productionVerified: true, now }), true);
+  // The stored version counts saves; the letter names the workspace edition.
+  await db.prepare("UPDATE account_notification_items SET version = 6 WHERE kind = 'publication.published'").run();
   await tick();
   assert.equal(sent.filter(m => m.subject.includes("審核通過")).length, 0);
   assert.equal(sent.filter(m => m.subject.includes("已公開")).length, 1);
-  assert.match(sent.find(m => m.subject.includes("已公開")).text, /\/events\/candidate\//);
+  const published = sent.find(m => m.subject.includes("已公開")).text;
+  assert.match(published, /\/events\/candidate\//);
+  assert.match(published, /第 1 版/); assert.doesNotMatch(published, /第 6 版/);
 });
 
 test("failed and changes-requested transitions reach current owners only", async () => {

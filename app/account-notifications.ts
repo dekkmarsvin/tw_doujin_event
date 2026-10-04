@@ -11,6 +11,8 @@ export type NotificationItem = {
   event_id: string | null; circle_id: string | null; candidate_id: string | null;
   source_id: string; audience: "claimant" | "circle_owner" | "applicant" | "owner" | "member";
   name: string; version: number | null; detail: string; occurred_at: number;
+  /** Workspace edition, read at delivery; version is the save counter for staleness. */
+  edition?: number | null;
 };
 
 export function isAccountNotificationCadence(value: unknown): value is AccountNotificationCadence {
@@ -74,7 +76,7 @@ export function accountNotificationLetter(origin: string, items: NotificationIte
     facts: digest ? summary.map(item => ({ label: `${item.name}（${item.event_id}）`, value: item.detail || "補充資料", href: notificationDestination(item, base.origin) })) : [
       { label: first.circle_id ? "社團" : "活動", value: first.name },
       ...(first.event_id ? [{ label: "活動代碼", value: first.event_id }] : []),
-      ...(first.version ? [{ label: "內容版本", value: `第 ${first.version} 版` }] : []),
+      ...(first.edition ? [{ label: "內容版本", value: `第 ${first.edition} 版` }] : []),
       { label: "異動時間", value: formatTaipeiTime(first.occurred_at) },
     ],
     ...(!digest && !(ownMember && first.kind === "member.revoked") ? { action: { label: description.action, href: notificationDestination(first, base.origin) } } : {}),
