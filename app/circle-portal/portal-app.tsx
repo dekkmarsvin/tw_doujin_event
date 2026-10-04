@@ -29,7 +29,7 @@ import { CirclePageShare } from "./circle-page-share";
 import { selectedCircleShareImage } from "../circle-share-image";
 import { CatalogImagesField } from "./catalog-images-field";
 import { pointTo } from "./point-to";
-import { SessionDeadline, useSessionExpiry } from "./session-status";
+import { useSessionExpiry } from "./session-status";
 import { AccountMenu } from "./account-menu";
 import styles from "./portal.module.css";
 
@@ -344,7 +344,7 @@ export default function CirclePortalApp() {
     circleId={targetCircleId}
     notice={status.kind === "ok" || status.kind === "error" ? { kind: status.kind, message: status.message } : null}
   >
-    <SignInFinePrint>個資與著作權爭議請寄 <code>maintain@kotoban.top</code>，控制面使用問題請寄 <code>circle@kotoban.top</code>。</SignInFinePrint>
+    <SignInFinePrint>個資與著作權爭議請寄 <code>maintain@kotoban.top</code>，網站操作問題請寄 <code>circle@kotoban.top</code>。</SignInFinePrint>
   </SignInScreen>;
 
   return <div className={styles.page}>
@@ -357,7 +357,6 @@ export default function CirclePortalApp() {
             ADMIN_EMAILS is visible rather than silently hiding the panel. */}
         <p className={styles.identityWho}>
           <span>{session.email}{session.isAdmin ? "・管理者" : ""}{session.isMapContributor ? "・地圖貢獻者" : ""}</span>
-          <SessionDeadline session={session} />
         </p>
         <AccountMenu>
           {/* Signing in here does not hide the way to the organizer workspace:

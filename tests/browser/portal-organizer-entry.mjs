@@ -170,7 +170,6 @@ try {
     const workspaces = visitor.getByRole("navigation", { name: "工作區" });
     assert.equal(await workspaces.getByRole("link", { name: new RegExp(`^${current}`) }).getAttribute("aria-current"), "page", `${path} marks itself`);
     assert.equal(await workspaces.getByRole("link", { name: new RegExp(`^${other}`) }).getAttribute("href"), other === "社團資料" ? "/circle" : "/organizer");
-    await visitor.getByText("社團與主辦單位可在此登入。瀏覽、收藏與排行程不需登入。", { exact: true }).waitFor();
     await journey.capture(visitor, `workspace-entries${path.replace("/", "-")}-390`);
     await visitor.close();
   }

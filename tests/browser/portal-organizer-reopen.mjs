@@ -248,7 +248,7 @@ try {
   assert.equal(await owner.getByRole("button", { name: "退回修改", exact: true }).count(), 0, "the recovery action is gone after reopening");
   assert.equal(await owner.getByRole("button", { name: "重試發布", exact: true }).count(), 0, "the prior failed job cannot be retried after reopening");
   assert.deepEqual(ownerRoutes.reopenBodies, [{ expectedVersion: 1, reason: "補齊活動資料後重新送審" }]);
-  await expandTechnicalDetails(owner, ownerReview);
+  assert.equal(await ownerReview.locator("details").filter({ hasText: "技術詳細資訊" }).count(), 0, "owners see the publication result without internal diagnostics");
   await capture(owner, "organizer-reopen-owner-history", { panel: ownerReview });
 
   // #221: the numbered strip is gone and the readiness rail is the only
@@ -274,6 +274,7 @@ try {
   const adminRoutes = admin.__reopen;
   await admin.getByRole("button", { name: "登出", exact: true }).waitFor();
   const adminReview = await reviewPanel(admin);
+  await expandTechnicalDetails(admin, adminReview);
   const adminReason = adminReview.getByRole("textbox", { name: "退回理由", exact: true });
   const adminReopen = adminReview.getByRole("button", { name: "退回修改", exact: true });
   assert.equal(await adminReopen.isDisabled(), true);
@@ -311,7 +312,6 @@ try {
   assert.equal(await auditReview.getByRole("button", { name: "重試發布", exact: true }).isDisabled(), true, "publication retry remains disabled while publication is unavailable");
   assert.equal(auditRoutes.reopenRequests, 1);
   assert.deepEqual(auditRoutes.reopenBodies, [{ expectedVersion: 1, reason: "等待儲存庫狀態恢復後再試" }]);
-  await expandTechnicalDetails(audit, auditReview);
   await capture(audit, "organizer-reopen-remote-audit-error", { panel: auditReview });
   await audit.close();
 
@@ -340,11 +340,10 @@ try {
   const startedRoutes = started.__reopen;
   await started.getByRole("button", { name: "登出", exact: true }).waitFor();
   const startedReview = await reviewPanel(started);
-  assert.match(await startedReview.innerText(), /遠端紀錄.*無法安全退回修改/);
+  assert.match(await startedReview.innerText(), /目前發布進度不允許退回修改.*請聯絡網站管理者/);
   assert.equal(await startedReview.getByRole("textbox", { name: "退回理由", exact: true }).count(), 0, "a started publication has no reopen reason field");
   assert.equal(await startedReview.getByRole("button", { name: "退回修改", exact: true }).count(), 0, "a started publication has no reopen action");
   assert.equal(startedRoutes.reopenRequests, 0, "a started publication sends no reopen request");
-  await expandTechnicalDetails(started, startedReview);
   await capture(started, "organizer-reopen-started-remote-record", { panel: startedReview });
   await started.close();
 

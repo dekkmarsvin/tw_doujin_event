@@ -31,7 +31,6 @@ export function SignInScreen({ title, current, notice, circleId, children }: {
       <WorkspaceEntries current={current} />
       <section className={styles.card} aria-labelledby="sign-in-title">
         <h2 id="sign-in-title">登入</h2>
-        <p>輸入 email 取得 15 分鐘內有效的一次性登入連結。</p>
         <LoginLinkForm audience={current} circleId={circleId} />
         {children}
       </section>

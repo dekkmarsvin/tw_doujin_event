@@ -4,8 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { OrganizerAmendmentPanel } from "./organizer-amendment-panel";
 import { OrganizerApplicationsPanel } from "./organizer-applications-panel";
-import { OrganizerClaimsPanel } from "./organizer-claims-panel";
-import { OrganizerTakedownPanel } from "./organizer-takedown-panel";
+import { OrganizerCirclePanel } from "./organizer-claims-panel";
 import { OrganizerWorkspaceHeader } from "./organizer-workspace-header";
 import { useOrganizerPendingClaims } from "./use-organizer-pending-claims";
 import { groupOrganizerEvents, latestOrganizerEdition } from "../organizer-event-groups";
@@ -23,7 +22,7 @@ import { organizerIssueTarget, RequiredMark, type FieldRequest } from "./organiz
 import { type OrganizerEventDraft } from "../organizer-event";
 import { ORGANIZER_GUIDED_TASKS, ORGANIZER_WORKSPACE_SECTIONS, type OrganizerGuidedTask, type OrganizerWorkspaceSection } from "../organizer-workspace";
 
-import { SessionDeadline, useSessionExpiry } from "../circle-portal/session-status";
+import { useSessionExpiry } from "../circle-portal/session-status";
 import { AccountNotificationSettings } from "../account-notification-settings";
 import { ContactLink, WorkspaceSwitch } from "../workspace-nav";
 import { LoginLinkForm, SignInScreen } from "../portal-sign-in";
@@ -80,7 +79,6 @@ export default function OrganizerApp() {
         <WorkspaceSwitch current="organizer" />
         <span>{session.email}{session.isAdmin ? "・網站管理者" : ""}</span>
         {session.isAdmin && <a href="/admin">管理</a>}
-        <SessionDeadline session={session} />
         <AccountNotificationSettings key={session.email} session={session} className={styles.ghost} />
         <ContactLink url={session.contactUrl} />
         <button type="button" className={styles.ghost} onClick={() => void signOut().finally(() => setSession(null))}>登出</button>
@@ -178,10 +176,10 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   // -- the map above all -- are what that width is for.
   const [eventListOpen, setEventListOpen] = useState(true);
   const [expandedEvents, setExpandedEvents] = useState<Record<string, boolean>>({});
-  const [surface, setSurface] = useState<"data" | "members" | "claims" | "takedown">(() =>
+  const [surface, setSurface] = useState<"data" | "members" | "circles">(() =>
     entry.has("candidate") && entry.get("section") === "members" ? "members" : "data");
   const { pendingClaims, onQueueLoaded } = useOrganizerPendingClaims(
-    detail?.claimReviewAvailable ? detail.event.id : null, detail?.event.eventId ?? null, surface === "claims",
+    detail?.claimReviewAvailable ? detail.event.id : null, detail?.event.eventId ?? null, surface === "circles",
   );
   // Async navigation (including a published-baseline read) must consult the
   // current panel's edits, not the dirty state captured when the request began.
@@ -476,12 +474,8 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
                     if (active) requestNavigation("開啟活動資料", () => setSurface("data"));
                     else chooseEvent(group.latest.id);
                   }}>活動資料</button>
-                {active && detail?.claimReviewAvailable && <>
-                  <button type="button" className={styles.ghost} aria-current={surface === "claims" ? "page" : undefined}
-                    onClick={() => requestNavigation("查看社團認領", () => setSurface("claims"))}>社團認領</button>
-                  <button type="button" className={styles.ghost} aria-current={surface === "takedown" ? "page" : undefined}
-                    onClick={() => requestNavigation("撤下補充資料", () => setSurface("takedown"))}>撤下補充資料</button>
-                </>}
+                {active && detail?.claimReviewAvailable && <button type="button" className={styles.ghost} aria-current={surface === "circles" ? "page" : undefined}
+                  onClick={() => requestNavigation("開啟社團管理", () => setSurface("circles"))}>社團管理</button>}
               </div>
             </div>;
           })}
@@ -491,11 +485,11 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
     <section className={styles.workspace}>
       {notice.kind !== "idle" && <p role="status" className={notice.kind === "error" ? styles.error : styles.notice}>{notice.message}</p>}
       {detail && <OrganizerWorkspaceHeader detail={detail} pendingClaims={pendingClaims}
-        current={surface === "members" || surface === "claims" ? surface
+        current={surface === "members" || surface === "circles" ? surface
           : surface === "data" && section === "review" && (detail.workspace.mode !== "guided" || showAllTasks) ? "review" : null}
         onOpen={(target) => {
           if (target === "review") chooseSection("review");
-          else requestNavigation(target === "claims" ? "查看社團認領" : "開啟成員與權限", () => setSurface(target));
+          else requestNavigation(target === "circles" ? "開啟社團管理" : "開啟成員與權限", () => setSurface(target));
         }} />}
       {surface === "data" && detail?.event.status === "published" && (detail.event.role === "owner" || session.isAdmin) && <div className={styles.guideBanner}>
         <div><strong>修正已發布名單</strong><p>建立修正草稿，原本的公開活動會持續提供，直到新版核准並完成發布。</p></div>
@@ -527,8 +521,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
       </div>
         : surface === "members" ? <MembersPanel key={detail.event.id} session={session} detail={detail} onChanged={refresh} onClose={() => setSurface("data")} />
         : surface !== "data" && detail.claimReviewAvailable && detail.event.eventId
-          ? surface === "claims" ? <OrganizerClaimsPanel key={detail.event.id} candidateId={detail.event.id} eventId={detail.event.eventId} canRevoke={detail.event.role !== "editor" || session.isAdmin} onQueueLoaded={onQueueLoaded} />
-            : <OrganizerTakedownPanel key={detail.event.id} candidateId={detail.event.id} eventId={detail.event.eventId} />
+          ? <OrganizerCirclePanel key={detail.event.id} candidateId={detail.event.id} eventId={detail.event.eventId} canRevoke={detail.event.role !== "editor" || session.isAdmin} onQueueLoaded={onQueueLoaded} />
           : <WorkspaceSurface
           key={detail.event.id}
           session={session}
