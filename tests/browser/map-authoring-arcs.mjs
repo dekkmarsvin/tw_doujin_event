@@ -37,10 +37,17 @@ try {
   await svg.press("Escape");
   await openToolGroup(editor, "設施");
   await editor.getByRole("button", { name: "描繪多邊形", exact: true }).click();
+  await click(100, 30); await click(200, 40); await click(300, 30);
+  await editor.getByRole("button", { name: "3 點畫成圓形", exact: true }).click();
+  await editor.getByRole("alert").filter({ hasText: "超出畫布" }).waitFor();
+  assert.equal(await editor.getByRole("button", { name: "完成多邊形（3 點）", exact: true }).count(), 1, "a circle that leaves the canvas keeps the clicked points");
+  await svg.press("Escape");
+  await openToolGroup(editor, "設施");
+  await editor.getByRole("button", { name: "描繪多邊形", exact: true }).click();
   await click(150, 150); await click(200, 100); await click(250, 150);
   await editor.getByRole("button", { name: "3 點畫成圓形", exact: true }).click();
   await editor.getByRole("button", { name: "完成多邊形（48 點）", exact: true }).click();
-  journey.report.checks.push("points on one line explain why they cannot curve; three points can also make a circle");
+  journey.report.checks.push("points on one line or a circle off the canvas keep the clicks with a reason; three points can also make a circle");
 
   await openToolGroup(editor, "註記");
   await editor.getByRole("button", { name: "新增動線箭頭", exact: true }).click();
