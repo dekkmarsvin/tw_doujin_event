@@ -42,10 +42,12 @@ let repository;
 let thumbnailObjects;
 
 const projectTestCircle = async (circleId, fields) => (CIRCLES[circleId]
-  ? [{ recordId: `${circleId}-0`, name: CIRCLES[circleId].name, circle: { id: circleId, ...(fields ?? {}) } }]
+  ? [{ recordId: `${circleId}-0`, name: CIRCLES[circleId].name, circle: { id: circleId, ...(fields ?? {}) },
+    placement: { day: "1", area: "hall", boothCode: "A01", status: "active" } }]
   : null);
 
 const TABLES = [
+  "organizer_amendments",
   "organizer_event_reviews",
   "organizer_event_invitations",
   "organizer_event_grants",
@@ -1274,6 +1276,188 @@ test("a takedown removes the content and a second takedown reports nothing to do
   assert.equal(payload.overrides.some((entry) => entry.circleId === "ff47-domain"), false);
 
   assert.equal((await handlers.adminTakedown(post("/api/admin/overrides", { circleId: "ff47-domain", reason: "again" }, admin))).status, 404);
+});
+
+test("admin circle details are private, served-event scoped, and exact to the catalog circle", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("detail-owner@example.com");
+  const first = handlersForEvent("ff47");
+  const second = handlersForEvent("ff48");
+  const claimIds = [];
+  for (const [one, text] of [[first, "第一場內容"], [second, "第二場內容"]]) {
+    const created = await one.createClaim(post("/api/claims", { circleId: "ff47-site", evidenceNote: "私人佐證" }, owner));
+    const { id } = await created.json();
+    claimIds.push(id);
+    assert.equal((await one.adminDecideClaim(post("/api/admin/claims", { claimId: id, decision: "approve" }, admin))).status, 200);
+    assert.equal((await one.putOverride(post("/api/circle/ff47-site/overrides", { fields: { saleInfo: text } }, owner), "ff47-site")).status, 200);
+  }
+  const before = await repository.getOverridesDoc("ff47");
+  assert.equal((await first.adminCircleDetail(get("/api/admin/circles/ff47-site"), "ff47-site")).status, 401);
+  assert.equal((await first.adminCircleDetail(get("/api/admin/circles/ff47-site", owner), "ff47-site")).status, 403);
+  assert.equal((await first.getMyOverride(get("/api/circle/ff47-site/overrides", admin), "ff47-site")).status, 403,
+    "the owner-only endpoint is not widened for administration");
+  assert.equal((await first.adminCircleDetail(get("/api/admin/circles/missing", admin), "missing")).status, 404);
+  assert.equal((await handlersForEvent("retired").adminCircleDetail(get("/api/admin/circles/ff47-site", admin), "ff47-site")).status, 404);
+  for (const [index, one] of [first, second].entries()) {
+    const response = await one.adminCircleDetail(get("/api/admin/circles/ff47-site", admin), "ff47-site");
+    assert.equal(response.status, 200);
+    const detail = await response.json();
+    assert.equal(detail.eventId, index ? "ff48" : "ff47");
+    assert.equal(detail.name, CIRCLES["ff47-site"].name);
+    assert.deepEqual(detail.placements, [{ day: "1", area: "hall", boothCode: "A01", status: "active" }]);
+    assert.deepEqual(detail.claims.map(claim => claim.id), [claimIds[index]]);
+    assert.equal(detail.claims[0].accountEmail, "detail-owner@example.com");
+    assert.equal(detail.claims[0].accountStatus, "active");
+    assert.equal(detail.supplemental.fields.saleInfo, index ? "第二場內容" : "第一場內容");
+    assert.equal(detail.publicHref, `/events/${detail.eventId}/circles/ff47-site/`);
+    assert.equal(detail.organizerHref, null);
+    assert.doesNotMatch(JSON.stringify(detail), /私人佐證|challenge_token|evidence_note|previous_fields_json|fields_json/);
+  }
+  assert.equal((await repository.getOverridesDoc("ff47")).revision, before.revision, "detail reads never rebuild the public document");
+  const catalogWithoutCircle = createCirclePortalHandlers({ ...handlerOptions, lookupCircle: async () => null });
+  assert.equal((await catalogWithoutCircle.adminCircleDetail(get("/api/admin/circles/ff47-site", admin), "ff47-site")).status, 404,
+    "an orphan D1 row is not a current catalog circle");
+  const noPlacement = createCirclePortalHandlers({ ...handlerOptions, projectCircle: async () => [] });
+  const unplaced = await (await noPlacement.adminCircleDetail(get("/api/admin/circles/ff47-site", admin), "ff47-site")).json();
+  assert.equal(unplaced.publicHref, null, "unplaced identities have no generated public circle page");
+});
+
+test("admin details distinguish stored content from the existing verified-claim and event-phase projection", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("detail-projection@example.com");
+  const none = await (await handlers.adminCircleDetail(get("/api/admin/circles/ff47-domain", admin), "ff47-domain")).json();
+  assert.equal(none.supplemental.status, "none");
+  assert.equal(none.supplemental.fields, null);
+  assert.equal(none.supplemental.publicReason, "no_content");
+  const claims = new Map();
+  for (const circleId of Object.keys(CIRCLES)) {
+    claims.set(circleId, await approve(owner, circleId, admin));
+    assert.equal((await handlers.putOverride(post(`/api/circle/${circleId}/overrides`, { fields: { saleInfo: circleId } }, owner), circleId)).status, 200);
+  }
+  await handlers.adminDecideClaim(post("/api/admin/claims", { claimId: claims.get("ff47-social"), decision: "revoke" }, admin));
+  await handlers.setPostEventVisibility(post("/api/circle/ff47-domain/visibility", { hidden: true }, owner), "ff47-domain");
+  const read = async (one, circleId) => (await one.adminCircleDetail(get(`/api/admin/circles/${circleId}`, admin), circleId)).json();
+  const publicDetail = await read(handlers, "ff47-site");
+  assert.equal(publicDetail.supplemental.status, "live");
+  assert.equal(publicDetail.supplemental.publicState, "public");
+  assert.equal(publicDetail.supplemental.publicReason, null);
+  const unclaimed = await read(handlers, "ff47-social");
+  assert.equal(unclaimed.supplemental.status, "live");
+  assert.equal(unclaimed.supplemental.fields.saleInfo, "ff47-social");
+  assert.equal(unclaimed.supplemental.publicState, "hidden");
+  assert.equal(unclaimed.supplemental.publicReason, "no_verified_claim");
+  assert.equal(unclaimed.claims[0].status, "revoked");
+  const during = await read(handlers, "ff47-domain");
+  assert.equal(during.supplemental.phase, "during");
+  assert.equal(during.supplemental.postEventHidden, true);
+  assert.equal(during.supplemental.publicState, "public", "opting out only hides after the event");
+  const after = createCirclePortalHandlers({ ...handlerOptions, config: {
+    ...handlerOptions.config, eventEndsAt: new Date(clock - 1).toISOString(),
+  } });
+  const hidden = await read(after, "ff47-domain");
+  assert.equal(hidden.supplemental.status, "live");
+  assert.equal(hidden.supplemental.fields.saleInfo, "ff47-domain");
+  assert.equal(hidden.supplemental.phase, "after");
+  assert.equal(hidden.supplemental.publicState, "hidden");
+  assert.equal(hidden.supplemental.publicReason, "post_event_hidden");
+  assert.equal(await repository.getPublicOverride("ff47", "ff47-domain", "after"), null);
+  await repository.disableAccount("detail-projection@example.com", clock);
+  const disabledOwner = await read(handlers, "ff47-site");
+  assert.equal(disabledOwner.claims[0].accountStatus, "disabled");
+  assert.equal(disabledOwner.supplemental.publicState, "public", "admin details do not add an account eligibility condition absent from readLiveOverrides");
+});
+
+test("admin circle history and workspace links use only existing trusted event associations", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("detail-history@example.com");
+  const rival = await signIn("detail-rival@example.com");
+  const { id: winner } = await (await handlers.createClaim(post("/api/claims", { circleId: "ff47-social" }, owner))).json();
+  const { id: rejected } = await (await handlers.createClaim(post("/api/claims", { circleId: "ff47-social" }, rival))).json();
+  const read = async () => (await handlers.adminCircleDetail(get("/api/admin/circles/ff47-social", admin), "ff47-social")).json();
+  const pending = await read();
+  assert.equal(pending.claims.length, 2);
+  for (const claim of pending.claims) assert.equal(claim.reviewHref,
+    `/admin?section=circles&view=claims&event=ff47&claim=${claim.id}`);
+  await handlers.adminDecideClaim(post("/api/admin/claims", { claimId: winner, decision: "approve" }, admin));
+  await handlers.adminDecideClaim(post("/api/admin/claims", { claimId: rejected, decision: "reject" }, admin));
+  await handlers.putOverride(post("/api/circle/ff47-social/overrides", { fields: { saleInfo: "保存內容" } }, owner), "ff47-social");
+  await handlers.adminTakedown(post("/api/admin/overrides", { circleId: "ff47-social", reason: "實際撤下原因" }, admin));
+  const adminId = await repository.upsertAccount("admin@example.com", clock);
+  for (const detail of [
+    { eventId: "ff48", reason: "另一場", applied: true },
+    { reason: "歷史未記活動", applied: true },
+    { eventId: "ff47", reason: "未套用操作", applied: false },
+  ]) await repository.writeAudit({ at: clock + 1, actorAccountId: adminId, actorRole: "admin", action: "override.takendown",
+    subjectType: "override", subjectId: "ff47-social", detail });
+  const initial = await read();
+  assert.equal(initial.claims.find(claim => claim.id === winner).status, "verified");
+  assert.equal(initial.claims.find(claim => claim.id === rejected).status, "rejected");
+  assert.ok(initial.claims.every(claim => claim.reviewHref === null));
+  assert.deepEqual(initial.history.map(entry => entry.action).sort(), ["claim.approved", "claim.rejected", "override.takendown"]);
+  assert.equal(initial.history.find(entry => entry.action === "override.takendown").reason, "實際撤下原因");
+  assert.ok(initial.history.every(entry => entry.by === "admin@example.com"));
+  assert.deepEqual(initial.supplemental.takedown, { reason: "實際撤下原因", at: clock, by: "admin@example.com" });
+
+  const candidate = async (id, eventId, offset, publicationOperation = "CREATE", published = false) => {
+    await repository.createOrganizerCandidate({ id, tentativeName: id, ownerEmail: "admin@example.com", createdByAccountId: adminId,
+      draftJson: '{}', now: clock + offset });
+    await database.prepare("UPDATE organizer_event_candidates SET event_id = ?2, publication_operation = ?3, published_version = ?4 WHERE id = ?1")
+      .bind(id, eventId, publicationOperation, published ? 1 : null).run();
+  };
+  await candidate("mutable-create", "ff47", 1_000);
+  assert.equal((await read()).organizerHref, null, "an editable CREATE event id is not a trusted association");
+  await database.prepare("UPDATE organizer_event_candidates SET status = 'published', published_version = 1 WHERE id = 'mutable-create'").run();
+  assert.equal((await read()).organizerHref, "/organizer?candidate=mutable-create");
+  await candidate("trusted-amend", "ff47", 2_000, "AMEND");
+  await database.prepare(`INSERT INTO organizer_amendments (candidate_id, source_candidate_id, source_version, source_job_id,
+    baseline_json, baseline_sha256, created_at) VALUES ('trusted-amend', 'mutable-create', 1, 'job', '{}', 'hash', ?1)`).bind(clock).run();
+  assert.equal((await read()).organizerHref, "/organizer?candidate=trusted-amend");
+  await database.prepare("UPDATE organizer_event_candidates SET status = 'published', published_version = 1 WHERE id = 'trusted-amend'").run();
+  await candidate("other-source", "ff48", 3_000, "CREATE", true);
+  await candidate("wrong-amend", "ff47", 4_000, "AMEND");
+  await database.prepare(`INSERT INTO organizer_amendments (candidate_id, source_candidate_id, source_version, source_job_id,
+    baseline_json, baseline_sha256, created_at) VALUES ('wrong-amend', 'other-source', 1, 'job', '{}', 'hash', ?1)`).bind(clock).run();
+  assert.equal((await read()).organizerHref, "/organizer?candidate=trusted-amend", "a newer candidate cannot borrow another event's published source");
+});
+
+test("admin detail keeps partial image cleanup pending or unknown until the existing retry completes", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("detail-images@example.com");
+  await approve(owner, "ff47-social", admin);
+  const uploaded = await handlers.uploadThumbnail(thumbnailRequest("ff47-social", owner, [137, 80, 78, 71, 13, 10, 26, 10]), "ff47-social");
+  const image = await uploaded.json();
+  assert.equal((await handlers.putOverride(post("/api/circle/ff47-social/overrides", {
+    fields: { thumbnail: image.thumbnail, saleInfo: "保存介紹" }, hostedThumbnailKey: image.uploadKey,
+  }, owner), "ff47-social")).status, 200);
+  const otherKey = "events/ff48/circles/ff47-social/other.png";
+  thumbnailObjects.keys.add(otherKey);
+  const partial = createCirclePortalHandlers({ ...handlerOptions, thumbnailStore: {
+    ...handlerOptions.thumbnailStore, delete: async () => { throw new Error("R2 unavailable"); },
+  } });
+  const result = await partial.adminTakedown(post("/api/admin/overrides", { circleId: "ff47-social", reason: "圖片撤下原因" }, admin));
+  assert.equal(result.status, 503);
+  const read = async one => (await one.adminCircleDetail(get("/api/admin/circles/ff47-social", admin), "ff47-social")).json();
+  const pending = await read(handlers);
+  assert.equal(pending.supplemental.status, "takendown");
+  assert.equal(pending.supplemental.fields.saleInfo, "保存介紹");
+  assert.equal(pending.supplemental.fields.thumbnail, null);
+  assert.equal(pending.supplemental.publicReason, "takendown");
+  assert.equal(pending.supplemental.cleanupState, "pending");
+  assert.equal(pending.claims[0].status, "verified", "withdrawal does not revoke the circle claim");
+  const missingStore = createCirclePortalHandlers({ ...handlerOptions, thumbnailStore: undefined });
+  assert.equal((await read(missingStore)).supplemental.cleanupState, "unknown");
+  const unavailableStore = createCirclePortalHandlers({ ...handlerOptions, thumbnailStore: {
+    ...handlerOptions.thumbnailStore, list: async () => { throw new Error("R2 listing unavailable"); },
+  } });
+  const unknown = await read(unavailableStore);
+  assert.equal(unknown.supplemental.cleanupState, "unknown");
+  assert.equal(unknown.supplemental.status, "takendown", "image lookup failure does not erase known content state");
+  assert.equal((await handlers.adminTakedown(post("/api/admin/overrides", { circleId: "ff47-social", reason: "重試圖片" }, admin))).status, 200);
+  const complete = await read(handlers);
+  assert.equal(complete.supplemental.cleanupState, "complete");
+  assert.equal(complete.supplemental.takedown.reason, "圖片撤下原因", "retry preserves the original takedown decision");
+  assert.equal(complete.history.filter(entry => entry.action === "override.takendown" && entry.retryCleanup).length, 1);
+  assert.deepEqual([...thumbnailObjects.keys], [otherKey], "cleanup cannot reach the other event's circle objects");
 });
 
 test("revoking a claim stops the former owner from editing", async () => {

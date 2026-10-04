@@ -35,6 +35,26 @@
 .accountMenu > div { position: absolute; z-index: 20; right: 0; width: 200px; display: grid; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: #fff; box-shadow: 0 8px 24px #202a3514; }
 .accountMenu a { color: var(--ink); padding: 6px; text-decoration: none; }
 .accountMenu button { font: inherit; padding: 6px; }
+.circleResults li { flex-wrap: wrap; }
+.circleDetail { overflow-wrap: anywhere; }
+.detailHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.detailHeading h3, .detailHeading p { margin: 0; }
+.detailHeading button { width: auto; margin-top: 0; flex: 0 0 auto; }
+.detailSection { border-top: 1px solid var(--line); margin-top: 22px; padding-top: 18px; }
+.detailSection h4 { margin: 0 0 12px; font-size: 15px; }
+.detailFacts { display: grid; gap: 10px; margin: 12px 0; }
+.detailFacts > div { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 12px; }
+.detailFacts dt { color: var(--muted); }
+.detailFacts dd { margin: 0; min-width: 0; }
+.detailFacts ul { margin: 0; padding-left: 20px; }
+.detailActions { display: flex; flex-wrap: wrap; gap: 10px 18px; font-size: 13px; }
+.detailList { list-style: none; padding: 0; margin: 12px 0; }
+.detailList li { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.detailList li > div { display: grid; gap: 4px; min-width: 0; }
+.detailList small { color: var(--muted); }
+.contentText { white-space: pre-wrap; }
+.detailMedia { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+.detailMedia img { display: block; width: 120px; max-height: 180px; object-fit: contain; border: 1px solid var(--line); background: #fff; }
 @media (max-width: 1050px) { .dashboard { grid-template-columns: 1fr; } }
 @media (max-width: 760px) {
   .layout { grid-template-columns: 1fr; gap: 16px; margin-top: 16px; }
@@ -45,4 +65,6 @@
   .navigation a { display: block; }
   .navigation a:last-child { margin-top: 6px; }
   .title h2 { font-size: 18px; }
+  .detailHeading { align-items: flex-start; flex-wrap: wrap; }
+  .detailFacts > div { grid-template-columns: 80px minmax(0, 1fr); gap: 10px; }
 }

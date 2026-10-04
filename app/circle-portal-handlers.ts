@@ -1,5 +1,7 @@
 import { isAccountNotificationCadence } from "./account-notifications";
 import { canSubmitEventApplication, contactSettingsProblem, parseSiteSettings } from "./site-settings";
+import type { AdminCircleDetail } from "./admin-circle-detail";
+import type { CircleViewRecord } from "./circle-records";
 import { notificationParameters } from "./notification-navigation";
 import identityRuntimeVersion from "../db/identity-runtime-version.json";
 import { createAdminReferenceHandlers } from "./admin-reference-handlers";
@@ -2005,6 +2007,72 @@ export function createCirclePortalHandlers({
     return searchTakedownCircles(request, config.eventId);
   }
 
+  async function adminCircleDetail(request: Request, circleId: string) {
+    const gate = await requireAdmin(request);
+    if (!gate.ok) return gate.response;
+    const eventId = config.eventId;
+    const circle = await lookupCircle(circleId, eventId);
+    if (!circle) return json({ error: "找不到這個活動的社團。" }, 404);
+
+    const phase = await currentPhase();
+    const [override, publicOverride, claims, history, candidate, records] = await Promise.all([
+      repository.getOverride(eventId, circleId),
+      repository.getPublicOverride(eventId, circleId, phase),
+      repository.listCircleClaimsForAdmin(eventId, circleId),
+      repository.listCircleModerationHistory(eventId, circleId),
+      repository.getOrganizerModerationCandidateForEvent(eventId),
+      projectCircle(circleId, null),
+    ]);
+    if (!records) return json({ error: "找不到這個活動的社團。" }, 404);
+    const placements = (records as CircleViewRecord[]).map(({ placement }) => ({
+      day: placement.day, area: placement.area, boothCode: placement.boothCode, status: placement.status,
+    }));
+    let cleanupState: AdminCircleDetail["supplemental"]["cleanupState"] = "not_required";
+    if (override?.status === "takendown") {
+      cleanupState = "unknown";
+      if (thumbnailStore) {
+        try {
+          cleanupState = (await thumbnailStore.list(circleObjectPrefix(eventId, circleId))).length ? "pending" : "complete";
+        } catch { /* Image availability does not turn known content into unknown content. */ }
+      }
+    }
+    const reviewer = (value: string | null) => value === "[shredded]" ? null : value;
+    const result: AdminCircleDetail = {
+      eventId, circleId: circle.id, name: circle.name, placements,
+      publicHref: placements.length ? `/events/${encodeURIComponent(eventId)}/circles/${encodeURIComponent(circle.id)}/` : null,
+      organizerHref: candidate ? `/organizer?candidate=${encodeURIComponent(candidate.id)}` : null,
+      claims: claims.map(claim => ({
+        id: claim.id, status: claim.status, method: claim.method, accountEmail: claim.account_email,
+        accountStatus: !claim.account_id ? "deleted" : claim.deletion_started_at !== null ? "deleting"
+          : claim.disabled_at !== null ? "disabled" : "active",
+        createdAt: claim.created_at, verifiedAt: claim.verified_at, reviewedAt: claim.reviewed_at,
+        reviewedBy: reviewer(claim.reviewed_by),
+        reviewHref: claim.status === "pending"
+          ? `/admin?section=circles&view=claims&event=${encodeURIComponent(eventId)}&claim=${encodeURIComponent(claim.id)}` : null,
+      })),
+      supplemental: {
+        status: (override?.status ?? "none") as AdminCircleDetail["supplemental"]["status"],
+        fields: override ? JSON.parse(override.fields_json) as CircleOverrideFields : null,
+        updatedAt: override?.updated_at ?? null, postEventHidden: !!override?.post_event_hidden,
+        publicState: publicOverride ? "public" : "hidden",
+        publicReason: publicOverride ? null : !override ? "no_content" : override.status === "takendown" ? "takendown"
+          : !claims.some(claim => claim.status === "verified") ? "no_verified_claim"
+            : phase === "after" && !!override.post_event_hidden ? "post_event_hidden" : null,
+        phase, cleanupState,
+        takedown: override?.status === "takendown" ? {
+          reason: override.takedown_reason, at: override.takendown_at, by: reviewer(override.takendown_by),
+        } : null,
+      },
+      history: history.map(entry => ({
+        action: entry.subject_type === "override" ? "override.takendown"
+          : entry.action.endsWith("_approve") ? "claim.approved" : entry.action.endsWith("_reject") ? "claim.rejected" : "claim.revoked",
+        at: entry.at, claimId: entry.subject_type === "claim" ? entry.subject_id : null,
+        reason: entry.reason, by: entry.actor_email, retryCleanup: !!entry.retry_cleanup,
+      })),
+    };
+    return json(result);
+  }
+
   async function organizerSearchTakedownCircles(request: Request, candidateId: string) {
     const access = await organizerClaimAccess(request, candidateId);
     if (!access.ok) return access.response;
@@ -3745,6 +3813,7 @@ export function createCirclePortalHandlers({
     adminDecideClaim: eventScoped(adminDecideClaim),
     adminTakedown: eventScoped(adminTakedown),
     adminSearchTakedownCircles: eventScoped(adminSearchTakedownCircles),
+    adminCircleDetail: eventScoped(adminCircleDetail),
     adminListStaleMapDrafts: eventScoped(adminListStaleMapDrafts),
     listMyMapDrafts: eventScoped(listMyMapDrafts),
     getMapDraft: eventScoped(getMapDraft),

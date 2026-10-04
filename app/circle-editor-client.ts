@@ -11,6 +11,8 @@ export function requestAdminServiceCheck() {
 import { notificationParameters } from "./notification-navigation";
 import type { MapAuthoringState } from "./map-authoring-state";
 import type { NotificationPreferences } from "./review-notifications";
+import type { AdminCircleDetail } from "./admin-circle-detail";
+export type { AdminCircleDetail, AdminCircleClaim, AdminCircleHistory } from "./admin-circle-detail";
 
 export function readAccountNotificationPreferences() {
   return call<AccountNotificationPreferences>("/api/account/notification-preferences");
@@ -276,6 +278,10 @@ export function takedownOverride(circleId: string, reason: string, eventId?: str
 export type TakedownCircle = { circleId: string; name: string; status: "live" | "takendown" | "none"; cleanupPending?: boolean };
 export function searchTakedownCircles(query: string, eventId: string) {
   return call<{ circles: TakedownCircle[] }>(`/api/admin/overrides?q=${encodeURIComponent(query)}`, undefined, eventId);
+}
+
+export function readAdminCircleDetail(circleId: string, eventId: string) {
+  return call<AdminCircleDetail>(`/api/admin/circles/${encodeURIComponent(circleId)}`, undefined, eventId);
 }
 
 export type AdminEntry = { email: string; addedBy: string | null; addedAt: number };

@@ -3,12 +3,12 @@
 // Authorization/data-integrity invariants stay in circle-portal-route tests.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { start, base } from "./support/journey.mjs";
+import { start, base, output } from "./support/journey.mjs";
 
 const journey = await start("portal-admin-entry");
 const map = JSON.parse(await readFile("fixtures/events/sample/map.json", "utf8"));
 const now = Date.now();
-async function open(role, entry = "/admin", implicitMapDraft = false, pendingService = false) {
+async function open(role, entry = "/admin", implicitMapDraft = false, pendingService = false, viewport) {
   const requests = [];
   const pending = [
     { id: "claim-one", eventId: "sample", circleId: "c-900001", circleName: "待審測試社", evidenceUrl: null, evidenceNote: "本人申請", targetUrl: null, createdAt: now, circleClaimed: false },
@@ -28,10 +28,21 @@ async function open(role, entry = "/admin", implicitMapDraft = false, pendingSer
     { id: "job-two", candidateId: "candidate-two", eventName: "已排程的活動", status: "queued", step: "preparing_data" },
   ] });
   let draftStatus = "submitted", failure = 0, settingsFailure = false;
+  let detailFailure = 0, partialTakedown = false;
+  const supplementals = new Map();
+  const circleDetail = eventId => {
+    const supplemental = supplementals.get(eventId) ?? { status: "live", fields: { pen: eventId === "sample-two" ? "第二場作者" : "第一場作者", saleInfo: "已保存的品書介紹" }, updatedAt: now,
+      postEventHidden: false, publicState: "public", publicReason: null, phase: "during", cleanupState: "not_required", takedown: null };
+    return { eventId, circleId: "c-900001", name: "待審測試社", placements: [{ day: "1", area: "A", boothCode: "A01", status: "active" }],
+      publicHref: `/events/${eventId}/circles/c-900001/`, organizerHref: null,
+      claims: [{ id: "verified-one", status: "verified", method: "manual", accountEmail: "owner@example.test", accountStatus: "active", createdAt: now,
+        verifiedAt: now, reviewedAt: now, reviewedBy: "admin@example.test", reviewHref: null }], supplemental,
+      history: supplemental.takedown ? [{ action: "override.takendown", at: now, claimId: null, reason: supplemental.takedown.reason, by: "admin@example.test", retryCleanup: false }] : [] };
+  };
   const comments = [];
   const draft = (eventId = "sample") => ({ id: "map-one", event_id: eventId, period_key: eventId === "sample" ? "1" : "thu", venue_space_id: eventId === "sample" ? "sample-hall" : "sample-two-floor", status: draftStatus, current_revision: 3,
     created_at: now, updated_at: now, decision_at: null, owner_email: "contributor@example.test", content: { schema: "map-contribution-draft/1", layout: map.layout } });
-  const page = await journey.page({ url: `${base}${entry}`, routes: async page => {
+  const page = await journey.page({ url: `${base}${entry}`, viewport, routes: async page => {
     if (pendingService) await page.clock.install({ time: now });
     await page.route("**/api/**", async route => {
       const request = route.request(), url = new URL(request.url()), path = url.pathname, method = request.method();
@@ -77,8 +88,22 @@ async function open(role, entry = "/admin", implicitMapDraft = false, pendingSer
         if (method === "POST") { admins = body.action === "add" ? [...admins, { email: body.email, addedBy: "admin@example.test", addedAt: now }] : admins.filter(x => x.email !== body.email); return reply({ ok: true }); }
         return reply({ admins, self: "admin@example.test" });
       }
-      if (path === "/api/admin/overrides" && method === "GET") return reply({ circles: [{ circleId: "c-900001", name: "待審測試社", status: "live" }] });
-      if (path === "/api/admin/overrides" || path === "/api/admin/accounts") return reply({ ok: true });
+      if (path.startsWith("/api/admin/circles/")) {
+        if (detailFailure) return reply({ error: "無法取得社團明細。" }, detailFailure);
+        if (path !== "/api/admin/circles/c-900001") return reply({ error: "找不到這個社團。" }, 404);
+        return reply(circleDetail(url.searchParams.get("event")));
+      }
+      if (path === "/api/admin/overrides" && method === "GET") {
+        const supplemental = circleDetail(url.searchParams.get("event")).supplemental;
+        return reply({ circles: [{ circleId: "c-900001", name: "待審測試社", status: supplemental.status, cleanupPending: supplemental.cleanupState === "pending" }] });
+      }
+      if (path === "/api/admin/overrides" && method === "POST") {
+        const eventId = url.searchParams.get("event");
+        supplementals.set(eventId, { ...circleDetail(eventId).supplemental, status: "takendown", publicState: "hidden", publicReason: "takendown",
+          cleanupState: partialTakedown ? "pending" : "complete", takedown: { reason: body.reason, at: now, by: "admin@example.test" } });
+        return partialTakedown ? reply({ error: "補充資料已撤下，但圖片清除尚未完成，請重試。" }, 503) : reply({ ok: true });
+      }
+      if (path === "/api/admin/accounts") return reply({ ok: true });
       if (path === "/api/admin/map-contributions/drafts") return reply({ drafts: implicitMapDraft || url.searchParams.get("event") === "sample" ? [draft(url.searchParams.get("event"))] : [] });
       if (path === "/api/admin/map-contributions/drafts/map-one") {
         if (!implicitMapDraft && url.searchParams.get("event") !== "sample") return reply({ error: "找不到這份草稿。" }, 404);
@@ -94,7 +119,8 @@ async function open(role, entry = "/admin", implicitMapDraft = false, pendingSer
       throw new Error(`Unexpected ${method} ${path}`);
     });
   } });
-  return { page, requests, expire: () => { failure = 401; }, failSettings: () => { settingsFailure = true; }, completeChecks: () => {
+  return { page, requests, expire: () => { failure = 401; }, failSettings: () => { settingsFailure = true; },
+    failDetail: status => { detailFailure = status; }, partialCleanup: enabled => { partialTakedown = enabled; }, completeChecks: () => {
     serviceChecks = { requestedAt: now, checkedAt: now + 1, mail: { status: "available", source: "Mailgun", reason: "測試檢查已完成。" },
       publication: { status: "available", source: "GitHub App", reason: "測試檢查已完成。" } };
   } };
@@ -199,25 +225,43 @@ try {
   await panel.getByText("已婉拒 1 筆。", { exact: true }).waitFor();
   await panel.getByText("目前沒有待審項目。", { exact: true }).waitFor();
   assert.equal(requests.filter(x => x.path === "/api/admin/claims" && x.method === "POST").at(-1).event, "sample-two");
-  await page.getByRole("navigation", { name: "社團管理頁籤", exact: true }).getByRole("link", { name: "社團查詢與撤下", exact: true }).click();
+  await page.getByRole("navigation", { name: "社團管理頁籤", exact: true }).getByRole("link", { name: "社團查詢", exact: true }).click();
   const takedown = page.locator("#takedown");
   const defaultSearchEvent = await takedown.getByLabel("活動", { exact: true }).inputValue();
   await takedown.getByLabel("社團名稱", { exact: true }).fill("待審測試社");
   await takedown.getByRole("button", { name: "搜尋", exact: true }).click();
-  await takedown.getByRole("button", { name: "選擇待審測試社", exact: true }).waitFor();
+  await takedown.getByRole("button", { name: "查看待審測試社明細", exact: true }).waitFor();
   assert.equal(new URL(page.url()).searchParams.get("event"), defaultSearchEvent);
   assert.equal(new URL(page.url()).searchParams.get("q"), "待審測試社");
   await takedown.getByLabel("活動", { exact: true }).selectOption("sample");
   await takedown.getByLabel("社團名稱", { exact: true }).fill("待審測試社");
   await takedown.getByRole("button", { name: "搜尋", exact: true }).click();
-  await takedown.getByRole("button", { name: "選擇待審測試社", exact: true }).click();
+  await takedown.getByRole("button", { name: "查看待審測試社明細", exact: true }).click();
+  await takedown.getByRole("heading", { name: "待審測試社", exact: true }).waitFor();
+  await takedown.getByText("第一場作者", { exact: true }).waitFor();
+  await takedown.getByText("公開中", { exact: true }).waitFor();
+  assert.equal(new URL(page.url()).searchParams.get("circle"), "c-900001");
+  assert.equal(new URL(page.url()).searchParams.get("event"), "sample");
+  await page.reload();
+  await takedown.getByText("第一場作者", { exact: true }).waitFor();
+  await takedown.getByRole("button", { name: "返回搜尋結果", exact: true }).click();
+  await takedown.getByRole("button", { name: "查看待審測試社明細", exact: true }).waitFor();
+  assert.equal(await takedown.getByLabel("社團名稱", { exact: true }).inputValue(), "待審測試社");
+  assert.equal(new URL(page.url()).searchParams.has("circle"), false);
+  assert.equal(new URL(page.url()).searchParams.get("q"), "待審測試社");
+  await takedown.getByRole("button", { name: "查看待審測試社明細", exact: true }).click();
+  await takedown.getByText("第一場作者", { exact: true }).waitFor();
+  await journey.capture(page, "admin-circle-detail-desktop");
+  await page.screenshot({ path: `${output}/issue508-desktop.png`, fullPage: true,
+    mask: [page.locator('[class*="identityWho"]'), page.locator('section[aria-labelledby="circle-claims-heading"] strong')] });
   await takedown.getByLabel("原因", { exact: true }).fill("測試撤下");
-  await takedown.getByRole("button", { name: "撤下", exact: true }).click();
+  await takedown.getByRole("button", { name: "撤下補充資料", exact: true }).click();
   await takedown.getByRole("dialog").getByRole("button", { name: "確認撤下", exact: true }).click();
   await takedown.getByText("已撤下。", { exact: true }).waitFor();
   const takedownRequest = requests.find(x => x.path === "/api/admin/overrides" && x.method === "POST");
   assert.deepEqual(takedownRequest.body, { circleId: "c-900001", reason: "測試撤下" });
   assert.equal(takedownRequest.event, "sample");
+  assert.ok(requests.filter(x => x.path === "/api/admin/circles/c-900001").every(x => x.event === "sample"), "detail reloads keep the selected event");
   await navigate(page, "帳號管理");
   const accounts = page.locator("#accounts");
   await accounts.getByLabel("新增管理者 email", { exact: true }).fill("second@example.test");
@@ -354,5 +398,45 @@ try {
   await navigate(settingsPage.page, "社團管理");
   await settingsPage.page.locator("#admin").getByText("待審測試社", { exact: true }).waitFor();
   await journey.capture(settingsPage.page, "admin-claims-mobile");
+  await settingsPage.page.close();
+
+  const circleMobile = await open("admin", "/admin?section=circles&view=search&event=sample-two&q=待審測試社&circle=c-900001", false, false, { width: 390, height: 844 });
+  await circleMobile.page.locator('nav[aria-label="管理項目"] details:not([open])').waitFor();
+  const mobileCircle = circleMobile.page.locator("#takedown");
+  await mobileCircle.getByText("第二場作者", { exact: true }).waitFor();
+  assert.equal(await mobileCircle.getByText("第一場作者", { exact: true }).count(), 0, "the same circle id does not carry another event's saved content");
+  await assertNoOverflow(circleMobile.page);
+  await journey.capture(circleMobile.page, "admin-circle-detail-mobile");
+  await circleMobile.page.screenshot({ path: `${output}/issue508-mobile.png`, fullPage: true,
+    mask: [circleMobile.page.locator('[class*="identityWho"]'), circleMobile.page.locator('section[aria-labelledby="circle-claims-heading"] strong')] });
+  circleMobile.partialCleanup(true);
+  await mobileCircle.getByLabel("原因", { exact: true }).fill("測試圖片清除接續");
+  await mobileCircle.getByRole("button", { name: "撤下補充資料", exact: true }).click();
+  await mobileCircle.getByRole("dialog").getByRole("button", { name: "確認撤下", exact: true }).click();
+  await mobileCircle.getByText("仍待清除", { exact: true }).waitFor();
+  await mobileCircle.getByText("已撤下", { exact: true }).first().waitFor();
+  assert.equal(await mobileCircle.getByText("公開中", { exact: true }).count(), 0, "a failed image cleanup does not conceal that the data was taken down");
+  circleMobile.partialCleanup(false);
+  await mobileCircle.getByRole("button", { name: "清除剩餘圖片", exact: true }).click();
+  await mobileCircle.getByRole("dialog").getByRole("button", { name: "確認撤下", exact: true }).click();
+  await mobileCircle.getByText("已清除", { exact: true }).waitFor();
+  const imageRetries = circleMobile.requests.filter(x => x.path === "/api/admin/overrides" && x.method === "POST");
+  assert.equal(imageRetries.length, 2);
+  assert.ok(imageRetries.every(x => x.event === "sample-two" && x.body.circleId === "c-900001" && x.body.reason === "測試圖片清除接續"), "cleanup resumes the original exact-event takedown");
+  await journey.capture(circleMobile.page, "admin-circle-cleanup-complete-mobile");
+  circleMobile.failDetail(503);
+  await circleMobile.page.reload();
+  await mobileCircle.getByText("無法取得社團明細。", { exact: true }).waitFor();
+  assert.equal(await mobileCircle.getByText("沒有補充資料", { exact: true }).count(), 0, "read failure does not become an empty record");
+  circleMobile.failDetail(0);
+  await circleMobile.page.reload();
+  await mobileCircle.getByText("已清除", { exact: true }).waitFor();
+  await circleMobile.page.close();
+
+  const missingCircle = await open("admin", "/admin?section=circles&view=search&event=sample&circle=missing-circle");
+  await missingCircle.page.getByText("找不到這個社團。", { exact: true }).waitFor();
+  assert.equal(await missingCircle.page.getByText("第一場作者", { exact: true }).count(), 0, "an invalid exact circle never opens the first result");
+  assert.equal(new URL(missingCircle.page.url()).searchParams.get("circle"), "missing-circle");
+  await missingCircle.page.close();
   await journey.finish();
 } catch (error) { await journey.abort(error); }

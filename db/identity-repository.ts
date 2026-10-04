@@ -777,6 +777,14 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return candidate?.event_id ?? null;
   }
 
+  async function getOrganizerModerationCandidateForEvent(eventId: string) {
+    await ensureTables();
+    return database.prepare(`SELECT candidate.id FROM organizer_event_candidates candidate
+      WHERE candidate.event_id = ?1 AND candidate.status <> 'abandoned' AND ${organizerModerationAssociationSql()}
+      ORDER BY candidate.created_at DESC, candidate.id DESC LIMIT 1`)
+      .bind(eventId).first<{ id: string }>();
+  }
+
   function organizerClaimAuthoritySql(candidateParam: number, accountParam: number, eventColumn = "circle_claims.event_id") {
     return `EXISTS (SELECT 1 FROM organizer_event_candidates candidate
       JOIN accounts actor ON actor.id = ?${accountParam}
@@ -895,7 +903,47 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   async function getOverride(eventId: string, circleId: string) {
     await ensureTables();
     return database.prepare(`SELECT * FROM circle_overrides WHERE event_id = ?1 AND circle_id = ?2`)
-      .bind(eventId, circleId).first<OverrideRow & { fields_json: string; revision: number }>();
+      .bind(eventId, circleId).first<OverrideRow & {
+        fields_json: string; revision: number; takedown_reason: string | null; takendown_at: number | null; takendown_by: string | null;
+      }>();
+  }
+
+  async function listCircleClaimsForAdmin(eventId: string, circleId: string) {
+    await ensureTables();
+    const rows = await database.prepare(`SELECT c.id, c.status, c.method, c.created_at, c.verified_at,
+        c.reviewed_at, c.reviewed_by, a.id AS account_id, a.email AS account_email, a.disabled_at, a.deletion_started_at
+      FROM circle_claims c LEFT JOIN accounts a ON a.id = c.account_id
+      WHERE c.event_id = ?1 AND c.circle_id = ?2 ORDER BY c.created_at DESC, c.id DESC`)
+      .bind(eventId, circleId).all<{
+        id: string; status: ClaimStatus; method: ClaimMethod | null; created_at: number; verified_at: number | null;
+        reviewed_at: number | null; reviewed_by: string | null; account_id: string | null; account_email: string | null;
+        disabled_at: number | null; deletion_started_at: number | null;
+      }>();
+    return rows.results;
+  }
+
+  /** Legacy audit rows without an explicit event association cannot be attributed. */
+  async function listCircleModerationHistory(eventId: string, circleId: string) {
+    await ensureTables();
+    const rows = await database.prepare(`SELECT l.at, l.action, l.subject_type, l.subject_id,
+        json_extract(l.detail_json, '$.reason') AS reason,
+        COALESCE(json_extract(l.detail_json, '$.retryCleanup'), 0) AS retry_cleanup, a.email AS actor_email
+      FROM audit_log l LEFT JOIN accounts a ON a.id = l.actor_account_id
+      WHERE l.shredded_at IS NULL AND json_extract(l.detail_json, '$.eventId') = ?1
+        AND json_extract(l.detail_json, '$.applied') = 1
+        AND ((l.subject_type = 'override' AND l.subject_id = ?2
+            AND l.action IN ('override.takendown', 'override.organizer_takendown'))
+          OR (l.subject_type = 'claim' AND l.subject_id IN
+            (SELECT id FROM circle_claims WHERE event_id = ?1 AND circle_id = ?2)
+            AND json_extract(l.detail_json, '$.circleId') = ?2
+            AND l.action IN ('claim.admin_approve', 'claim.admin_reject', 'claim.admin_revoke',
+              'claim.organizer_approve', 'claim.organizer_reject')))
+      ORDER BY l.at DESC, l.id DESC`)
+      .bind(eventId, circleId).all<{
+        at: number; action: string; subject_type: "override" | "claim"; subject_id: string;
+        reason: string | null; retry_cleanup: number; actor_email: string | null;
+      }>();
+    return rows.results;
   }
 
   /**
@@ -3623,7 +3671,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     ...createOrganizerAmendmentRepository(database, ensureTables),
     ...createOrganizerRecoveryRepository(database, ensureTables),
     ...createOrganizerApplicationRepository(database, ensureTables, organizerCandidateStatements, notify),
-    ensureTables, writeAudit, getOrganizerModerationEventId,
+    ensureTables, writeAudit, getOrganizerModerationEventId, getOrganizerModerationCandidateForEvent,
     listAdmins, isAdminEmail, addAdmin, removeAdmin,
     countLoginTokensSince, createLoginToken, deleteLoginToken, consumeLoginToken, consumeLoginTokenDetails,
     upsertAccount, createSession, getSession, revokeSession, disableAccount, beginAccountDeletion, isAccountWritable, deleteAccount,
@@ -3631,7 +3679,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     listHostedThumbnailKeysForAccount, listHostedThumbnailKeys, listUnsubmittedMapDraftObjectKeysForAccount,
     createClaim, getClaim, withdrawClaim, listClaimsForAccount, listClaimScopesForAccount, listClaimsByStatus, listPendingEventClaims, listAdminReviewSummary, listPendingAdminClaims,
     hasVerifiedClaim, ownsCircle, markClaimVerified, setClaimStatus, recordChallengeAttempt,
-    getOverride, putOverride, deleteOverride, takedownOverride, listLiveOverrides, getPublicOverride, setPostEventHidden,
+    getOverride, listCircleClaimsForAdmin, listCircleModerationHistory,
+    putOverride, deleteOverride, takedownOverride, listLiveOverrides, getPublicOverride, setPostEventHidden,
     rebuildOverridesDoc, getOverridesDoc,
     manageMapContributor, hasActiveMapContributor,
     createMapDraft, getMapDraft, normalizeMapDraftPeriodAliases,

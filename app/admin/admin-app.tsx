@@ -4,7 +4,8 @@ import { getPublishedEvent, PUBLISHED_EVENTS } from "../event-catalog";
 import { nearestEvent, taipeiDate } from "../event-calendar";
 import { adminLoginEntry } from "../notification-navigation";
 import { SessionDeadline, useSessionExpiry } from "../circle-portal/session-status";
-import { AdminRoster, AdminTakedownPanel } from "./admin-panels";
+import { AdminRoster } from "./admin-panels";
+import { AdminCirclePanel } from "./admin-circle-panel";
 import { AdminMapReviewPanel } from "./admin-map-review-panel";
 import { AdminNotificationPanel } from "./admin-notification-panel";
 import { AdminReviewQueue } from "./admin-review-queue";
@@ -52,7 +53,7 @@ export default function AdminApp() {
   const scoped = route.section === "circles" || (route.section === "events" && route.view === "maps");
   const unavailable = route.unavailable || (scoped && !event);
   const tabs = route.section === "events" ? [["publication", "審核與發布"], ["maps", "地圖投稿"]]
-    : route.section === "circles" ? [["claims", "認領審核"], ["search", "社團查詢與撤下"]] : [];
+    : route.section === "circles" ? [["claims", "認領審核"], ["search", "社團查詢"]] : [];
   return <div className={`${styles.page} ${ui.workspace}`}>
     <header className={styles.masthead}><h1>網站管理</h1>
       {session && <div className={styles.accountBar}>
@@ -78,7 +79,9 @@ export default function AdminApp() {
                 : route.section === "events" ? route.view === "publication" ? <AdminPublicationPanel />
                   : <AdminMapReviewPanel event={event!} initialDraftId={route.draft} onEventChange={id => replaceRoute({ event: id, draft: "" })} onSelectDraft={draft => replaceRoute({ event: event!.id, draft })} />
                   : route.section === "circles" ? route.view === "claims" ? <AdminReviewQueue key={`${route.event}:${route.claim}`} initialEventId={route.event} initialClaimId={route.claim} onEventChange={id => replaceRoute({ event: id, claim: "" })} />
-                    : <AdminTakedownPanel key={event!.id} initialEventId={event!.id} initialQuery={route.q} onEventChange={id => replaceRoute({ event: id, q: "" })} onSearchChange={q => replaceRoute({ event: event!.id, q })} />
+                    : <AdminCirclePanel key={event!.id} event={event!} initialQuery={route.q} circleId={route.circle}
+                      onEventChange={id => replaceRoute({ event: id, q: "", circle: "" })} onSearchChange={q => replaceRoute({ event: event!.id, q, circle: "" })}
+                      onSelectCircle={circle => replaceRoute({ event: event!.id, circle })} />
                     : route.section === "accounts" ? <AdminRoster />
                       : route.section === "data" ? <AdminReferencePanel initialView={route.view as ReferenceView} onViewChange={view => replaceRoute({ view })} />
                         : route.section === "settings" ? <AdminSiteSettingsPanel /> : <AdminNotificationPanel email={session.email} />}
