@@ -50,7 +50,7 @@ export default function ReaderHelp({ eventId, dataLastUpdatedLabel, onCheckOffli
         <li><strong>找社團與作品</strong><span>輸入社團、攤位或作品；「詳細搜尋」可再依創作內容、作品取向與分級篩選。按 Ctrl/Command + K 可直接聚焦搜尋欄。</span></li>
         <li><strong>查看攤位</strong><span>拖曳、縮放或重設地圖位置。鍵盤使用者可進入地圖後以方向鍵移動，按 Enter 或空白鍵開啟攤位。</span></li>
         <li><strong>收藏與安排行程</strong><span>行程建立後可使用「導航模式」只看當日預定攤位並標記已走訪。</span></li>
-        <li><strong>離線使用</strong><span>斷網後可查看已備妥的場刊與地圖；社團自填內容、品書圖與外部連結需要網路。{onCheckOffline && <button type="button" className={styles.inlineAction} onClick={() => { setOpen(false); onCheckOffline(); }}>確認這天可離線使用</button>}</span></li>
+        <li><strong>離線使用</strong><span>開過的活動，斷網後仍可查看場刊與地圖；社團自填內容、品書圖與外部連結需要網路。{onCheckOffline && <button type="button" className={styles.inlineAction} onClick={() => { setOpen(false); onCheckOffline(); }}>確認這天可離線使用</button>}</span></li>
         <li><strong>完整備份</strong><span>收藏、備註、群組、購買項目與預算只存在此瀏覽器。在「資料管理」匯出備份；換瀏覽器或裝置時用「從備份復原」。</span></li>
       </ol>
       <section className={styles.circleEntry} aria-labelledby="reader-circle-entry-title">

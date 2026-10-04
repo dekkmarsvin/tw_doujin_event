@@ -313,7 +313,7 @@ lease 過期後，只允許仍持有原 token 與原 step 的 executor 寫入 fa
 
 **逾時的 job 不一定從未開始，所以失敗訊息看 checkpoint 而不是 step。** retry 會把 job 放回 `queued` 並保留原 step，因此同一個逾時有兩種來源：從未被 dispatch 的 job，以及重試後 dispatch 又沒發生、先前 checkpoint 都還在的 job。判準是這份工作有沒有留下任何 checkpoint。`preparing_data` 是新工作唯一能通過的第一步，而 `missing_checkpoint` 不允許它在缺 `data_pr_number` 與 `data_head_sha` 的情況下前進；其後每一步在它完成前都到不了，`preparing_main` 起另有 `missing_data_commit` 把關。因此七個 checkpoint 欄位全空就代表這份工作什麼都還沒碰到。（並非每個步驟都宣告 required checkpoint——`waiting_data_checks`、`waiting_main_checks` 與 `verifying_production` 沒有——但新建的工作過不到那裡。）pending 的 delivery 會寫下 metadata 卻不推進 step，所以這個判準量的是「有沒有東西跑過」，不是「有沒有階段完成」；區分從未被 dispatch 的工作與遠端產物已經釘住的工作，要的正是前者。**step 不能拿來判斷**：核准流程建立的 job 落在 `preparing_data`，舊的建立路徑落在 `assemble`，而 retry 保留上次失敗的那一步，同一個名字同時涵蓋兩種情形。只有從未完成任何階段的才說發布沒有開始；其餘沿用既有 retryable 措辭，因為 UI 四階段對它已經顯示出已完成的階段，說「沒有開始」會與同一畫面互相矛盾。
 
-UI 四階段保留已完成進度，raw error 與 step 放在「技術詳細資訊」。每五秒重新讀取進行中的工作與活動列表狀態，不重疊請求；讀取失敗立即標示目前為上次讀取的進度，401 停止輪詢並提供重新登入入口，其他錯誤連續三次後停止，提供手動重新讀取。檢查與發布只有 published 才算完成，不能在 approved/queued 顯示 5/5。同源、同瀏覽器帳號的上次 candidate 保存於 localStorage，讀寫被封鎖時仍可在記憶體中操作；登入後仍以伺服器授權清單確認可達性，各協作者的區段仍由 D1 保存。
+UI 四階段保留已完成進度，raw error 與 step 放在「技術詳細資訊」，僅網站管理者在發布失敗時可見。每五秒重新讀取進行中的工作與活動列表狀態，不重疊請求；讀取失敗立即標示目前為上次讀取的進度，401 停止輪詢並提供重新登入入口，其他錯誤連續三次後停止，提供手動重新讀取。檢查與發布只有 published 才算完成，不能在 approved/queued 顯示 5/5。同源、同瀏覽器帳號的上次 candidate 保存於 localStorage，讀寫被封鎖時仍可在記憶體中操作；登入後仍以伺服器授權清單確認可達性，各協作者的區段仍由 D1 保存。
 
 目前 production gate：
 
