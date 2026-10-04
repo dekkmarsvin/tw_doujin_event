@@ -119,7 +119,7 @@ function MobileNotificationResult() {
       {detail.publication && <p>發布狀態：{detail.publication.status === "published" ? "已公開" : detail.publication.status === "failed" ? "發布未完成" : "正在處理"}</p>}
       <p>{new URLSearchParams(window.location.search).get("section") === "members"
         ? "成員管理請改用桌機。請在桌機開啟同一個連結，接續這個工作區。"
-        : "活動資料與地圖編輯請改用桌機。請在桌機開啟同一封信的連結，接續這個工作區。"}</p></> : <p role="status">載入結果…</p>}
+        : "活動資料與地圖編輯請改用桌機。請在桌機開啟同一個連結，接續這個工作區。"}</p></> : <p role="status">載入結果…</p>}
     <p className={styles.linkActions}><a href="/organizer">返回主辦單位工作區</a></p>
   </section>;
 }

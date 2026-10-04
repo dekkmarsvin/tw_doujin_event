@@ -46,6 +46,15 @@ function AdminDashboard({ queueState, mode }: { queueState?: ReturnType<typeof u
   const { data } = operations;
   const knownEvents = eventsByProximity(PUBLISHED_EVENTS, today);
   const submitted = candidates?.filter(item => item.status === "submitted").sort((a, b) => (a.createdAt ?? a.updatedAt) - (b.createdAt ?? b.updatedAt));
+  const publicationJobs = <section className={styles.card} aria-labelledby="publication-jobs-heading"><h3 id="publication-jobs-heading">發布作業</h3>
+    {!data ? <p>{operations.error ? "無法取得發布作業。" : "載入中…"}</p> : <>
+      <ul className={ui.rows}>{data.publicationActivities.map(job => <li key={job.id}><div><strong>{job.eventName}</strong><small>第 {job.edition} 版 · {publicationProgress(job, data.settings.publicationEnabled)}</small><small>更新於 {adminDate(job.updatedAt)}</small></div>
+        <a href={candidateHref(job.candidateId, true)}>{job.status === "failed" ? "查看處理方式" : "查看進度"}</a></li>)}</ul>
+      {data.publicationActivities.length === 0 && <p>目前沒有待處理的發布作業。</p>}
+    </>}
+    {mode === "list" && operations.error && <><p className={styles.error} role="alert">發布作業更新失敗：{operations.error}</p>
+      {operations.updatedAt && <p className={ui.status}>發布作業更新於 {adminDate(operations.updatedAt)}</p>}</>}
+  </section>;
   return <>
     <div className={ui.title}><h2 id={overview ? "overview-heading" : mode === "list" ? "event-list-heading" : "publication-heading"}>{overview ? "管理總覽" : mode === "list" ? "活動總表" : "審核與發布"}</h2>
       <button type="button" className={styles.secondaryButton} onClick={refresh} disabled={queueState?.loading}>重新整理</button></div>
@@ -55,9 +64,10 @@ function AdminDashboard({ queueState, mode }: { queueState?: ReturnType<typeof u
       <a href={adminHref("circles", { view: "claims" })}>社團認領<strong>{queue?.pendingClaimCount ?? "—"}</strong></a>
       <a href={adminHref("events", { view: "maps" })}>地圖投稿<strong>{queue ? queue.mapDrafts.reduce((sum, item) => sum + item.submitted, 0) : "—"}</strong></a>
     </div>}
-    <div className={ui.dashboard} id={overview ? "overview" : undefined}>
+    <div className={mode === "list" ? ui.eventDashboard : ui.dashboard} id={overview ? "overview" : undefined}>
       <div>
         {mode === "list" ? <>
+          {publicationJobs}
           {queueState?.loadError && <><p className={styles.error} role="alert">待審摘要更新失敗：{queueState.loadError}</p>
             {queueState.updatedAt && <p className={ui.status}>待審摘要更新於 {adminDate(queueState.updatedAt)}</p>}</>}
           {error && <><p className={styles.error} role="alert">活動內容更新失敗：{error}</p>{updatedAt && <p className={ui.status}>活動內容更新於 {adminDate(updatedAt)}</p>}</>}
@@ -79,20 +89,14 @@ function AdminDashboard({ queueState, mode }: { queueState?: ReturnType<typeof u
           {submitted?.length === 0 && !error && <p>目前沒有待審活動內容。</p>}
           {!overview && <p><a href="/organizer?application">活動申請審核</a> · <a href="/organizer">前往主辦工作區</a></p>}
         </section>}
-        <section className={styles.card} aria-labelledby="publication-jobs-heading"><h3 id="publication-jobs-heading">發布作業</h3>
-          {!data ? <p>{operations.error ? "無法取得發布作業。" : "載入中…"}</p> : <>
-            <ul className={ui.rows}>{data.publicationActivities.map(job => <li key={job.id}><div><strong>{job.eventName}</strong><small>第 {job.edition} 版 · {publicationProgress(job, data.settings.publicationEnabled)}</small><small>更新於 {adminDate(job.updatedAt)}</small></div>
-              <a href={candidateHref(job.candidateId, true)}>{job.status === "failed" ? "查看處理方式" : "查看進度"}</a></li>)}</ul>
-            {data.publicationActivities.length === 0 && <p>目前沒有待處理的發布作業。</p>}
-          </>}
-        </section>
+        {mode !== "list" && publicationJobs}
         {overview && <section className={styles.card} aria-labelledby="published-heading"><h3 id="published-heading">已公開活動</h3>
           <ul className={ui.rows}>{knownEvents.map(({ event, label }) => <li key={event.id}><div><strong>{event.name}</strong><small>{label} · 已公開</small></div>
             <a href={`/events/${encodeURIComponent(event.id)}/`}>查看公開頁</a></li>)}</ul>
           <p><a href={adminHref("events")}>完整活動總表</a></p>
         </section>}
       </div>
-      <div>
+      {mode !== "list" && <div>
         <section className={styles.card} aria-labelledby="operations-heading"><h3 id="operations-heading">營運狀態</h3>
           {data ? <dl className={ui.facts}>
             <div><dt>活動申請</dt><dd>{{ closed: "暫停申請", invite_only: "僅限邀請", public: "公開申請" }[data.settings.organizerApplicationMode]}</dd></div>
@@ -109,7 +113,7 @@ function AdminDashboard({ queueState, mode }: { queueState?: ReturnType<typeof u
           {data ? <ServiceResults data={data} checking={operations.checking} /> : <p>無法確認</p>}
           <button type="button" disabled={!data || operations.checking} onClick={() => void operations.checkServices()}>{operations.checking ? "檢查中…" : "檢查服務"}</button>
         </section>
-      </div>
+      </div>}
     </div>
   </>;
 }
@@ -119,7 +123,7 @@ function AdminEventList({ candidates, readFailed, queue, today }: { candidates: 
   return <div className={ui.eventList} aria-label="完整活動總表">
     {!candidates && <p>{readFailed ? "無法取得工作版次。" : "工作版次載入中…"}</p>}
     {groups.map(group => <article key={group.id} className={`${styles.card} ${ui.eventRow}`} aria-label={group.name}>
-      <header><h3>{group.name}</h3><p>{group.calendar.label} · {activityTime(group.calendar, today)}</p>{group.published?.venue && <p>{group.published.venue}</p>}</header>
+      <header><h3>{group.name}</h3><p>{group.calendar.label}{activityTime(group.calendar, today) !== group.calendar.label && ` · ${activityTime(group.calendar, today)}`}</p>{group.published?.venue && <p>{group.published.venue}</p>}</header>
       <div className={ui.eventVersions}>
         <section aria-label="目前公開內容"><h4>目前公開內容</h4>{group.published ? <>
           <p>已公開</p><p>{group.calendar.label}</p><a href={`/events/${encodeURIComponent(group.eventId!)}/`}>查看公開頁</a>
@@ -131,14 +135,14 @@ function AdminEventList({ candidates, readFailed, queue, today }: { candidates: 
           <div className={ui.detailActions}><a href={candidateHref(item.id)}>開啟工作區</a><a href={candidateHref(item.id, true)}>審核與發布</a></div>
         </li>)}</ul> : <p>{!candidates ? readFailed ? "無法取得工作版次。" : "載入中…" : "無工作區"}</p>}</section>
       </div>
-      <p className={ui.eventCounts}>內容待審 {candidates ? group.editions.filter(item => item.status === "submitted").length : "—"}
+      <div className={ui.eventWork}><p className={ui.eventCounts}><span>內容待審 {candidates ? group.editions.filter(item => item.status === "submitted").length : "—"}</span>
         <span>認領待審 {queue?.claimCounts ? queue.claimCounts.find(item => item.eventId === group.eventId)?.pending ?? 0 : "—"}</span>
         <span>地圖投稿 {queue ? queue.mapDrafts.find(item => item.eventId === group.eventId)?.submitted ?? 0 : "—"}</span>
       </p>
       {group.eventId && <div className={ui.detailActions}>
         {!!queue?.claimCounts?.find(item => item.eventId === group.eventId)?.pending && <a href={adminHref("circles", { view: "claims", event: group.eventId })}>審核認領</a>}
         {!!queue?.mapDrafts.find(item => item.eventId === group.eventId)?.submitted && <a href={adminHref("events", { view: "maps", event: group.eventId })}>查看地圖投稿</a>}
-      </div>}
+      </div>}</div>
     </article>)}
   </div>;
 }

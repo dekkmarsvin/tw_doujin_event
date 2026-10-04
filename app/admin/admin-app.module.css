@@ -60,6 +60,8 @@
 .accountActions button { flex: 0 0 auto; }
 .accountActions p { margin: 0; }
 .eventList { min-width: 0; }
+.eventDashboard { min-width: 0; }
+.eventDashboard > section, .eventDashboard .eventRow { max-width: none; margin-inline: 0; }
 .eventRow { overflow-wrap: anywhere; }
 .eventRow header h3 { margin: 0; }
 .eventRow header p { color: var(--muted); margin: 6px 0; font-size: 13px; }
@@ -72,6 +74,16 @@
 .editions li:first-child { padding-top: 0; border-top: 0; }
 .editions span { font-size: 13px; color: var(--muted); }
 .eventCounts { display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 13px; }
+@media (min-width: 1051px) {
+  .eventRow { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(0, 2.5fr) minmax(120px, .6fr); align-items: start; gap: 22px; }
+  .eventRow.eventRow { margin: 12px 0; padding: 18px; }
+  .eventRow header p { margin-bottom: 0; }
+  .eventVersions { margin: 0; padding: 0; border: 0; gap: 22px; }
+  .eventVersions > section { min-width: 0; }
+  .eventWork { display: grid; gap: 12px; border-left: 1px solid var(--line); padding-left: 18px; }
+  .eventCounts { display: grid; gap: 7px; margin: 0; }
+  .eventWork .detailActions { gap: 8px; }
+}
 @media (max-width: 1050px) { .dashboard { grid-template-columns: 1fr; } }
 @media (max-width: 760px) {
   .layout { grid-template-columns: 1fr; gap: 16px; margin-top: 16px; }
