@@ -1863,6 +1863,13 @@ export function createCirclePortalHandlers({
     // claim from here would withdraw ownership in that event while leaving its
     // document — and so the revoked content — standing.
     if (!claim || claim.event_id !== eventId) return json({ error: "找不到這筆認領。" }, 404);
+    // The rebuild below uses the decided event's own dates, resolved before
+    // anything changes. `dataUpdatedAt()` follows the request's `?event=`, which
+    // on the organizer route need not be the candidate's event: a mismatch
+    // would fail after the write and leave revoked content public.
+    const published = config.publishedEvent ? await config.publishedEvent(eventId)
+      : { dataUpdatedAt: await dataUpdatedAt(), eventEndsAt: await eventEndsAt() };
+    if (!published) return json({ error: "找不到這筆認領。" }, 404);
 
     const now = config.now();
     const method: ClaimMethod = authority ? "organizer" : "admin";
@@ -1882,7 +1889,7 @@ export function createCirclePortalHandlers({
     // phase has to be the current one: rebuilding as "during" after the event
     // would republish every circle that had opted out of the post-event window.
     if (ok && (decision === "revoke" || (decision === "reject" && !authority))) {
-      await repository.rebuildOverridesDoc(eventId, await dataUpdatedAt(), now, await currentPhase());
+      await repository.rebuildOverridesDoc(eventId, published.dataUpdatedAt, now, now > Date.parse(published.eventEndsAt) ? "after" : "during");
     }
     await repository.writeAudit({
       at: now, actorAccountId: session.accountId, actorRole,

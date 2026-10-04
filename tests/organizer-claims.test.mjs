@@ -330,6 +330,22 @@ test("an owner revokes an approved claim in their event, which withdraws its con
   assert.equal((await repo.getClaim("still-pending")).status, "pending", "revoke never decides a pending claim");
 });
 
+test("an organizer revoke rebuilds the candidate's event, whatever event the request names", async () => {
+  await repo.markClaimVerified("claim-a", "admin", now, "admin@example.test");
+  await repo.putOverride({ eventId: "event-a", circleId: "c-1", fieldsJson: '{"saleInfo":"wrong owner"}', updatedBy: "admin@example.test", accountId: ids.adminId, now });
+  await repo.rebuildOverridesDoc("event-a", "2026-10-01", now, "during");
+  const cookie = await signIn("owner@example.test");
+  // Production binds these to the request's `?event=`; an unserved one cannot be read at all.
+  handlers = createCirclePortalHandlers({ ...options, config: { ...options.config,
+    dataUpdatedAt: async () => { throw new Error("unserved request event"); },
+    eventEndsAt: async () => { throw new Error("unserved request event"); } } });
+  assert.equal((await handlers.organizerDecideClaim(request("candidate-a", cookie, "revoke"), "candidate-a")).status, 200);
+  assert.equal((await repo.getClaim("claim-a")).status, "revoked");
+  const doc = JSON.parse((await repo.getOverridesDoc("event-a")).json);
+  assert.equal(doc.generatedAt, "event-a", "the rebuild uses the candidate event's own published data");
+  assert.doesNotMatch(JSON.stringify(doc), /wrong owner/);
+});
+
 test("revoke rechecks the Owner grant at the SQL write", async () => {
   await repo.markClaimVerified("claim-a", "admin", now, "admin@example.test");
   const cookie = await signIn("owner@example.test");
