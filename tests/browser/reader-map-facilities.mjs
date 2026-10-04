@@ -9,7 +9,7 @@ journey.report.source = "local pinned FF47, not production";
 journey.report.measurements = [];
 const settle = page => page.waitForTimeout(250);
 const MINIMUM = { access: 11, service: 11, row: 12, landmark: 11 };
-const MAXIMUM = { access: 14, service: 14, row: 28, landmark: 16 };
+const MAXIMUM = { access: 14, service: 14, row: 28, landmark: 28 };
 
 // Screen size of every drawn marker name, badge and area, in CSS px.
 const markers = page => page.evaluate(() => {

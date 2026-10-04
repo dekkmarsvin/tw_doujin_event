@@ -1,5 +1,6 @@
 import type { MapAccessDirection, MapAccessPoint, MapServicePointKind, MapSpaceMark } from "./event-map";
-import type { MapMarkerPresentation } from "./map-marker-presentation";
+import type { CSSProperties } from "react";
+import type { MapMarkerLabel, MapMarkerPresentation } from "./map-marker-presentation";
 
 const ROTATION: Record<MapAccessDirection, number> = { north: 0, east: 90, south: 180, west: 270 };
 export const MAP_ENTRANCE_COLOR = "#267cad";
@@ -71,4 +72,13 @@ export function MapSpaceMarkDrawing({ mark, presentation = { screenScale: 1, fon
     {kind === "cancelled" && <path d={`M${rect.x + inset} ${rect.y + inset}L${rect.x + rect.width - inset} ${rect.y + rect.height - inset}M${rect.x + rect.width - inset} ${rect.y + inset}L${rect.x + inset} ${rect.y + rect.height - inset}`} fill="none" stroke="#6d6b66" strokeWidth={1} vectorEffect="non-scaling-stroke" pointerEvents="none" />}
     <text x={rect.x + rect.width / 2} y={rect.y + rect.height / 2} style={{ fontSize, textAnchor: "middle", dominantBaseline: "central", fill: "#6d6b66", stroke: "#f3f2ed", strokeWidth: 2 / scale, paintOrder: "stroke", fontWeight: 700, pointerEvents: "none" }}>{kind === "reserved" ? "空桌" : "取消"}</text>
   </>;
+}
+
+/** A placed name. An area name on several lines stays centred on its anchor,
+ * so a stack of single characters reads as vertical text. */
+export function MapMarkerText({ label, className, style }: { label: MapMarkerLabel; className?: string; style?: CSSProperties }) {
+  const lines = label.lines;
+  return <text className={className} x={label.dx} y={label.dy} textAnchor={label.anchor} style={{ fontSize: label.fontPx, ...style }}>
+    {lines ? lines.map((line, index) => <tspan key={index} x={label.dx} dy={`${index ? 1.2 : -(lines.length - 1) * .6}em`}>{line}</tspan>) : label.text}
+  </text>;
 }
