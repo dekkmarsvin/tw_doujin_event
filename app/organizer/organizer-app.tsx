@@ -13,7 +13,7 @@ import { ReviewPanel } from "./organizer-review-panel";
 import { OrganizerMapPanel } from "./organizer-map-panel";
 import { ImportPanel } from "./organizer-import-panel";
 import { DraftForm } from "./organizer-draft-form";
-import { ValidationPanel } from "./organizer-validation-panel";
+import { MembersPanel } from "./organizer-members-panel";
 import { PortalError, readSession, readTurnstileSitekey, requestLoginLink, signOut, verifyLoginToken, type PortalSession } from "../circle-editor-client";
 import { createOrganizerEvent, completeOrganizerOnboarding, listOrganizerEvents, readOrganizerEvent, saveOrganizerWorkspacePreference, startOrganizerAmendment, type OrganizerEventDetail, type OrganizerEventSummary, type OrganizerMapLocation } from "../organizer-client";
 import { type OrganizerVenueCatalog } from "../organizer-venue-catalog";
@@ -199,6 +199,8 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
     if (entry.has("candidate")) return entry.get("candidate");
     try { return localStorage.getItem(resumeKey); } catch { return null; }
   });
+  const currentSelection = useRef(selectedId);
+  useEffect(() => { currentSelection.current = selectedId; }, [selectedId]);
   const [publicationReadError, setPublicationReadError] = useState<{ candidateId: string; needsLogin: boolean } | null>(null);
   const [pollGeneration, setPollGeneration] = useState(0);
   const [detail, setDetail] = useState<OrganizerEventDetail | null>(null);
@@ -210,7 +212,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   // -- the map above all -- are what that width is for.
   const [eventListOpen, setEventListOpen] = useState(true);
   const [expandedEvents, setExpandedEvents] = useState<Record<string, boolean>>({});
-  const [surface, setSurface] = useState<"data" | "claims" | "takedown">("data");
+  const [surface, setSurface] = useState<"data" | "members" | "claims" | "takedown">("data");
   const { pendingClaims, onQueueLoaded } = useOrganizerPendingClaims(
     detail?.claimReviewAvailable ? detail.event.id : null, detail?.event.eventId ?? null, surface === "claims",
   );
@@ -330,11 +332,15 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
    * effect. */
   const refresh = useCallback(async () => {
     const list = reloadList();
-    await Promise.all([list, selectedId ? reloadDetail(selectedId, undefined, "keep").catch(async (error) => {
+    // A panel's action can answer after the reader has opened another
+    // activity -- the check in 檢查與發布 starts by itself on entry -- and that
+    // answer must not put the activity they left back on screen.
+    const candidateId = selectedId;
+    await Promise.all([list, candidateId ? reloadDetail(candidateId, () => currentSelection.current === candidateId, "keep").catch(async (error) => {
       // Removing one's own owner grant may make this detail unavailable.
       // The refreshed list already selects an accessible activity or clears it.
       if (error instanceof PortalError && error.status === 404
-        && !(await list).some((event) => event.id === selectedId)) return;
+        && !(await list).some((event) => event.id === candidateId)) return;
       throw error;
     }) : Promise.resolve()]);
   }, [reloadDetail, reloadList, selectedId]);
@@ -469,7 +475,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
           onCreated={async (id) => { await reloadList(); setSelectedId(id); }}
           onInvitationFailed={(delivery, email) => setNotice({ kind: "error", message:
             (delivery === "failed" ? "活動已建立，邀請信未寄出。" : "活動已建立，無法確認邀請信是否寄出。")
-            + (email.normalize("NFKC").trim().toLowerCase() === session.email ? "" : "請到「送審與發布狀態」重寄負責人邀請信。") })}
+            + (email.normalize("NFKC").trim().toLowerCase() === session.email ? "" : "請到「成員與權限」重寄負責人邀請信。") })}
         />}
         <nav aria-label="活動列表" className={styles.eventList}>
           {groups.map(group => {
@@ -514,7 +520,13 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
     </aside>
     <section className={styles.workspace}>
       {notice.kind !== "idle" && <p role="status" className={notice.kind === "error" ? styles.error : styles.notice}>{notice.message}</p>}
-      {detail && <OrganizerWorkspaceHeader detail={detail} pendingClaims={pendingClaims} onReview={() => chooseSection("review")} />}
+      {detail && <OrganizerWorkspaceHeader detail={detail} pendingClaims={pendingClaims}
+        current={surface === "members" || surface === "claims" ? surface
+          : surface === "data" && section === "review" && (detail.workspace.mode !== "guided" || showAllTasks) ? "review" : null}
+        onOpen={(target) => {
+          if (target === "review") chooseSection("review");
+          else requestNavigation(target === "claims" ? "查看社團認領" : "開啟成員與權限", () => setSurface(target));
+        }} />}
       {surface === "data" && detail?.event.status === "published" && (detail.event.role === "owner" || session.isAdmin) && <div className={styles.guideBanner}>
         <div><strong>修正已發布名單</strong><p>建立修正草稿，原本的公開活動會持續提供，直到新版核准並完成發布。</p></div>
         <button type="button" disabled={startingAmendment} onClick={() => {
@@ -543,6 +555,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
           : session.isAdmin ? "建立新活動後，活動會出現在左側。"
             : "收到主辦邀請後，活動會出現在左側。"}</p>
       </div>
+        : surface === "members" ? <MembersPanel key={detail.event.id} session={session} detail={detail} onChanged={refresh} onClose={() => setSurface("data")} />
         : surface !== "data" && detail.claimReviewAvailable && detail.event.eventId
           ? surface === "claims" ? <OrganizerClaimsPanel key={detail.event.id} candidateId={detail.event.id} eventId={detail.event.eventId} onQueueLoaded={onQueueLoaded} />
             : <OrganizerTakedownPanel key={detail.event.id} candidateId={detail.event.id} eventId={detail.event.eventId} />
@@ -650,7 +663,7 @@ function WorkspaceSurface({
         >
           {handoff && <OnboardingHandoff detail={detail} section={section} />}
           {/* Editable panels keep their action feedback across their own saves.
-              Validation and review still reset when the candidate version changes. */}
+              檢查與發布 still resets when the candidate version changes. */}
           <StepContent
             key={`${detail.event.id}:${section}${["event", "venue", "map"].includes(section) || (section === "import" && detail.event.operation !== "AMEND") ? "" : `:${detail.event.version}`}`}
             session={session}
@@ -673,7 +686,7 @@ function WorkspaceSurface({
 }
 
 /** The one moment the navigation changes shape: three numbered steps give way
- * to the six sections in 準備進度. Said once, on the section the reader was
+ * to the five sections in 準備進度. Said once, on the section the reader was
  * brought to, and gone as soon as they move or act. The button that led here
  * has just unmounted, so focus comes here: a keyboard reader is not dropped to
  * the top of the document, and a reader who scrolled down to press it sees
@@ -817,7 +830,7 @@ function ReadinessRail({ detail, current, onSection, compact = false, showNextAc
     ]
     /* The rail reports what is wrong, not everything that is not yet done. A
      * section nobody has started is neutral, and the complete list of blocking
-     * issues belongs to 檢查與預覽, where it is asked for rather than carried
+     * issues belongs to 檢查與發布, where it is asked for rather than carried
      * alongside every other screen. The live branch above is exempt: it is about
      * the section being edited right now, which is by definition engaged with
      * (#221 4.4, 4.5). */
@@ -905,7 +918,6 @@ function StepContent({ session, detail, section, onSection, onChanged, onDirtyCh
     ? <OrganizerAmendmentPanel detail={detail} onChanged={onChanged} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} />
     : <ImportPanel detail={detail} onChanged={onChanged} onSection={onSection} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} onLocate={onLocate} />;
   if (section === "map") return <OrganizerMapPanel detail={detail} onChanged={onChanged} onSection={onSection} location={mapLocation} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} />;
-  if (section === "validate") return <ValidationPanel detail={detail} onChanged={onChanged} onSection={onSection} />;
-  return <ReviewPanel session={session} detail={detail} onChanged={onChanged} />;
+  return <ReviewPanel session={session} detail={detail} onChanged={onChanged} onSection={onSection} />;
 }
 

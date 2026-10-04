@@ -1,7 +1,8 @@
-/** 檢查與預覽：驗證問題卡與 Reader 預覽。
+/** 檢查與發布的檢查區：驗證問題卡與 Reader 預覽。
  *
  * 由 `organizer-app.tsx` 拆出（#224）。該檔原本是 1870 行的單檔，面板
- * 彼此無關卻共處一室，讀一個面板要先略過另外四個。
+ * 彼此無關卻共處一室，讀一個面板要先略過另外四個。檢查原本是獨立區段，
+ * 併入送審面板後，進入時直接跑一次檢查，送審前不必先記得按。
  */
 import { organizerIssueTarget } from "./organizer-field-guidance";
 import type { OrganizerWorkspaceSection } from "../organizer-workspace";
@@ -12,19 +13,24 @@ import { type OrganizerVenueCatalog } from "../organizer-venue-catalog";
 import { STEP_LABEL, organizerDayLabel, organizerIssueMessage, organizerVenueSpaceLabel } from "./organizer-shared";
 import styles from "./organizer.module.css";
 import { ActionNotice, useActionFeedback } from "./organizer-feedback";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-/* 檢查與預覽 is where the complete list of blocking issues is asked for, so
- * the heading says which of the three situations the reader is in rather than
+/* The check is where the complete list of blocking issues is asked for, so
+ * its line says which of the three situations the reader is in rather than
  * repeating that previews are private (#221 4.5, Phase 5). */
-const CHECK_STATE: Record<string, string> = {
-  complete: "這一版已通過檢查。可以建立預覽，或到送審與發布送出。",
-  available: "這一版還沒檢查。執行檢查會列出所有必須修正的項目。",
-  blocked: "前面的項目還沒完成，完成後再執行檢查。",
+const CHECK_STATE = {
+  complete: "這一版已通過檢查。可以建立預覽。",
+  submittable: "這一版已通過檢查。可以建立預覽，或在下方送出審閱。",
+  available: "這一版還沒通過檢查。",
+  blocked: "前面的項目還沒完成。",
 };
 
-export function ValidationPanel({ detail, onChanged, onSection }: { detail: OrganizerEventDetail; onChanged: () => Promise<void>; onSection?: (section: OrganizerWorkspaceSection, target?: string) => void }) {
-  const validateState = detail.workspace.readiness.sections.find((item) => item.id === "validate")?.state ?? "available";
+export function CheckSection({ detail, onChanged, onSection }: { detail: OrganizerEventDetail; onChanged: () => Promise<void>; onSection?: (section: OrganizerWorkspaceSection, target?: string) => void }) {
+  const { readiness } = detail.workspace;
+  const editable = detail.event.status === "draft" || detail.event.status === "changes_requested";
+  const checkState = readiness.sections.find((item) => item.id === "review")?.state === "blocked" ? "blocked"
+    : readiness.blockers.some((blocker) => blocker.code === "validation_required") ? "available"
+      : editable ? "submittable" : "complete";
   const [issues, setIssues] = useState<OrganizerValidationIssue[] | null>(null);
   const [preview, setPreview] = useState<OrganizerReaderPreview | null>(null);
   const checkFeedback = useActionFeedback();
@@ -33,12 +39,24 @@ export function ValidationPanel({ detail, onChanged, onSection }: { detail: Orga
   // without this the button looked like it did nothing (#220 decision 4).
   const previewRef = useRef<HTMLDivElement | null>(null);
   const grouped = useMemo(() => issues ? { errors: issues.filter((issue) => issue.severity === "error"), warnings: issues.filter((issue) => issue.severity === "warning") } : null, [issues]);
-  return <section className={styles.panel}>
-    <div className={styles.panelHead}><div><h3>檢查與預覽</h3><p>{CHECK_STATE[validateState]}</p></div><div className={styles.panelActions}><div className={styles.row}>
-      <button type="button" disabled={checkFeedback.pending || previewFeedback.pending} onClick={() => {
-        previewFeedback.clear();
-        void checkFeedback.run(validateOrganizerEvent(detail.event.id).then(async (result) => { setIssues(result.issues); await onChanged(); }), "檢查完成。");
-      }}>執行檢查</button>
+  const runCheck = () => {
+    previewFeedback.clear();
+    void checkFeedback.run(validateOrganizerEvent(detail.event.id).then(async (result) => { setIssues(result.issues); await onChanged(); }), "檢查完成。");
+  };
+  // Entering the section is asking where the draft stands, so the check runs
+  // once without a press while there is still something to submit. The ref
+  // keeps StrictMode's second effect pass from sending it twice.
+  const autoChecked = useRef(false);
+  useEffect(() => {
+    if (autoChecked.current || !editable) return;
+    autoChecked.current = true;
+    runCheck();
+    // Once per mount; the panel remounts when the candidate version changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return <div className={styles.subpanel}>
+    <div className={styles.panelHead}><div><h4>檢查與預覽</h4><p>{CHECK_STATE[checkState]}</p></div><div className={styles.panelActions}><div className={styles.row}>
+      <button type="button" disabled={checkFeedback.pending || previewFeedback.pending} onClick={runCheck}>{issues === null ? "執行檢查" : "重新檢查"}</button>
       <button type="button" className={styles.ghost} disabled={previewFeedback.pending || checkFeedback.pending} onClick={() => {
         checkFeedback.clear();
         void previewFeedback.run(previewOrganizerEvent(detail.event.id).then((result) => { setIssues(result.issues); setPreview(result.preview); }), "預覽已產生。")
@@ -48,7 +66,7 @@ export function ValidationPanel({ detail, onChanged, onSection }: { detail: Orga
     {grouped && <div className={styles.validationSummary}><b>{grouped.errors.length} 項必須修正</b><span>{grouped.warnings.length} 項建議確認</span></div>}
     {issues?.map((issue, index) => <OrganizerValidationIssueCard key={`${issue.code}-${index}`} issue={issue} detail={detail} onSection={onSection} />)}
     <div ref={previewRef}>{preview !== null && <OrganizerReaderPreviewPanel preview={preview} venueCatalog={detail.venueCatalog} />}</div>
-  </section>;
+  </div>;
 }
 
 export function OrganizerValidationIssueCard({ issue, detail, onSection }: { issue: OrganizerValidationIssue; detail: OrganizerEventDetail; onSection?: (section: OrganizerWorkspaceSection, target?: string) => void }) {

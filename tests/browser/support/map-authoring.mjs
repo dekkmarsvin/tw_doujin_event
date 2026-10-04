@@ -8,7 +8,7 @@ const assignment = { venueId: "test-hall", venueSpaceId: "test-space", areaIds: 
 const detail = { event: summary, publicationAvailable: false, publication: null, revisions: [], venueCatalog: { venues: [] },
   draft: { schema: "organizer-event-draft/1", event: { id: "sample", name: "畫布放置驗收", days: [{ id: "1", label: "第一天", date: "2026-11-07" }] }, venue: { assignments: [assignment] }, officialSource: { label: "測試來源", url: "https://organizer.example/" } },
   import: { source: {}, rows: [{ dayId: "1", venueSpaceId: "test-space", codes: ["S01"], circleName: "測試社" }] },
-  workspace: { mode: "binder", onboardingCompletedAt: now, resume: { guidedTask: "identity_source", section: "map" }, readiness: { completed: 3, total: 6, suggestedNextSection: "map", blockers: [], sections: ["event", "venue", "import", "map", "validate", "review"].map(id => ({ id, state: "available" })) } } };
+  workspace: { mode: "binder", onboardingCompletedAt: now, resume: { guidedTask: "identity_source", section: "map" }, readiness: { completed: 3, total: 5, suggestedNextSection: "map", blockers: [], sections: ["event", "venue", "import", "map", "review"].map(id => ({ id, state: "available" })) } } };
 
 export async function openSurface(journey, surface, initialLayout = source, options = {}) {
   const eventDetail = structuredClone(detail);

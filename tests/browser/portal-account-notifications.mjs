@@ -10,8 +10,8 @@ const detail = { event: { ...event, eventIdLocked: false }, publicationAvailable
     venue: { assignments: [] }, officialSource: { label: "", url: null } },
   venueCatalog: { venues: [] }, revisions: [], import: null, publication: null,
   workspace: { mode: "binder", onboardingCompletedAt: 1, resume: { guidedTask: "identity_source", section: "review" },
-    readiness: { completed: 0, total: 6, suggestedNextSection: "review", blockers: [],
-      sections: ["event", "venue", "import", "map", "validate", "review"].map(id => ({ id, state: "available" })) } } };
+    readiness: { completed: 0, total: 5, suggestedNextSection: "review", blockers: [],
+      sections: ["event", "venue", "import", "map", "review"].map(id => ({ id, state: "available" })) } } };
 
 try {
   await clearMail();
@@ -77,9 +77,11 @@ try {
     await p.route("**/api/auth/session", r => r.fulfill({ json: { email: "owner@example.test", isAdmin: false, isMapContributor: false, hasOrganizerAccess: true } }));
     await p.route("**/api/account/notification-preferences*", r => r.fulfill({ json: { cadence: "daily", version: 0 } }));
     await p.route("**/api/organizer/events", r => r.fulfill({ json: { events: allowed ? [event, { ...event, id: "other-candidate" }] : [{ ...event, id: "other-candidate" }] } }));
+    await p.route("**/api/organizer/events/invitation-fixture/validate", r => r.fulfill({ json: { ok: false, version: 1, issues: [] } }));
     await p.route("**/api/organizer/events/invitation-fixture", r => allowed ? r.fulfill({ json: { ...detail, workspace: { ...detail.workspace, resume: { ...detail.workspace.resume, section: "event" } } } }) : r.fulfill({ status: 404, json: { error: "找不到活動。" } }));
   } });
-  await target.getByRole("heading", { name: "送審與發布狀態", exact: true }).waitFor();
+  await target.getByRole("heading", { name: "檢查與發布", exact: true }).waitFor();
+  await target.getByRole("button", { name: "成員與權限", exact: true }).click();
   const draft = target.getByRole("textbox", { name: "協作者 Email", exact: true });
   await draft.fill("unsaved@example.test");
   await target.getByRole("button", { name: "通知設定", exact: true }).click();
@@ -90,7 +92,7 @@ try {
   await journey.capture(target, "notification-result-mobile");
   allowed = false; await target.setViewportSize({ width: 1440, height: 900 }); await target.reload();
   await target.getByText("找不到信件指定的工作區，或此帳號已無權限。請從活動列表選擇可使用的活動。", { exact: true }).waitFor();
-  assert.equal(await target.getByRole("heading", { name: "送審與發布狀態", exact: true }).count(), 0);
+  assert.equal(await target.getByRole("heading", { name: "檢查與發布", exact: true }).count(), 0);
   await journey.capture(target, "notification-target-unavailable");
   await journey.finish();
 } catch (error) { await journey.abort(error); }

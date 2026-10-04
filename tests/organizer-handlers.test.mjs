@@ -792,8 +792,8 @@ test("owner and editor use one validated optimistic workflow while only admin ap
     `/api/organizer/events/${candidateId}`, "GET", undefined, editorCookie,
   ), candidateId);
   const validatedWorkspace = (await validatedDetail.json()).workspace;
-  assert.equal(validatedWorkspace.readiness.completed, 5);
-  assert.equal(validatedWorkspace.readiness.sections.find((section) => section.id === "validate").state, "complete");
+  assert.equal(validatedWorkspace.readiness.completed, 4);
+  assert.equal(validatedWorkspace.readiness.blockers.some((blocker) => blocker.code === "validation_required"), false);
 
   const preview = await handlers.previewOrganizerCandidate(request(`/api/organizer/events/${candidateId}/preview`, "POST", {}, ownerCookie), candidateId);
   assert.equal(preview.status, 200);

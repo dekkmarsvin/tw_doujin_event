@@ -104,7 +104,7 @@ const detail = {
     resume: { guidedTask: "identity_source", section: "import" },
     readiness: {
       completed: 3,
-      total: 6,
+      total: 5,
       suggestedNextSection: "import",
       blockers: [],
       sections: [
@@ -112,7 +112,6 @@ const detail = {
         { id: "venue", state: "complete" },
         { id: "import", state: "complete" },
         { id: "map", state: "available" },
-        { id: "validate", state: "blocked" },
         { id: "review", state: "blocked" },
       ],
     },

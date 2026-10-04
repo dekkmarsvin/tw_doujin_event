@@ -16,6 +16,7 @@ const {
   evaluateOrganizerWorkspaceReadiness,
   organizerGuidedTaskIssues,
   organizerOnboardingIssues,
+  organizerWorkspaceSectionOrDefault,
 } = await environment.runner.import("/app/organizer-workspace.ts");
 after(async () => { await vite.close(); });
 
@@ -52,14 +53,13 @@ test("readiness names actionable and blocked sections and never invents a percen
     status: "draft",
   });
   assert.equal(readiness.completed, 2);
-  assert.equal(readiness.total, 6);
+  assert.equal(readiness.total, 5);
   assert.equal(readiness.suggestedNextSection, "import");
   assert.deepEqual(Object.fromEntries(readiness.sections.map((section) => [section.id, section.state])), {
     event: "complete",
     venue: "complete",
     import: "available",
     map: "blocked",
-    validate: "blocked",
     review: "blocked",
   });
   assert.equal(Object.hasOwn(readiness, "percentage"), false);
@@ -74,21 +74,27 @@ test("validation follows the candidate version and only publication completes re
     lastValidatedVersion: 4,
     status: "draft",
   };
+  const validationRequired = (readiness) => readiness.blockers.some((blocker) => blocker.section === "review" && blocker.code === "validation_required");
   const validated = evaluateOrganizerWorkspaceReadiness(input);
-  assert.equal(validated.completed, 5);
+  assert.equal(validated.completed, 4);
   assert.equal(validated.suggestedNextSection, "review");
-  assert.equal(validated.sections.find((section) => section.id === "validate").state, "complete");
+  assert.equal(validated.sections.find((section) => section.id === "review").state, "available");
+  assert.equal(validationRequired(validated), false);
 
   const changed = evaluateOrganizerWorkspaceReadiness({ ...input, currentVersion: 5 });
-  assert.equal(changed.sections.find((section) => section.id === "validate").state, "available");
+  assert.equal(validationRequired(changed), true);
   assert.equal(changed.completed, 4);
 
-  const submitted = evaluateOrganizerWorkspaceReadiness({ ...input, status: "submitted" });
-  assert.equal(submitted.completed, 5);
-  for (const status of ["approved", "publishing", "failed"]) {
-    assert.equal(evaluateOrganizerWorkspaceReadiness({ ...input, status }).completed, 5);
+  for (const status of ["submitted", "approved", "publishing", "failed"]) {
+    assert.equal(evaluateOrganizerWorkspaceReadiness({ ...input, status }).completed, 4);
   }
-  assert.equal(evaluateOrganizerWorkspaceReadiness({ ...input, status: "published" }).completed, 6);
+  assert.equal(evaluateOrganizerWorkspaceReadiness({ ...input, status: "published" }).completed, 5);
+});
+
+test("a remembered 檢查與預覽 section resumes in the merged review section", () => {
+  assert.equal(organizerWorkspaceSectionOrDefault("validate"), "review");
+  assert.equal(organizerWorkspaceSectionOrDefault("map"), "map");
+  assert.equal(organizerWorkspaceSectionOrDefault("unknown"), "event");
 });
 
 test("a stored map with formal validation errors still needs attention", () => {
@@ -109,7 +115,7 @@ test("a stored map with formal validation errors still needs attention", () => {
   });
 
   assert.equal(readiness.sections.find((section) => section.id === "map").state, "needs_attention");
-  assert.equal(readiness.sections.find((section) => section.id === "validate").state, "blocked");
+  assert.equal(readiness.sections.find((section) => section.id === "review").state, "blocked");
   assert.equal(readiness.completed, 3);
   assert.equal(readiness.blockers.some((blocker) => blocker.code === "missing_booth"), true);
 });
@@ -133,7 +139,7 @@ test("a stale persisted import reopens import and blocks maps even when rows and
 
   assert.equal(readiness.sections.find((section) => section.id === "import").state, "needs_attention");
   assert.equal(readiness.sections.find((section) => section.id === "map").state, "blocked");
-  assert.equal(readiness.sections.find((section) => section.id === "validate").state, "blocked");
+  assert.equal(readiness.sections.find((section) => section.id === "review").state, "blocked");
   assert.equal(readiness.suggestedNextSection, "import");
   assert.equal(readiness.completed, 2);
 });

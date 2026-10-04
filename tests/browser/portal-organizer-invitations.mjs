@@ -12,8 +12,8 @@ const detail = { event: { ...event, eventIdLocked: false }, publicationAvailable
     venue: { assignments: [] }, officialSource: { label: "", url: null } },
   venueCatalog: { venues: [] }, revisions: [], import: null, publication: null,
   workspace: { mode: "binder", onboardingCompletedAt: 1, resume: { guidedTask: "identity_source", section: "review" },
-    readiness: { completed: 0, total: 6, suggestedNextSection: "review", blockers: [],
-      sections: ["event", "venue", "import", "map", "validate", "review"].map(id => ({ id, state: "available" })) } } };
+    readiness: { completed: 0, total: 5, suggestedNextSection: "review", blockers: [],
+      sections: ["event", "venue", "import", "map", "review"].map(id => ({ id, state: "available" })) } } };
 const actions = [];
 let session = { email: "admin@example.test", isAdmin: true, isMapContributor: false, hasOrganizerAccess: true };
 let canAccess = true;
@@ -22,6 +22,7 @@ try {
   const page = await journey.page({ url: `${base}/organizer`, routes: async page => {
     await page.route("**/api/auth/session", route => route.fulfill({ json: session }));
     await page.route("**/api/organizer/events", route => route.fulfill({ json: { events: canAccess ? [detail.event] : [] } }));
+    await page.route("**/api/organizer/events/invitation-fixture/validate", route => route.fulfill({ json: { ok: false, version: 1, issues: [] } }));
     await page.route("**/api/organizer/events/invitation-fixture", route => route.fulfill(
       canAccess ? { json: detail } : { status: 404, json: { error: "找不到活動。" } }));
     await page.route("**/api/organizer/events/invitation-fixture/collaborators", route => {
@@ -36,7 +37,13 @@ try {
         invitationSent: delivery === "sent", invitationDelivery: delivery } });
     });
   } });
-  await page.getByRole("heading", { name: "送審與發布狀態", exact: true }).waitFor();
+  // Members live behind the activity header, and a reload returns to the data surface.
+  const openMembers = async () => {
+    await page.getByRole("button", { name: "成員與權限", exact: true }).click();
+    await page.getByRole("heading", { name: "成員與權限", exact: true }).waitFor();
+  };
+  await page.getByRole("heading", { name: "檢查與發布", exact: true }).waitFor();
+  await openMembers();
   for (const [role, label, button, failure] of [
     ["editor", "協作者", "邀請協作者", "邀請已建立，邀請信未寄出。請按「重寄邀請信」。"],
     ["owner", "負責人", "新增負責人", "邀請已建立，無法確認邀請信是否寄出。你可以重寄邀請信。"],
@@ -49,6 +56,7 @@ try {
     await journey.capture(page, `invitation-${role}-failure`);
     // A pending invitation must remain recoverable after leaving the page.
     await page.reload();
+    await openMembers();
     await page.getByRole("textbox", { name: `${label} Email`, exact: true }).fill(`${role}@example.test`);
     await section.getByRole("button", { name: "重寄邀請信", exact: true }).click();
     await section.getByRole("status").getByText("邀請信已寄出。", { exact: true }).waitFor();
@@ -62,10 +70,11 @@ try {
   detail.event.status = "submitted";
   detail.publicationAvailable = true;
   await page.reload();
-  await page.getByRole("heading", { name: "送審與發布狀態", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "檢查與發布", exact: true }).waitFor();
   assert.equal(await page.getByRole("heading", { name: "網站管理者審閱", exact: true }).count(), 0);
   assert.equal(await page.getByRole("textbox", { name: "審閱說明" }).count(), 0);
   assert.equal(await page.getByRole("button", { name: "核准並發布", exact: true }).count(), 0);
+  await openMembers();
   const ownerSection = page.locator("div").filter({ has: page.getByRole("heading", { name: "負責人", exact: true }) }).last();
   await page.getByRole("textbox", { name: "負責人 Email", exact: true }).fill("co-owner@example.test");
   await ownerSection.getByRole("button", { name: "新增負責人", exact: true }).click();
@@ -77,8 +86,8 @@ try {
   assert.deepEqual(actions.slice(-3).map(({ role, action }) => [role, action]), [["owner", "invite"], ["owner", "resend"], ["owner", "revoke"]]);
   await page.getByRole("textbox", { name: "負責人 Email", exact: true }).fill("");
   await journey.capture(page, "ordinary-owner-submitted");
-  await page.locator("section").filter({ has: page.getByRole("heading", { name: "送審與發布狀態", exact: true }) })
-    .last().screenshot({ path: `${output}/ordinary-owner-review-panel.png` });
+  await page.locator("section").filter({ has: page.getByRole("heading", { name: "成員與權限", exact: true }) })
+    .last().screenshot({ path: `${output}/ordinary-owner-members-panel.png` });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("heading", { name: "請改用桌機", exact: true }).waitFor();
   await journey.capture(page, "organizer-mobile-desktop-required");
@@ -86,9 +95,11 @@ try {
 
   detail.event.role = "editor";
   await page.reload();
-  await page.getByRole("heading", { name: "送審與發布狀態", exact: true }).waitFor();
-  assert.equal(await page.getByRole("heading", { name: "負責人", exact: true }).count(), 0);
+  await page.getByRole("heading", { name: "檢查與發布", exact: true }).waitFor();
   assert.equal(await page.getByRole("heading", { name: "網站管理者審閱", exact: true }).count(), 0);
+  await openMembers();
+  assert.equal(await page.getByRole("heading", { name: "負責人", exact: true }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: "邀請協作者", exact: true }).isDisabled(), true);
   await journey.capture(page, "editor-submitted");
 
   session = { ...session, isAdmin: true };
@@ -97,20 +108,22 @@ try {
   await page.getByRole("heading", { name: "網站管理者審閱", exact: true }).waitFor();
   assert.equal(await page.getByRole("textbox", { name: "審閱說明" }).isEnabled(), true);
   assert.equal(await page.getByRole("button", { name: "核准並發布", exact: true }).isEnabled(), true);
-  assert.equal(await page.getByRole("button", { name: "新增負責人", exact: true }).isEnabled(), true);
   await journey.capture(page, "admin-submitted");
-  await page.locator("section").filter({ has: page.getByRole("heading", { name: "送審與發布狀態", exact: true }) })
+  await page.locator("section").filter({ has: page.getByRole("heading", { name: "檢查與發布", exact: true }) })
     .last().screenshot({ path: `${output}/admin-review-panel.png` });
+  await openMembers();
+  assert.equal(await page.getByRole("button", { name: "新增負責人", exact: true }).isEnabled(), true);
 
   session = { ...session, isAdmin: false };
   detail.event.role = "owner";
   detail.event.status = "draft";
   await page.reload();
-  await page.getByRole("heading", { name: "送審與發布狀態", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "檢查與發布", exact: true }).waitFor();
   assert.equal(await page.getByRole("button", { name: "送出審閱", exact: true }).isEnabled(), true);
+  await openMembers();
   await page.getByRole("textbox", { name: "負責人 Email", exact: true }).fill(session.email);
   await ownerSection.getByRole("button", { name: "移除此負責人", exact: true }).click();
-  await page.getByRole("heading", { name: "送審與發布狀態", exact: true }).waitFor({ state: "hidden" });
+  await page.getByRole("heading", { name: "成員與權限", exact: true }).waitFor({ state: "hidden" });
   assert.equal(await page.getByText("找不到活動。", { exact: true }).count(), 0);
   await journey.capture(page, "owner-leaves-activity");
   await journey.finish();

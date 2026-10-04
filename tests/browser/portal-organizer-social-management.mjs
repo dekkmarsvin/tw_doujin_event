@@ -14,7 +14,7 @@ const detail = id => ({ claimReviewAvailable: true, event: { ...summaries.find(e
   draft: { schema: "organizer-event-draft/1", event: { id: "sample", name: "社團處置測試", days: [] }, venue: { assignments: [] }, officialSource: { label: "", url: null } },
   venueCatalog: { venues: [] }, revisions: [], import: null, publication: null,
   workspace: { mode: "binder", onboardingCompletedAt: now, resume: { guidedTask: "identity_source", section: "review" },
-    readiness: { completed: 5, total: 6, suggestedNextSection: "review", blockers: [], sections: [] } } });
+    readiness: { completed: 5, total: 5, suggestedNextSection: "review", blockers: [], sections: [] } } });
 let status = "live";
 let claims = [1, 2].map(index => ({ id: `social-claim-${index}`, eventId: "sample", circleId: "c-900001", circleName: "北風畫室", circleClaimed: false, evidenceUrl: null, evidenceNote: "社團代表", targetUrl: null, createdAt: now + index }));
 let claimsUnavailable = false;
@@ -91,7 +91,21 @@ try {
   await page.getByText("已撤下。", { exact: true }).waitFor();
   assert.deepEqual(writes, [{ candidate: "social-original", circleId: "c-900001", reason: "權利人要求" }]);
   await journey.capture(page, "organizer-social-takedown-done");
-  await page.getByRole("button", { name: "送審與發布", exact: true }).click();
-  await page.getByRole("heading", { name: "送審與發布狀態", exact: true }).waitFor();
+  await page.getByRole("button", { name: "成員與權限", exact: true }).click();
+  await page.getByRole("heading", { name: "成員與權限", exact: true }).waitFor();
+  assert.equal(await page.getByRole("button", { name: "邀請協作者", exact: true }).isDisabled(), true, "an editor cannot manage members");
+  await page.getByRole("button", { name: "返回活動資料", exact: true }).click();
+  await page.getByRole("heading", { name: "檢查與發布", exact: true }).waitFor();
+  // Each header status leads to the panel that changes it, and is marked there.
+  const claimStatus = header.getByRole("button", { name: /^社團認領/ });
+  await claimStatus.click();
+  await page.getByRole("heading", { name: "社團認領", exact: true }).waitFor();
+  assert.equal(await claimStatus.getAttribute("aria-current"), "page");
+  await header.getByRole("button", { name: /^發布狀態/ }).click();
+  await page.getByRole("heading", { name: "檢查與發布", exact: true }).waitFor();
+  assert.equal(await header.getByRole("button", { name: /^審核狀態/ }).getAttribute("aria-current"), "page");
+  assert.equal(await claimStatus.getAttribute("aria-current"), null);
+  await page.waitForTimeout(250); // let the 180ms background transition settle before the capture
+  await journey.capture(page, "organizer-header-status-navigation");
   await journey.finish();
 } catch (error) { await journey.abort(error); }

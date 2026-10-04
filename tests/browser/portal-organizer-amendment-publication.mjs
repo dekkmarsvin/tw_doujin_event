@@ -188,7 +188,7 @@ try {
     });
   };
   const owner = await journey.page({ url: `${base}/organizer`, routes: routes("owner") });
-  await openSection(owner, /^送審與發布/);
+  await openSection(owner, /^檢查與發布/);
   await owner.getByRole("button", { name: "開始修正已發布活動", exact: true }).click();
   const form = owner.getByRole("form", { name: "修正宣告表單" }); await form.waitFor();
   await form.getByRole("combobox", { name: "變動類型", exact: true }).selectOption("released");
@@ -270,15 +270,14 @@ try {
   await owner.getByRole("button", { name: "第一天", exact: true }).click();
   await owner.getByRole("region", { name: "活動地圖編輯器" }).getByRole("combobox", { name: "選取地圖元素" }).locator("option", { hasText: "服務設施 北側" }).waitFor({ state: "attached" });
   await journey.capture(owner,"amendment-real-d1-service-point-reopened");
-  await owner.getByRole("button", { name: /檢查與預覽/ }).first().click();
-  await owner.getByRole("button", { name: "執行檢查", exact: true }).click();
+  // Entering the section runs the check once without a press.
+  await openSection(owner, /^檢查與發布/);
   await owner.getByText("0 項必須修正", { exact: true }).waitFor();
   await owner.getByRole("button", { name: "建立預覽", exact: true }).click();
   await owner.locator('[data-slot-code="S02"]').click();
   await owner.getByRole("status").filter({ hasText: "S02 · 確認接手社" }).waitFor();
   await owner.getByRole("heading", { name: "測試活動 改名", exact: true }).waitFor();
   await journey.capture(owner,"amendment-real-d1-preview");
-  await openSection(owner, /^送審與發布/);
   await owner.getByRole("button", { name: "送出審閱", exact: true }).click();
   // The submit control unmounts when the saved status becomes submitted. Its
   // brief success notice is not the outcome; the durable status and approved
@@ -291,7 +290,7 @@ try {
   await journey.capture(owner,"amendment-real-d1-submitted"); await owner.close();
   const admin = await journey.page({ url: `${base}/organizer`, routes: routes("admin") });
   await admin.getByRole("combobox", { name: "活動版本", exact: true }).selectOption(candidate);
-  await openSection(admin, /^送審與發布/);
+  await openSection(admin, /^檢查與發布/);
   await admin.getByRole("textbox", { name: "審閱說明", exact: true }).fill("隔離合成資料核准");
   await admin.getByRole("button", { name: "核准並發布", exact: true }).click();
   await admin.getByText("發布作業已暫停，送審內容會保留。", { exact: true }).waitFor();
@@ -307,7 +306,7 @@ try {
   await journey.capture(admin,"amendment-real-d1-recoverable-failure"); await admin.close();
   const retryOwner = await journey.page({ url: `${base}/organizer`, routes: routes("owner") });
   await retryOwner.getByRole("combobox", { name: "活動版本", exact: true }).selectOption(candidate);
-  await openSection(retryOwner, /^送審與發布/);
+  await openSection(retryOwner, /^檢查與發布/);
   await retryOwner.getByRole("button", { name: "重試發布", exact: true }).click();
   await retryOwner.getByText("已要求從失敗步驟繼續，請查看發布進度。", { exact: true }).waitFor({ timeout: PUBLICATION_TIMEOUT });
   const completed = await repo.getLatestOrganizerPublicationJob(candidate);

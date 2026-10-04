@@ -30,7 +30,7 @@ const draft = {
 const venueCatalog = { venues: [] };
 const readiness = {
   completed: 0,
-  total: 6,
+  total: 5,
   suggestedNextSection: "review",
   blockers: [],
   sections: [
@@ -38,7 +38,6 @@ const readiness = {
     { id: "venue", state: "available" },
     { id: "import", state: "available" },
     { id: "map", state: "available" },
-    { id: "validate", state: "available" },
     { id: "review", state: "needs_attention" },
   ],
 };
@@ -131,6 +130,10 @@ async function routeOrganizer(page, { role, reopen = "success", started = false 
     if (route.request().method() !== "PATCH") return route.continue();
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, guidedTask: "identity_source", lastSection: "event" }) });
   });
+  // A reopened draft runs the check once when 檢查與發布 remounts.
+  await page.route(`**/api/organizer/events/${CANDIDATE_ID}/validate`, (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({ ok: false, version: 2, issues: [] }),
+  }));
   await page.route(`**/api/organizer/events/${CANDIDATE_ID}/reopen`, async (route) => {
     reopenRequests += 1;
     reopenBodies.push(route.request().postDataJSON());
@@ -197,8 +200,8 @@ async function capture(page, name, { fullPage = false, panel = null } = {}) {
 }
 
 async function reviewPanel(page) {
-  const review = page.locator("section").filter({ has: page.getByRole("heading", { name: "送審與發布狀態", exact: true }) }).last();
-  await review.getByRole("heading", { name: "送審與發布狀態", exact: true }).waitFor();
+  const review = page.locator("section").filter({ has: page.getByRole("heading", { name: "檢查與發布", exact: true }) }).last();
+  await review.getByRole("heading", { name: "檢查與發布", exact: true }).waitFor();
   return review;
 }
 

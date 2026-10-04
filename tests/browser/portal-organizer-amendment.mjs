@@ -37,7 +37,7 @@ function fixtureRoutes(role, existing = false, delayStart = false) {
   const startWait = delayStart ? new Promise((resolve) => { releaseStart = resolve; }) : Promise.resolve();
   const state = { created: existing, version: 1, changes: [], impact: [], settings: null, conflict: false, starts: 0, saves: 0,
     otherVersion: 1, otherDraft: { ...baseline.draft, event: { ...baseline.draft.event, id: "other-event", name: "另一場待編輯活動" } },
-    sections: { source: "review", amendment: "import", other: "event" } };
+    sections: { source: "review", amendment: "import", other: "event" }, validateGate: Promise.resolve(), validateSeen: () => {} };
   const plan = () => planOrganizerAmendment({ ...baseline, changes: state.changes, today: () => "2026-09-15" });
   const summary = (id) => ({ id, tentativeName: id === "other" ? "另一場待編輯活動" : "#190 合成修正驗收", eventId: id === "other" ? "other-event" : baseline.event.id,
     operation: id === "amendment" ? "AMEND" : "CREATE", status: id === "source" ? "published" : "draft",
@@ -51,8 +51,8 @@ function fixtureRoutes(role, existing = false, delayStart = false) {
         sourceRow: index + 1, dayId: String(day.day), venueSpaceId: baseline.draft.venue.assignments[0].venueSpaceId,
         areaId: booth.areaId, codes: booth.codes, circleName: booth.name, stableKey: null, identityGroup: null }))) },
     workspace: { mode: "binder", onboardingCompletedAt: fixture.now, resume: { guidedTask: "identity_source", section: state.sections[id] },
-      readiness: { completed: 3, total: 6, suggestedNextSection: "import", blockers: [],
-        sections: ["event", "venue", "import", "map", "validate", "review"].map((id) => ({ id, state: "available" })) } } });
+      readiness: { completed: 3, total: 5, suggestedNextSection: "import", blockers: [],
+        sections: ["event", "venue", "import", "map", "review"].map((id) => ({ id, state: "available" })) } } });
   return { state, startSeen, releaseStart: () => releaseStart?.(), routes: async (page) => {
     await page.route("**/api/**", async (route) => {
       const req = route.request(); const path = new URL(req.url()).pathname; const method = req.method();
@@ -85,6 +85,8 @@ function fixtureRoutes(role, existing = false, delayStart = false) {
         state.otherDraft = body.draft; state.otherVersion++;
         return reply({ ok: true, candidateId: "other", version: state.otherVersion });
       }
+      // Opening 檢查與發布 runs the check once.
+      if (path.endsWith("/validate") && method === "POST") { state.validateSeen(); await state.validateGate; return reply({ ok: true, version: state.version, issues: [] }); }
       if (/\/events\/(source|amendment|other)$/.test(path)) return reply(detail(path.split("/").at(-1)));
       throw new Error(`Unexpected synthetic UI request: ${method} ${path}`);
     });
@@ -131,7 +133,7 @@ try {
   await add("withdrawn", "S01"); await add("released", "S02", "接手社");
   await add("moved", "S03", null, "S05"); await add("added", null, "新增社", "S06");
   // Navigation must not silently throw away any declaration.
-  await page.getByRole("button", { name: /送審與發布/ }).first().click();
+  await page.getByRole("button", { name: /檢查與發布/ }).first().click();
   const dialog = page.getByRole("dialog", { name: "尚有未儲存變更" });
   await dialog.waitFor(); await dialog.getByRole("button", { name: "取消", exact: true }).click();
   await page.getByRole("button", { name: "儲存修正並檢視影響", exact: true }).click();
@@ -181,15 +183,16 @@ try {
   ownerRoutes.state.conflict = false;
   await page.getByRole("button", { name: "捨棄未儲存修正並讀取最新版本", exact: true }).click();
   await page.getByRole("heading", { name: "4. 新增", exact: true }).waitFor();
-  await page.getByRole("button", { name: /送審與發布/ }).first().click();
-  await page.getByRole("heading", { name: "送審與發布狀態", exact: true }).waitFor();
+  await page.getByRole("button", { name: /檢查與發布/ }).first().click();
+  await page.getByRole("heading", { name: "檢查與發布", exact: true }).waitFor();
+  await page.getByText("0 項必須修正", { exact: true }).waitFor();
   assert.equal(await page.getByRole("button", { name: "送出審閱", exact: true }).isDisabled(), true);
   await journey.capture(page, "organizer-amendment-publication-not-enabled");
   await page.close();
   for (const role of ["editor", "admin"]) {
     const routes = fixtureRoutes(role);
     const actor = await journey.page({ url: `${base}/organizer`, routes: routes.routes, viewport: { width: 1100, height: 900 } });
-    await actor.getByRole("heading", { name: "送審與發布狀態", exact: true }).waitFor();
+    await actor.getByRole("heading", { name: "檢查與發布", exact: true }).waitFor();
     assert.equal(await actor.getByRole("button", { name: "開始修正已發布活動", exact: true }).count(), role === "admin" ? 1 : 0);
     await journey.capture(actor, `organizer-amendment-${role}-entry`); await actor.close();
   }
@@ -231,6 +234,36 @@ try {
   assert.equal(delayed.state.otherDraft.event.name, "另一場還沒儲存的內容");
   assert.equal(delayed.state.otherVersion, 2);
   await moving.close();
+
+  // The check runs by itself on entry, so a reader can leave before it answers.
+  // Its late answer must not bring the activity they left back on screen.
+  const late = fixtureRoutes("owner", false, true);
+  let releaseValidate;
+  const validateSeen = new Promise((resolve) => { late.state.validateSeen = resolve; });
+  late.state.validateGate = new Promise((resolve) => { releaseValidate = resolve; });
+  late.state.sections.other = "review";
+  const leaving = await journey.page({ url: `${base}/organizer`, routes: late.routes });
+  await leaving.getByRole("button", { name: "開始修正已發布活動", exact: true }).waitFor();
+  await leaving.getByRole("button", { name: /另一場待編輯活動/ }).click();
+  await leaving.getByRole("heading", { name: "檢查與發布", exact: true }).waitFor();
+  await validateSeen;
+  await leaving.getByRole("button", { name: /#190 合成修正驗收/ }).click();
+  await leaving.getByRole("button", { name: "開始修正已發布活動", exact: true }).waitFor();
+  // Even a brief return would unmount whatever the reader had started here.
+  await leaving.evaluate(() => {
+    window.leftActivityReturned = false;
+    new MutationObserver(() => {
+      if ([...document.querySelectorAll("h2")].some((heading) => heading.textContent === "另一場待編輯活動")) window.leftActivityReturned = true;
+    }).observe(document.body, { subtree: true, childList: true, characterData: true });
+  });
+  const reread = leaving.waitForResponse((response) => response.url().endsWith("/api/organizer/events") && response.request().method() === "GET");
+  releaseValidate();
+  await reread;
+  await leaving.waitForTimeout(300);
+  assert.equal(await leaving.evaluate(() => window.leftActivityReturned), false, "the late check never brings the left activity back");
+  assert.equal(await leaving.getByRole("button", { name: "開始修正已發布活動", exact: true }).count(), 1, "the chosen activity stays on screen");
+  assert.equal(await leaving.getByRole("combobox", { name: "活動版本", exact: true }).inputValue(), "source");
+  await leaving.close();
 
   // Equal dimensions must not hide which picture a saved correction replaces.
   // The previous image is public, while the replacement still needs its

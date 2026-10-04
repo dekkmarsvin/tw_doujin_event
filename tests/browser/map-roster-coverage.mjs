@@ -35,7 +35,7 @@ async function open(surface) {
       venue: { assignments: ["hall-a", "hall-b"].map(venueSpaceId => ({ venueId: "hall", venueSpaceId, areaIds: ["A"], areaMode: "imported", mapTemplate: "SAMPLE" })) },
       officialSource: { label: "測試來源", url: "https://organizer.example/" } },
     import: { source: { fileName: "roster.csv", worksheet: null, sha256: "a".repeat(64), sourceDescription: "合成來源", mapping: {} }, rows: roster },
-    workspace: { mode: "binder", onboardingCompletedAt: now, resume: { guidedTask: "identity_source", section: "import" }, readiness: { completed: 3, total: 6, suggestedNextSection: "map", blockers: [], sections: ["event", "venue", "import", "map", "validate", "review"].map(id => ({ id, state: "available" })) } },
+    workspace: { mode: "binder", onboardingCompletedAt: now, resume: { guidedTask: "identity_source", section: "import" }, readiness: { completed: 3, total: 5, suggestedNextSection: "map", blockers: [], sections: ["event", "venue", "import", "map", "review"].map(id => ({ id, state: "available" })) } },
   };
   const draftOf = map => ({ id: map.id, event_id: "sample", period_key: map.periodKey, venue_space_id: map.venueSpaceId, status: "draft", current_revision: map.mapRevision, updated_at: now, content: { schema: "map-contribution-draft/1", layout: map.layout, authoring: map.authoring } });
   const scopeOf = map => {

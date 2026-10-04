@@ -29,8 +29,8 @@ async function routes(page, role, result) {
     publication: { id: jobId, status: "failed", step: "merging_main", error: "approved snapshot mismatch",
       failureCode: "snapshot_mismatch", retryable: false, started: true, candidateVersion: 2, updatedAt: 1789980000000 },
     workspace: { mode: "binder", onboardingCompletedAt: 1789980000000, resume: { guidedTask: "identity_source", section: "review" },
-      readiness: { completed: 0, total: 6, suggestedNextSection: "review", blockers: [], sections:
-        ["event", "venue", "import", "map", "validate", "review"].map((section) => ({ id: section, state: "available" })) } },
+      readiness: { completed: 0, total: 5, suggestedNextSection: "review", blockers: [], sections:
+        ["event", "venue", "import", "map", "review"].map((section) => ({ id: section, state: "available" })) } },
   }));
   await page.route(`**/api/organizer/events/${id}/workspace`, (route) => reply(route, { ok: true }));
   await page.route(`**/api/admin/organizer/events/${id}/abandon`, async (route) => {
@@ -47,7 +47,7 @@ async function routes(page, role, result) {
 async function open(role, result, viewport) {
   let control;
   const page = await journey.page({ url: `${base}/organizer`, viewport, routes: async (tab) => { control = await routes(tab, role, result); } });
-  await page.getByRole("heading", { name: "送審與發布狀態", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "檢查與發布", exact: true }).waitFor();
   return { page, control };
 }
 
