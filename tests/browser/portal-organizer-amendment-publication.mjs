@@ -273,6 +273,9 @@ try {
   // Entering the section runs the check once without a press.
   await openSection(owner, /^檢查與發布/);
   await owner.getByText("0 項必須修正", { exact: true }).waitFor();
+  // Passing the check is visible on the rail even though the section completes only on publication.
+  await owner.getByRole("group", { name: "活動項目" }).getByRole("button", { name: /^檢查與發布/ }).getByText("可送審", { exact: true }).waitFor();
+  await journey.capture(owner,"amendment-real-d1-ready-to-submit");
   await owner.getByRole("button", { name: "建立預覽", exact: true }).click();
   await owner.locator('[data-slot-code="S02"]').click();
   await owner.getByRole("status").filter({ hasText: "S02 · 確認接手社" }).waitFor();
@@ -282,7 +285,7 @@ try {
   // The submit control unmounts when the saved status becomes submitted. Its
   // brief success notice is not the outcome; the durable status and approved
   // snapshot below are, and both still have to arrive.
-  await owner.getByText("審閱中", { exact: true }).waitFor();
+  await owner.getByRole("group", { name: "活動項目" }).getByText("審閱中", { exact: true }).waitFor();
   const submittedVersion = (await db.prepare("SELECT current_version AS version FROM organizer_event_candidates WHERE id=?1").bind(candidate).first()).version;
   const approvedSnapshot = await repo.getOrganizerSubmissionSnapshot(candidate,submittedVersion);
   assert.deepEqual(JSON.parse(approvedSnapshot.snapshot_json).maps[0].content.layout.servicePoints, savedServices, "the submitted snapshot carries the service point");

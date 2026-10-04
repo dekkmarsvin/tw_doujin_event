@@ -43,6 +43,22 @@ export const READINESS_LABEL = {
   needs_attention: "需要處理",
   blocked: "需先完成前面步驟",
 } as const;
+/** 檢查與發布 completes only on publication, so its generic state would read
+ * 可開始 from the first passing check all the way to approval, and passing the
+ * check would change nothing on the rail. Its row names the stage instead. */
+export function organizerSectionStateLabel(
+  detail: OrganizerEventDetail,
+  item: OrganizerEventDetail["workspace"]["readiness"]["sections"][number],
+) {
+  if (item.id !== "review" || item.state === "complete" || item.state === "blocked") return READINESS_LABEL[item.state];
+  const status = detail.event.status;
+  if (status === "submitted") return "審閱中";
+  if (status === "approved") return "等待發布";
+  if (status === "publishing") return "發布中";
+  if ((status === "draft" || status === "changes_requested")
+    && !detail.workspace.readiness.blockers.some((blocker) => blocker.code === "validation_required")) return "可送審";
+  return READINESS_LABEL[item.state];
+}
 export const STATUS_LABEL: Record<OrganizerEventSummary["status"], string> = {
   draft: "草稿",
   changes_requested: "要求修改",

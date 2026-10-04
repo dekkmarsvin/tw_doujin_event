@@ -18,6 +18,7 @@ const {
   organizerOnboardingIssues,
   organizerWorkspaceSectionOrDefault,
 } = await environment.runner.import("/app/organizer-workspace.ts");
+const { organizerSectionStateLabel } = await environment.runner.import("/app/organizer/organizer-shared.ts");
 after(async () => { await vite.close(); });
 
 const empty = {
@@ -167,4 +168,20 @@ test("a booth blocker carries the count the wording needs, never the codes", () 
   assert.equal("boothCodes" in missing, false);
   // A problem with no codes does not gain an empty count to explain away.
   assert.equal("count" in blockers.find((blocker) => blocker.code === "missing_name"), false);
+});
+
+test("the 檢查與發布 row shows passing the check and each later stage before publication", () => {
+  const input = { draft: base, importedRows: 1, maps: [{ periodKey: "1", venueSpaceId: "hall-a" }], currentVersion: 4, lastValidatedVersion: 4 };
+  const label = (status, lastValidatedVersion = 4) => {
+    const readiness = evaluateOrganizerWorkspaceReadiness({ ...input, status, lastValidatedVersion });
+    return organizerSectionStateLabel({ event: { status }, workspace: { readiness } }, readiness.sections.find((section) => section.id === "review"));
+  };
+  assert.equal(label("draft", null), "可開始");
+  assert.equal(label("draft"), "可送審");
+  assert.equal(label("changes_requested"), "可送審");
+  assert.equal(label("submitted"), "審閱中");
+  assert.equal(label("approved"), "等待發布");
+  assert.equal(label("publishing"), "發布中");
+  assert.equal(label("failed"), "需要處理");
+  assert.equal(label("published"), "已完成");
 });
