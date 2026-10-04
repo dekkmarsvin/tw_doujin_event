@@ -25,11 +25,11 @@ export default function AdminApp() {
   const [ready, setReady] = useState(false);
   const [message, setMessage] = useState("");
   const [today] = useState(() => taipeiDate(Date.now()));
-  const [navigationOpen, setNavigationOpen] = useState(() => window.matchMedia("(min-width: 761px)").matches);
+  const [navigationOpen, setNavigationOpen] = useState(() => window.matchMedia("(min-width: 960px)").matches);
   const expire = useCallback(() => { setSession(null); setMessage("登入已到期，請重新登入。"); }, []);
   useSessionExpiry(session, expire);
   useEffect(() => {
-    const media = window.matchMedia("(min-width: 761px)");
+    const media = window.matchMedia("(min-width: 960px)");
     const resize = (event: MediaQueryListEvent) => setNavigationOpen(event.matches);
     media.addEventListener("change", resize);
     return () => media.removeEventListener("change", resize);
@@ -69,7 +69,7 @@ export default function AdminApp() {
     {message && <p className={styles.error} role="status">{message}</p>}
     {!ready ? <p className={styles.notice}>載入中…</p> : !session ? <section className={styles.card}><h2>請先登入</h2><a href={adminLoginEntry(window.location.href)}>前往社團入口登入</a></section>
       : !session.isAdmin ? <section className={styles.card}><h2>需要管理者權限</h2><p>目前帳號無法使用網站管理功能。</p><a href="/circle">返回社團入口</a></section>
-        : <div className={ui.layout}>
+        : <div className={`${ui.layout} ${styles.workspace}`}>
           <nav aria-label="管理項目"><details className={ui.navigation} open={navigationOpen} onToggle={event => setNavigationOpen(event.currentTarget.open)}><summary>{labels[route.section]}</summary>
             {(["overview", "events", "circles", "accounts", "data", "settings"] as const).map(section => <a key={section} href={adminHref(section)} aria-current={route.section === section ? "page" : undefined}>{labels[section]}</a>)}
           </details></nav>

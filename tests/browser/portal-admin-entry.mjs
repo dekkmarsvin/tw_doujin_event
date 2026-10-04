@@ -607,6 +607,8 @@ try {
   await workVersions.getByText("2026年11月1日至2日", { exact: true }).waitFor();
   assert.equal(await workVersions.getByText("第 2 版 · 發布失敗", { exact: true }).count(), 1);
   assert.equal(await workVersions.getByText("第 44 版", { exact: false }).count(), 0, "storage revisions are not workspace editions");
+  assert.deepEqual(await index.evaluate(list => [...list.children].map(item => item.tagName === "ARTICLE" ? (item.querySelector("header p")?.textContent.includes("已結束") ? "ended" : "current") : item.textContent))
+    .then(order => [...new Set(order)]), ["current", "已結束", "ended"], "ended activities sit under one divider after the current ones");
   const publicOnly = index.getByRole("article", { name: "第二範例活動", exact: true });
   await publicOnly.getByText("無工作區", { exact: true }).waitFor();
   assert.equal(await publicOnly.getByRole("link", { name: "開啟工作區", exact: true }).count(), 0);
@@ -629,7 +631,7 @@ try {
   assert.equal(await eventDesktop.page.getByRole("button", { name: "重試發布", exact: true }).count(), 0);
   assert.ok(eventDesktop.requests.some(request => request.path === "/api/organizer/events/sample-failed-amend"));
   await eventDesktop.page.goBack();
-  await eventDesktop.page.getByRole("heading", { name: "活動總表", exact: true }).waitFor();
+  await eventDesktop.page.getByRole("link", { name: "活動總表", exact: true }).and(eventDesktop.page.locator('[aria-current="page"]')).waitFor();
   await sampleEntry.getByText("認領待審 123", { exact: true }).waitFor();
   eventDesktop.failEvents(503);
   eventDesktop.failQueue(503);
@@ -657,7 +659,7 @@ try {
   assert.equal(new URL(eventMobile.page.url()).searchParams.get("candidate"), "sample-failed-amend");
   await eventMobile.page.getByText("目前狀態：發布失敗", { exact: true }).waitFor();
   await eventMobile.page.goBack();
-  await eventMobile.page.getByRole("heading", { name: "活動總表", exact: true }).waitFor();
+  await eventMobile.page.getByRole("link", { name: "活動總表", exact: true }).and(eventMobile.page.locator('[aria-current="page"]')).waitFor();
   await assertNoOverflow(eventMobile.page);
   assert.equal(eventMobile.requests.filter(request => request.method !== "GET").length, 0, "overview navigation only reads existing progress");
   await eventMobile.page.close();

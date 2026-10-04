@@ -1,4 +1,5 @@
-.workspace { max-width: 1440px; }
+/* 180px nav + 24px gap + the 960px content column the admin spec names, plus the page padding. */
+.workspace { max-width: calc(180px + 24px + 960px + 36px); }
 .layout { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 24px; margin-top: 24px; }
 .navigation { align-self: start; position: sticky; top: 18px; display: grid; gap: 4px; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
 .navigation a { display: block; padding: 10px 12px; border-radius: 7px; color: var(--ink); text-decoration: none; font-weight: 700; }
@@ -8,15 +9,20 @@
 .navigation summary { display: none; }
 .content { min-width: 0; }
 .content :global(#map-review) { max-width: none; }
+/* Section headings open their card flush, like the claim queue's. */
+.content section > h3:first-child { margin-top: 0; }
+/* Loose text links in ink, like the row links beside them, not browser blue. */
+.content :is(p, .detailSection, .detailActions) > a:not([class]) { color: var(--ink); text-underline-offset: 2px; }
 .title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .title h2 { font-size: 20px; }
+.title > button:only-child { margin-left: auto; }
 .title button { border: 1px solid var(--line); border-radius: 7px; background: #fff; color: var(--ink); padding: 8px 12px; font: inherit; cursor: pointer; }
 .title button:focus-visible { outline: 3px solid #8fac9c; outline-offset: 2px; }
 .title button:disabled { color: var(--muted); cursor: not-allowed; }
 .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .tabs a { color: var(--ink); text-decoration: none; padding: 8px 12px; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
 .tabs a[aria-current="page"] { background: #e9eee8; border-color: #9aa5a0; font-weight: 700; }
-.dashboard { display: grid; grid-template-columns: minmax(0, 2fr) minmax(270px, 1fr); gap: 18px; align-items: start; }
+.dashboard { display: grid; grid-template-columns: minmax(0, 2fr) minmax(270px, 1fr); gap: 0 18px; align-items: start; }
 .dashboard > div { min-width: 0; }
 .summary { display: flex; flex-wrap: wrap; gap: 8px 24px; border-block: 1px solid var(--line); padding: 12px 0; margin-bottom: 16px; }
 .summary a { color: var(--ink); text-decoration: none; }
@@ -29,6 +35,9 @@
 .facts { margin: 12px 0; }
 .facts > div { display: flex; justify-content: space-between; gap: 18px; padding: 5px 0; }
 .facts dd { margin: 0; text-align: right; }
+/* Ended events under the current ones, dashed like the queue's past line. */
+.groupDivider { display: flex; align-items: center; gap: 10px; margin-top: 16px !important; color: var(--muted); font-size: 12px; font-weight: 700; }
+.groupDivider::after { content: ""; flex: 1; border-top: 1px dashed #cfd5d0; }
 .status { color: var(--muted); font-size: 12px; margin-top: 10px !important; }
 .accountMenu { position: relative; }
 .accountMenu summary { cursor: pointer; padding: 8px 12px; border: 1px solid var(--line); background: #fff; border-radius: 7px; font-weight: 700; }
@@ -85,7 +94,9 @@
   .eventWork .detailActions { gap: 8px; }
 }
 @media (max-width: 1050px) { .dashboard { grid-template-columns: 1fr; } }
-@media (max-width: 760px) {
+/* Below 960px a side nav leaves the queue's six columns ~80px each, so the
+   nav folds into a menu above the content well before the phone breakpoint. */
+@media (max-width: 959px) {
   .layout { grid-template-columns: 1fr; gap: 16px; margin-top: 16px; }
   .navigation { position: static; }
   .navigation summary { display: list-item; cursor: pointer; font-weight: 700; padding: 8px 12px; }
@@ -93,12 +104,15 @@
   .navigation[open] { display: grid; }
   .navigation a { display: block; }
   .navigation a:last-child { margin-top: 6px; }
+}
+@media (max-width: 760px) {
   .title h2 { font-size: 18px; }
+  .summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .content.content button, .navigation summary, .accountMenu summary { min-height: 44px; }
-  .tabs a, .rows a, .detailActions a, .accountMenu a { display: inline-flex; align-items: center; min-height: 44px; }
+  .summary a, .tabs a, .rows a, .detailActions a, .detailList a, .accountMenu a { display: inline-flex; align-items: center; min-height: 44px; }
   .accountMenu button { min-height: 44px; }
   .detailHeading { align-items: flex-start; flex-wrap: wrap; }
-  .detailFacts > div { grid-template-columns: 80px minmax(0, 1fr); gap: 10px; }
+  .detailFacts > div { gap: 10px; }
   .eventVersions { grid-template-columns: 1fr; gap: 18px; }
   .eventVersions > section + section { border-top: 1px solid var(--line); padding-top: 16px; }
 }

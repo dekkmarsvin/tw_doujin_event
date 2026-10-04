@@ -127,7 +127,7 @@ function AdminCircleDetailPanel({ event, circleId, onBack, onChanged }: {
   };
   return <section className={`${styles.card} ${styles.admin} ${ui.circleDetail}`} id="takedown" aria-label="社團明細">
     <div className={ui.detailHeading}><div><p className={styles.muted}>{event.name}</p><h3>{detail?.name ?? "社團明細"}</h3></div>
-      <button type="button" disabled={pending} onClick={onBack}>返回搜尋結果</button></div>
+      <button type="button" className={styles.secondaryButton} disabled={pending} onClick={onBack}>返回搜尋結果</button></div>
     {result && <p role="status" className={result.failed ? styles.error : styles.notice}>{result.message}</p>}
     {loading ? <p role="status">載入社團明細…</p> : readError ? <div><p role="alert" className={styles.error}>{readError}</p>
       <button type="button" onClick={() => { void reload(); }}>重新讀取明細</button></div> : detail && <>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { listOrganizerEvents, type OrganizerEventSummary } from "../organizer-client";
 import { PUBLISHED_EVENTS, getPublishedEvent } from "../event-catalog";
 import { eventsByProximity, taipeiDate } from "../event-calendar";
@@ -56,7 +56,8 @@ function AdminDashboard({ queueState, mode }: { queueState?: ReturnType<typeof u
       {operations.updatedAt && <p className={ui.status}>發布作業更新於 {adminDate(operations.updatedAt)}</p>}</>}
   </section>;
   return <>
-    <div className={ui.title}><h2 id={overview ? "overview-heading" : mode === "list" ? "event-list-heading" : "publication-heading"}>{overview ? "管理總覽" : mode === "list" ? "活動總表" : "審核與發布"}</h2>
+    {/* Under 活動管理 the selected tab already names this view; only the overview titles itself. */}
+    <div className={ui.title}>{overview && <h2 id="overview-heading">管理總覽</h2>}
       <button type="button" className={styles.secondaryButton} onClick={refresh} disabled={queueState?.loading}>重新整理</button></div>
     {overview && <div className={ui.summary} aria-label="待審工作">
       <a href="/organizer?application">活動申請<strong>{queue ? queue.organizer.applications : "—"}</strong></a>
@@ -120,9 +121,11 @@ function AdminDashboard({ queueState, mode }: { queueState?: ReturnType<typeof u
 
 function AdminEventList({ candidates, readFailed, queue, today }: { candidates: OrganizerEventSummary[] | null; readFailed: boolean; queue: ReviewQueue | null | undefined; today: string }) {
   const groups = groupAdminEvents(candidates ?? [], PUBLISHED_EVENTS, today);
+  // Groups arrive current first; ended ones sit under a divider once something precedes them.
+  const firstEnded = groups.findIndex(group => activityTime(group.calendar, today) === "已結束");
   return <div className={ui.eventList} aria-label="完整活動總表">
     {!candidates && <p>{readFailed ? "無法取得工作版次。" : "工作版次載入中…"}</p>}
-    {groups.map(group => <article key={group.id} className={`${styles.card} ${ui.eventRow}`} aria-label={group.name}>
+    {groups.map((group, index) => <Fragment key={group.id}>{index === firstEnded && index > 0 && <p className={ui.groupDivider}>已結束</p>}<article className={`${styles.card} ${ui.eventRow}`} aria-label={group.name}>
       <header><h3>{group.name}</h3><p>{group.calendar.label}{activityTime(group.calendar, today) !== group.calendar.label && ` · ${activityTime(group.calendar, today)}`}</p>{group.published?.venue && <p>{group.published.venue}</p>}</header>
       <div className={ui.eventVersions}>
         <section aria-label="目前公開內容"><h4>目前公開內容</h4>{group.published ? <>
@@ -143,6 +146,6 @@ function AdminEventList({ candidates, readFailed, queue, today }: { candidates: 
         {!!queue?.claimCounts?.find(item => item.eventId === group.eventId)?.pending && <a href={adminHref("circles", { view: "claims", event: group.eventId })}>審核認領</a>}
         {!!queue?.mapDrafts.find(item => item.eventId === group.eventId)?.submitted && <a href={adminHref("events", { view: "maps", event: group.eventId })}>查看地圖投稿</a>}
       </div>}</div>
-    </article>)}
+    </article></Fragment>)}
   </div>;
 }
