@@ -217,6 +217,26 @@ test("an activity created for someone else still waits for that owner to accept 
   assert.equal((await ownerDetail.json()).event.role, "owner");
 });
 
+test("an admin without the Owner grant invites collaborators as the site and reaches the submission checks", async () => {
+  // ADR-0080: the HTTP gates admit the roster; the repository rechecks it at the write.
+  const adminCookie = await signIn("admin@example.test", "organizer");
+  const { candidateId } = await (await handlers.adminCreateOrganizerCandidate(request(
+    "/api/admin/organizer/events", "POST", { tentativeName: "PF47", ownerEmail: "owner@example.test" }, adminCookie,
+  ))).json();
+  const path = `/api/organizer/events/${candidateId}/collaborators`;
+  const invited = await handlers.manageOrganizerCollaborators(request(path, "POST",
+    { email: "admin-editor@example.test", action: "invite" }, adminCookie), candidateId);
+  assert.equal(invited.status, 200);
+  assert.match(sent.at(-1).text, /邀請者：網站管理者/, "an admin acting without the grant invites as the site");
+  assert.equal((await handlers.manageOrganizerCollaborators(request(path, "POST",
+    { email: "admin-editor@example.test", action: "revoke" }, adminCookie), candidateId)).status, 200);
+
+  const submitted = await handlers.submitOrganizerCandidate(request(
+    `/api/organizer/events/${candidateId}/submit`, "POST", { expectedVersion: 1 }, adminCookie,
+  ), candidateId);
+  assert.equal(submitted.status, 422, "the admin passes the role gate and meets the same validation as an Owner");
+});
+
 test("an event organizer can list and immediately extend the shared venue catalog", async () => {
   const adminCookie = await signIn("admin@example.test");
   const createdCandidate = await handlers.adminCreateOrganizerCandidate(request(

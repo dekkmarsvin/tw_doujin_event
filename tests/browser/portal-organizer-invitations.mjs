@@ -113,6 +113,15 @@ try {
     .last().screenshot({ path: `${output}/admin-review-panel.png` });
   await openMembers();
   assert.equal(await page.getByRole("button", { name: "新增負責人", exact: true }).isEnabled(), true);
+  // ADR-0080: an admin without the Owner grant also manages collaborators and submits.
+  assert.equal(await page.getByRole("button", { name: "邀請協作者", exact: true }).isEnabled(), true);
+  assert.equal(await page.getByText(/管理成員需要負責人身分/).count(), 0);
+  detail.event.status = "draft";
+  await page.reload();
+  await page.getByRole("heading", { name: "檢查與發布", exact: true }).waitFor();
+  assert.equal(await page.getByRole("button", { name: "送出審閱", exact: true }).isEnabled(), true);
+  assert.equal(await page.getByText(/送出審閱需要/).count(), 0);
+  await journey.capture(page, "admin-without-owner-can-submit");
 
   session = { ...session, isAdmin: false };
   detail.event.role = "owner";

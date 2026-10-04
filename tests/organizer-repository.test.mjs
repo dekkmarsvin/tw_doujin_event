@@ -1143,6 +1143,47 @@ test("optimistic versions refuse stale edits and editors cannot submit", async (
   }), { ok: true, status: "submitted" });
 });
 
+test("a site admin without the Owner grant submits and manages collaborators, and loses both with the roster", async () => {
+  // ADR-0080. The write itself rechecks the roster, as it does the Owner grant.
+  await repository.createOrganizerCandidate({
+    id: "candidate-admin-acts", tentativeName: "管理者代辦", ownerEmail: "owner@example.test",
+    createdByAccountId: adminId, draftJson: JSON.stringify(initialDraft), now: NOW,
+  });
+  const complete = structuredClone(initialDraft);
+  complete.event.id = "admin-acts";
+  complete.event.days = [{ id: "1", label: "第一日", date: "2026-11-07" }];
+  await repository.saveOrganizerCandidate({
+    candidateId: "candidate-admin-acts", actorAccountId: adminId, expectedVersion: 1,
+    eventId: "admin-acts", draftJson: JSON.stringify(complete), now: NOW + 1, admin: true,
+  });
+  assert.equal(await repository.organizerRole("candidate-admin-acts", adminId), null, "the admin holds no grant");
+  assert.deepEqual(await repository.manageOrganizerCollaborator({
+    candidateId: "candidate-admin-acts", actorAccountId: adminId, email: "editor@example.test",
+    role: "editor", action: "invite", now: NOW + 2,
+  }), { ok: true, result: "invited" });
+  assert.deepEqual(await repository.manageOrganizerCollaborator({
+    candidateId: "candidate-admin-acts", actorAccountId: editorId, email: "other@example.test",
+    role: "editor", action: "invite", now: NOW + 2,
+  }), { ok: false, reason: "forbidden" }, "an account with neither grant nor roster place still cannot");
+
+  await database.prepare("DELETE FROM admins WHERE email = 'admin@example.test'").run();
+  assert.deepEqual(await repository.manageOrganizerCollaborator({
+    candidateId: "candidate-admin-acts", actorAccountId: adminId, email: "editor@example.test",
+    role: "editor", action: "revoke", now: NOW + 3,
+  }), { ok: false, reason: "forbidden" });
+  assert.deepEqual(await repository.submitOrganizerCandidate({
+    candidateId: "candidate-admin-acts", actorAccountId: adminId, expectedVersion: 2, now: NOW + 3,
+  }), { ok: false, reason: "forbidden" });
+  await repository.addAdmin("admin@example.test", "bootstrap", NOW + 4);
+
+  assert.deepEqual(await repository.submitOrganizerCandidate({
+    candidateId: "candidate-admin-acts", actorAccountId: adminId, expectedVersion: 2, now: NOW + 5,
+  }), { ok: true, status: "submitted" });
+  const submitted = await repository.getOrganizerCandidate("candidate-admin-acts");
+  assert.equal(submitted.submitted_by, adminId);
+  assert.equal(submitted.last_updated_role, "admin");
+});
+
 test("event id locks at submission while requested changes can produce a new reviewed revision", async () => {
   await repository.createOrganizerCandidate({
     id: "candidate-pf",

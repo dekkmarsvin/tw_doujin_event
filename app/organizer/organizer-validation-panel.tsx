@@ -20,7 +20,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
  * repeating that previews are private (#221 4.5, Phase 5). */
 const CHECK_STATE = {
   complete: "這一版已通過檢查。可以建立預覽。",
-  submittable: "這一版已通過檢查。可以建立預覽，或在下方送出審閱。",
   available: "這一版還沒通過檢查。",
   blocked: "前面的項目還沒完成。",
 };
@@ -30,7 +29,7 @@ export function CheckSection({ detail, onChanged, onSection }: { detail: Organiz
   const editable = detail.event.status === "draft" || detail.event.status === "changes_requested";
   const checkState = readiness.sections.find((item) => item.id === "review")?.state === "blocked" ? "blocked"
     : readiness.blockers.some((blocker) => blocker.code === "validation_required") ? "available"
-      : editable ? "submittable" : "complete";
+      : "complete";
   const [issues, setIssues] = useState<OrganizerValidationIssue[] | null>(null);
   const [preview, setPreview] = useState<OrganizerReaderPreview | null>(null);
   const checkFeedback = useActionFeedback();

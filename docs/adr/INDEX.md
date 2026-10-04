@@ -21,7 +21,7 @@ ADR 不搬動，決策不改寫；推翻舊決策時寫新的 ADR，並在舊的
 | 收藏與行程規劃 | 0002、0004、0005、0078、0079 |
 | 社團身分與目錄 | 0010、0013、0030、0044、0045、0071 |
 | 社團控制面 | 0007、0016、0017、0020、0043、0051、0052、0053、0054、0072 |
-| 主辦工作區與發布 | 0035、0037、0038、0046、0047、0050、0057、0058、0059、0062、0066、0068、0069、0070、0071、0073 |
+| 主辦工作區與發布 | 0035、0037、0038、0046、0047、0050、0057、0058、0059、0062、0066、0068、0069、0070、0071、0073、0080 |
 | 地圖貢獻 | 0033 |
 | 活動資料與 reference | 0012、0014、0026、0028、0032、0039、0068、0070 |
 | 保存期限與個資 | 0018、0021、0022、0027、0054、0068 |
@@ -80,7 +80,7 @@ ADR 不搬動，決策不改寫；推翻舊決策時寫新的 ADR，並在舊的
 | [0043](./0043-the-circle-portal-is-event-agnostic.md) | Circle portal 是通用入口，claim 逐活動隔離 | 生效 |
 | [0044](./0044-an-accepted-circle-list-is-not-yet-catalogable.md) | 錄取名單不等於可編目，身分等主辦攤位證據 | **部分被取代** — 跨日同名分組由 0071 改採主辦預覽確認；錄取名單不可單獨配號仍有效 |
 | [0045](./0045-list-changes-are-declared-not-inferred.md) | 名單變動要宣告，不從差異推論 | 生效 |
-| [0046](./0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md) | 已核准的 Organizer publication 可合併 App 自己建立的 PR | **部分被取代** — 決策 4 的三項 ruleset 前置由 0058 放寬，只保留「App 不得列為 bypass actor」；合併 app-owned PR 的授權本身仍有效；「結果」的本機備援由 0049 取代；決策 5 的推進方式由 0062 改寫 |
+| [0046](./0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md) | 已核准的 Organizer publication 可合併 App 自己建立的 PR | **部分被取代** — 決策 4 的三項 ruleset 前置由 0058 放寬，只保留「App 不得列為 bypass actor」；合併 app-owned PR 的授權本身仍有效；「結果」的本機備援由 0049 取代；決策 5 的推進方式由 0062 改寫；決策 1 的「以 Owner 身分送出」由 0080 放寬為 Owner 或管理者 |
 | [0047](./0047-organizer-onboarding-opens-into-a-resumable-workspace.md) | Organizer onboarding 先引導，完成後開放為可續作工作區 | 生效 |
 | [0048](./0048-a-map-covers-one-day-in-one-hall.md) | 一份地圖涵蓋一個活動日的一個場地 | 生效 |
 | [0049](./0049-the-local-authoring-backup-is-withdrawn.md) | 本機 authoring 備援退場，只留控制面一條路 | 生效 |
@@ -114,3 +114,4 @@ ADR 不搬動，決策不改寫；推翻舊決策時寫新的 ADR，並在舊的
 | [0077](./0077-circle-share-images-follow-published-media.md) | 社團分享縮圖使用已公開的圖片選擇 | 生效；部分取代 0070、0074 |
 | [0078](./0078-own-planning-backups-can-be-imported.md) | 讀者可匯入自己的完整規劃備份 | 生效；部分取代 0005 |
 | [0079](./0079-shared-itineraries-use-short-links-and-qr-codes.md) | 本場行程以短網址與 QR Code 分享，同一流程帶到自己的手機 | 生效 |
+| [0080](./0080-site-admins-submit-and-manage-collaborators-without-an-owner-grant.md) | 網站管理者不需活動負責人身分即可送審與管理協作者 | 生效；部分取代 0046 |
