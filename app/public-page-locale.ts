@@ -7,6 +7,7 @@ import { PUBLIC_HEADER_MESSAGES } from "./public-header";
 import { PUBLIC_PAGE_LOCALE_ID, PUBLIC_PAGE_MESSAGES } from "./public-page-messages";
 
 type PageTitles = Partial<Record<Locale, { title: string; description: string }>>;
+const builtHrefs = new WeakMap<HTMLAnchorElement, string>();
 
 const ENDONYM: Record<Locale, { name: string; short: string }> = {
   "zh-Hant": { name: "繁體中文", short: "中" },
@@ -64,8 +65,8 @@ export function applyPublicPageLocale(root: Document, locale: Locale) {
   });
   // Same-site links keep the language; the built href is the Chinese one.
   root.querySelectorAll<HTMLAnchorElement>("a[href^='/'], a[href^='?']").forEach((anchor) => {
-    const built = anchor.getAttribute("data-i18n-href") ?? anchor.getAttribute("href")!;
-    anchor.setAttribute("data-i18n-href", built);
+    const built = builtHrefs.get(anchor) ?? anchor.getAttribute("href")!;
+    builtHrefs.set(anchor, built);
     anchor.setAttribute("href", /^\/privacy\/?$/.test(built)
       ? locale === DEFAULT_LOCALE ? "/privacy/" : `/privacy/${locale}/`
       : localizedHref(built, locale));
@@ -121,7 +122,10 @@ function mountSwitcher(root: Document, locale: Locale, onChange: (locale: Locale
     }
   };
   show(locale);
-  select.addEventListener("change", () => onChange(select.value as Locale));
+  select.addEventListener("change", () => {
+    const next = LOCALES.find(option => option === select.value);
+    if (next) onChange(next);
+  });
   label.append(face, select);
   actions.prepend(label);
   return show;
