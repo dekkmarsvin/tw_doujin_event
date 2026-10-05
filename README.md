@@ -8,10 +8,10 @@
 |---|---|
 | 一般參觀者 | [公開網站](https://map.kotoban.top/)：選擇活動、搜尋社團與攤位、查看地圖、收藏與安排每日行程；不需登入。 |
 | 參展社團 | [社團入口](https://map.kotoban.top/circle)：以 email 一次性連結登入，認領後維護介紹、作品標籤、連結與代表圖，預覽公開結果或刪除補充資料。 |
-| 主辦單位 | [主辦工作區](https://map.kotoban.top/organizer)：由管理者建立候選活動並邀請負責人，在桌機上設定日期與場館、匯入 CSV／XLSX 並維護攤位清單、編輯地圖、檢查、預覽及送審；管理者核准後由系統執行發布。 |
+| 主辦單位 | [主辦工作區](https://map.kotoban.top/organizer)：開放申請時可登入申請活動，經管理者核准後取得候選活動；也可由管理者直接建立並邀請負責人。在桌機上設定日期與場館、匯入 CSV／XLSX 並維護攤位清單、編輯地圖、檢查、預覽及送審；內容經核准後由系統執行發布。 |
 | 網站管理者 | [管理入口](https://map.kotoban.top/admin)：認領審核、撤下補充資料、管理者名單、停用帳號與地圖審閱／候選匯出；未登入時先到社團入口登入。活動核准與發布仍在主辦工作區。 |
 
-收藏與行程只存在目前瀏覽器，可匯出 JSON／CSV 備份；一般介面尚未提供匯入或跨裝置同步。已下載的場刊與地圖支援離線閱讀。
+收藏與行程保存在目前瀏覽器，可匯出完整 JSON 備份並從備份復原，也可匯出 CSV。帶到手機或分享給朋友使用短網址與 QR Code，只分享勾選的本場行程，不包含私人備註、群組、購買項目或預算；兩台裝置之後的修改不會自動同步。已下載的場刊與地圖支援離線閱讀，詳細規則見[收藏與走訪規劃契約](docs/contracts/planning.md)。
 
 已發布活動以 [published-events.json](data/published-events.json) 為準。主辦[首次發布](https://github.com/dekkmarsvin/tw_doujin_event/issues/212)與[發布後更正](https://github.com/dekkmarsvin/tw_doujin_event/issues/190)均已有實際交付紀錄；驗收仍保留工程補救與人工操作紀錄。
 

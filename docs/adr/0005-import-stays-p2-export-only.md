@@ -1,6 +1,6 @@
 # ADR-0005：匯入維持 P2，一般介面只保留安全匯出
 
-- 狀態：已定案（2026-08-06）
+- 狀態：部分被取代（原決策 2026-08-06）；[ADR-0078](./0078-own-planning-backups-can-be-imported.md) 解除讀者完整 JSON 備份的匯入分期並另定復原規則；CSV 與外部服務匯入仍維持 P2。
 - 相關契約：[收藏與走訪規劃契約](../contracts/planning.md#匯出與匯入分期)、[資料匯入契約](../contracts/data-import.md)
 
 ## 脈絡
