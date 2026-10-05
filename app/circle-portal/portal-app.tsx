@@ -402,7 +402,7 @@ export default function CirclePortalApp() {
     </header>
 
     {session && preferences.error && <p className={styles.error} role="alert">
-      {t("通知語言尚未儲存。")} {portalNotice(preferences.error, locale)}
+      {preferences.unsavedLocale && t("通知語言尚未儲存。")} {portalNotice(preferences.error, locale)}
       <button type="button" className={styles.inlineButton} disabled={preferences.loading || preferences.busy} onClick={preferences.conflict || !preferences.unsavedLocale ? preferences.reload : preferences.retry}>
         {preferences.conflict || !preferences.unsavedLocale ? t("重新載入設定") : t("重試儲存通知語言")}
       </button>

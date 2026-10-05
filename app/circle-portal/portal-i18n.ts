@@ -7,8 +7,7 @@ import { translate, type MessageParams } from "../i18n/messages";
 import { PORTAL_MESSAGES } from "./portal-messages";
 import { PORTAL_ERROR_MESSAGES } from "./portal-error-messages";
 
-export type PortalNotice = string | { text: string; params: MessageParams } | { error: unknown };
-export const notice = (text: string, params: MessageParams): PortalNotice => ({ text, params });
+export type PortalNotice = string | { error: unknown };
 export const noticeError = (error: unknown): PortalNotice => ({ error });
 
 /** Unknown field errors and manually authored reasons remain readable. */
@@ -18,7 +17,6 @@ export function portalText(text: string, locale: Locale, params?: MessageParams)
 
 export function portalNotice(value: PortalNotice, locale: Locale): string {
   if (typeof value === "string") return portalText(value, locale);
-  if ("text" in value) return portalText(value.text, locale, value.params);
   const error = value.error;
   if (error instanceof PortalError) {
     if (locale === "zh-Hant") return error.message;
