@@ -69,8 +69,8 @@ async function createReferenceSelection(candidateId, cookie, expectedVersion = 1
 async function signIn(email, audience = "circle") {
   await handlers.requestLink(request("/api/auth/request-link", "POST", { email, turnstileToken: "solved", audience }));
   const path = audience === "organizer" ? "organizer" : "circle";
-  const token = sent.at(-1).text.match(new RegExp(`/${path}\\?login=([^\\s]+)`))[1];
-  return cookieFrom(await handlers.verify(request("/api/auth/verify", "POST", { token: decodeURIComponent(token) })));
+  const token = new URL(sent.at(-1).text.split("\n").find(line => line.startsWith(`${ORIGIN}/${path}?`))).searchParams.get("login");
+  return cookieFrom(await handlers.verify(request("/api/auth/verify", "POST", { token })));
 }
 
 // Built once: `ensureTables` memoizes on the repository closure, so a fresh
@@ -175,7 +175,9 @@ test("admin invitation creates an organizer event entry that only its owner can 
   assert.equal(created.status, 201);
   const body = await created.json();
   assert.match(body.candidateId, /^[0-9a-f-]{36}$/);
-  assert.match(sent.at(-1).text, /\/organizer\?login=/);
+  const loginUrl = new URL(sent.at(-1).text.split("\n").find(line => line.startsWith(`${ORIGIN}/organizer?`)));
+  assert.ok(loginUrl.searchParams.get("login"));
+  assert.equal(loginUrl.searchParams.get("lang"), "zh-Hant");
 
   const ownerCookie = await signIn("owner@example.test", "organizer");
   const listed = await handlers.listOrganizerCandidates(request("/api/organizer/events", "GET", undefined, ownerCookie));

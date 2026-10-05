@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
+import { parse } from "parse5";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer, isRunnableDevEnvironment } from "vite";
 
@@ -131,9 +132,18 @@ for (const scenario of ["sink", "sandbox", "denied", "production", "sandbox-reje
       assert.ok(init.signal instanceof AbortSignal);
       const form = init.body;
       assert.equal(form.get("to"), email);
-      const link = form.get("text").split("\n").find(line => line.startsWith("https://preview.example/circle?login="));
+      const link = form.get("text").split("\n").find(line => line.startsWith("https://preview.example/circle?"));
       assert.ok(link, "plain-text action URL stays alone on its line");
-      assert.ok(form.get("html").includes(`href="${link}"`), "the same HTML action URL reaches the transport");
+      const destination = new URL(link);
+      assert.ok(destination.searchParams.get("login"));
+      assert.equal(destination.searchParams.get("lang"), "zh-Hant");
+      const nodes = [parse(form.get("html"))];
+      const hrefs = [];
+      for (const node of nodes) {
+        nodes.push(...(node.childNodes ?? []));
+        if (node.tagName === "a") hrefs.push(node.attrs.find(attribute => attribute.name === "href")?.value);
+      }
+      assert.ok(hrefs.includes(link), "the same HTML action URL reaches the transport");
       mail.push(form);
       if (scenario.endsWith("timeout")) throw new DOMException(`${email} ${link} fixture-key`, "TimeoutError");
       if (scenario.endsWith("network")) throw new TypeError(`${email} ${link} fixture-key`);
@@ -153,7 +163,11 @@ for (const scenario of ["sink", "sandbox", "denied", "production", "sandbox-reje
     }
     assert.equal(mail.length, scenario === "sink" || scenario === "denied" ? 0 : 1);
     const captured = await repository.latestPreviewMail(email);
-    if (scenario === "sink") assert.match(captured.text, /^https:\/\/preview.example\/circle\?login=\S+$/m);
+    if (scenario === "sink") {
+      const destination = new URL(captured.text.split("\n").find(line => line.startsWith("https://preview.example/circle?")));
+      assert.ok(destination.searchParams.get("login"));
+      assert.equal(destination.searchParams.get("lang"), "zh-Hant");
+    }
     else assert.equal(captured, null);
     assert.deepEqual(errors, scenario === "sandbox-rejected" ? [`Mailgun rejected the message (403). ${rejection.slice(0, 300)}`] : []);
     const result = scenario === "sink" ? { result: "preview_sink", providerId: null }
