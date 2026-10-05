@@ -124,11 +124,11 @@ try {
     assert.equal(await page.evaluate(() => window.history.length), history, "switching adds no history entry");
     assert.equal(await page.getByRole("status").count(), 1, "the dead-link notice is still shown");
     assert.equal(await page.getByRole("link", { name: "ログイン", exact: true }).getAttribute("href"), "/circle?lang=ja");
-    // The reader map is not translated yet, so it must not claim to be Japanese.
     await page.getByRole("link", { name: `配置マップを開く：${events[0].name}`, exact: true }).click();
     await page.locator("[data-slot-code]").first().waitFor();
     assert.match(page.url(), /[?&]lang=ja(&|$)/, "the language travels with the reader");
-    assert.equal(await page.evaluate(() => document.documentElement.lang), "zh-Hant");
+    assert.equal(await page.evaluate(() => document.documentElement.lang), "ja");
+    await page.getByRole("searchbox", { name: "サークル・スペース・作品を検索" }).or(page.getByRole("textbox", { name: "サークル・スペース・作品を検索" })).first().waitFor();
     await page.goto(new URL("/?event=unknown-event", page.url()).href);
     await page.getByRole("heading", { name: "イベントを選択" }).waitFor({ timeout: 5000 });
     await page.getByRole("banner").getByRole("combobox", { name: "表示言語" }).selectOption("zh-Hant");

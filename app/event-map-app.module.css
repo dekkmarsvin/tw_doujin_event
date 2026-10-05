@@ -106,8 +106,9 @@
 .storageError { max-width:150px; color:#a43e30; font-size:calc(12px * var(--ui-font-scale,1)); }
 @media (min-width:761px) {
   .shell:global(.app-shell) { height:100vh; height:100dvh; display:grid; grid-template-rows:auto minmax(0,1fr); min-height:0; }
-  /* Brand, event, search, map/browse switch, tools: the switch stays in the top row. */
-  .shell :global(.topbar) { height:auto; min-height:72px; grid-template-columns:auto minmax(240px,max-content) minmax(240px,1fr) auto auto; gap:12px; padding:8px 16px; }
+  /* Brand, event, search, map/browse switch, language, tools: the switch stays in the top row. */
+  .shell :global(.topbar) { height:auto; min-height:72px; grid-template-columns:auto minmax(240px,max-content) minmax(240px,1fr) auto auto auto; gap:12px; padding:8px 16px; }
+  .languageSlot { display:flex; }
   .shell :global(.event),.shell :global(.event)>div,.shell :global(.search) { min-width:0; }
   .shell :global(.event) .eventLink { min-height:44px; }
   .shell :global(.brand) { gap:8px; }
@@ -169,13 +170,19 @@
 }
 @media (min-width:761px) and (max-width:1050px) {
   .shell .workspace { grid-template-columns:248px minmax(0,1fr); }
-  .shell :global(.topbar) { grid-template-columns:auto minmax(0,1fr) auto auto; }
-  .shell :global(.search) { grid-column:1/-1; grid-row:2; }
   .shell :global(.brand)>div { display:none; }
+}
+/* Until one row holds brand, event, search, switch, language and tools, search
+   and language take a second row so the event name keeps the top row's room. */
+@media (min-width:761px) and (max-width:1359px) {
+  .shell :global(.topbar) { grid-template-columns:auto minmax(0,1fr) auto auto; }
+  .shell :global(.search) { grid-column:1/-2; grid-row:2; }
+  .languageSlot { grid-column:-2/-1; grid-row:2; justify-self:end; }
 }
 @media (min-width:1051px) {
   .shell[data-text-scale="large"] :global(.topbar),.shell[data-text-scale="extra"] :global(.topbar) { grid-template-columns:auto minmax(100px,1fr) auto auto; }
-  .shell[data-text-scale="large"] :global(.search),.shell[data-text-scale="extra"] :global(.search) { grid-column:1/-1; grid-row:2; }
+  .shell[data-text-scale="large"] :global(.search),.shell[data-text-scale="extra"] :global(.search) { grid-column:1/-2; grid-row:2; }
+  .shell[data-text-scale="large"] .languageSlot,.shell[data-text-scale="extra"] .languageSlot { grid-column:-2/-1; grid-row:2; justify-self:end; }
 }
 @media (max-width:760px) {
   .desktopTabs { display:none; }

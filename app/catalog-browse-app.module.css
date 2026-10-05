@@ -98,6 +98,8 @@ a.event:hover>span:first-child { text-decoration:underline; text-underline-offse
   .undo { bottom:calc(76px + env(safe-area-inset-bottom)); }
   .identity>button { grid-column:3; grid-row:1; }
   .readerLogin { grid-column:4; grid-row:1; }
+  /* The top row has no room left on a phone; the language gets its own line under it. */
+  .languageSwitcher { grid-column:1/-1; grid-row:2; justify-self:start; }
   .main { padding:12px 12px calc(96px + env(safe-area-inset-bottom)); }
   .grid,.textList { grid-template-columns:minmax(0,1fr); }
   .grid { gap:16px; }
