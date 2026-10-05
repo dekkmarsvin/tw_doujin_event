@@ -1,5 +1,7 @@
 import { type AccountNotificationKind, type AccountNotificationPreferences, type NotificationItem } from "../app/account-notifications";
 import { nextNotificationSlot, notificationRetryDelay } from "../app/review-notifications";
+import type { AccountNotificationPreferencesUpdate } from "../app/i18n/api-contract";
+import type { Locale } from "../app/i18n/locale";
 
 type NotificationSource = { kind: AccountNotificationKind; occurrence: string; now: number; detail?: string; detailFromSource?: boolean };
 export type NotificationBatch = { id: string; account_id: string; lane: string; lease_token: string; attempts: number; first_attempt_at: number };
@@ -69,21 +71,33 @@ export function createAccountNotificationRepository(database: D1Database, ensure
   }
   async function getAccountNotificationPreferences(accountId: string): Promise<AccountNotificationPreferences> {
     await ensureTables();
-    return await database.prepare("SELECT cadence, version FROM account_notification_preferences WHERE account_id = ?1")
-      .bind(accountId).first<AccountNotificationPreferences>() ?? { cadence: "daily", version: 0 };
+    return await database.prepare("SELECT cadence, version, locale FROM account_notification_preferences WHERE account_id = ?1")
+      .bind(accountId).first<AccountNotificationPreferences>() ?? { cadence: "daily", version: 0, locale: null };
   }
-  async function saveAccountNotificationPreferences(input: AccountNotificationPreferences & { accountId: string; sessionId: string; now: number }) {
+  async function saveAccountNotificationPreferences(input: AccountNotificationPreferencesUpdate & { accountId: string; sessionId: string; now: number }) {
     await ensureTables();
     const token = crypto.randomUUID();
+    // Language changes never enter the cadence transaction, including the
+    // first preference row. daily/0 are exactly the absent-row defaults.
+    if (input.cadence === undefined) {
+      const result = await database.prepare(`INSERT INTO account_notification_preferences (account_id, cadence, version, enabled_since, write_token, locale)
+        SELECT ?1, 'daily', 1, 0, ?6, ?2 WHERE (?4 = 0 OR EXISTS (SELECT 1 FROM account_notification_preferences WHERE account_id = ?1))
+        AND EXISTS (SELECT 1 FROM accounts a JOIN sessions s ON s.account_id = a.id WHERE a.id = ?1
+          AND a.disabled_at IS NULL AND a.deletion_started_at IS NULL AND s.id = ?5 AND s.revoked_at IS NULL AND s.expires_at > ?3)
+        ON CONFLICT(account_id) DO UPDATE SET locale = excluded.locale, version = account_notification_preferences.version + 1,
+          write_token = ?6 WHERE account_notification_preferences.version = ?4`)
+        .bind(input.accountId, input.locale!, input.now, input.version, input.sessionId, token).run();
+      return result.meta.changes === 1 ? getAccountNotificationPreferences(input.accountId) : null;
+    }
     const results = await database.batch([
-      database.prepare(`INSERT INTO account_notification_preferences (account_id, cadence, version, enabled_since, write_token)
-        SELECT ?1, ?2, 1, ?3, ?6 WHERE (?4 = 0 OR EXISTS (SELECT 1 FROM account_notification_preferences WHERE account_id = ?1))
+      database.prepare(`INSERT INTO account_notification_preferences (account_id, cadence, version, enabled_since, write_token, locale)
+        SELECT ?1, ?2, 1, ?3, ?6, ?7 WHERE (?4 = 0 OR EXISTS (SELECT 1 FROM account_notification_preferences WHERE account_id = ?1))
         AND EXISTS (SELECT 1 FROM accounts a JOIN sessions s ON s.account_id = a.id WHERE a.id = ?1
           AND a.disabled_at IS NULL AND a.deletion_started_at IS NULL AND s.id = ?5 AND s.revoked_at IS NULL AND s.expires_at > ?3)
         ON CONFLICT(account_id) DO UPDATE SET cadence = excluded.cadence, version = account_notification_preferences.version + 1,
           enabled_since = CASE WHEN account_notification_preferences.cadence = 'off' THEN ?3 ELSE account_notification_preferences.enabled_since END,
-          write_token = ?6 WHERE account_notification_preferences.version = ?4`)
-        .bind(input.accountId, input.cadence, input.now, input.version, input.sessionId, token),
+          write_token = ?6, locale = COALESCE(?7, account_notification_preferences.locale) WHERE account_notification_preferences.version = ?4`)
+        .bind(input.accountId, input.cadence, input.now, input.version, input.sessionId, token, input.locale ?? null),
       database.prepare(`UPDATE account_notification_items SET state = CASE WHEN ?2 = 'off' THEN 'cancelled' ELSE state END,
         completed_at = CASE WHEN ?2 = 'off' THEN ?3 ELSE completed_at END, due_at = ?4
         WHERE account_id = ?1 AND kind = 'circle.updated' AND state = 'pending'
@@ -152,8 +166,11 @@ export function createAccountNotificationRepository(database: D1Database, ensure
       AND ${eligible} AND EXISTS (SELECT 1 FROM account_notification_batches b WHERE b.id = n.batch_id
         AND b.lease_token = ?2 AND b.state = 'pending' AND b.lease_until > ?3 AND b.retry_at <= ?3)
       ORDER BY n.occurred_at, n.id`).bind(batch.id, batch.lease_token, now).all<NotificationItem>()).results;
-    const account = await database.prepare("SELECT email FROM accounts WHERE id = ?1 AND disabled_at IS NULL AND deletion_started_at IS NULL").bind(batch.account_id).first<{ email: string }>();
-    return { items, to: account?.email ?? null };
+    const account = await database.prepare(`SELECT a.email, p.locale FROM accounts a
+      LEFT JOIN account_notification_preferences p ON p.account_id = a.id
+      WHERE a.id = ?1 AND a.disabled_at IS NULL AND a.deletion_started_at IS NULL`)
+      .bind(batch.account_id).first<{ email: string; locale: Locale | null }>();
+    return { items, to: account?.email ?? null, locale: account?.locale ?? null };
   }
   async function finishAccountNotificationBatch(batch: NotificationBatch, state: "accepted" | "cancelled" | "failed", now: number, providerId: string | null = null, errorCode: string | null = null) {
     await database.batch([

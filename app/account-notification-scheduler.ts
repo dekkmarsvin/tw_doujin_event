@@ -21,7 +21,7 @@ export async function runAccountNotificationTick(input: { repository: IdentityRe
         results.push({ batchId: batch.id, result: "cancelled" });
         continue;
       }
-      const id = await input.sendMail({ purpose: "account_notification", to: message.to, ...accountNotificationLetter(input.origin, message.items) });
+      const id = await input.sendMail({ purpose: "account_notification", to: message.to, ...accountNotificationLetter(input.origin, message.items, message.locale ?? "zh-Hant") });
       await input.repository.finishAccountNotificationBatch(batch, "accepted", now(), id === "accepted" || id === "preview-sink" ? null : id);
       results.push({ batchId: batch.id, result: "accepted" });
     } catch (error) {

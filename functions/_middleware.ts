@@ -10,6 +10,7 @@
 
 import { isHtmlRoute, secureHtmlResponse, unconditionalHtmlRequest } from "./_html-security";
 import { applyCircleShareImage } from "./_circle-share-image";
+import { API_ERROR_CODES, type ApiErrorCode } from "../app/i18n/api-error-codes";
 
 const SAFE_METHODS = new Set(["GET", "HEAD"]);
 
@@ -23,6 +24,9 @@ function json(body: unknown, status: number) {
 export const onRequest: PagesFunction<PortalEnv> = async (context) => {
   const { request } = context;
   const url = new URL(request.url);
+  const circleErrors = API_ERROR_CODES.origin_mismatch.endpoints.some(endpoint =>
+    new RegExp(`^${endpoint.replace(/:[^/]+/g, "[^/]+")}$`).test(url.pathname));
+  const errorCode = (code: ApiErrorCode) => circleErrors ? { code } : {};
 
   if (!SAFE_METHODS.has(request.method)) {
     const origin = request.headers.get("origin");
@@ -30,7 +34,7 @@ export const onRequest: PagesFunction<PortalEnv> = async (context) => {
     // This server-to-server route authenticates exact body bytes with HMAC.
     // Its JSON requirement remains below; every cookie-authenticated write
     // still requires the same-origin header.
-    if (!githubWebhook && origin !== url.origin) return json({ error: "來源不符，請重新整理後再試。" }, 403);
+    if (!githubWebhook && origin !== url.origin) return json({ error: "來源不符，請重新整理後再試。", ...errorCode("origin_mismatch") }, 403);
 
     const contentType = (request.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
     const privateFileUpload = contentType === "multipart/form-data" && (
@@ -43,7 +47,7 @@ export const onRequest: PagesFunction<PortalEnv> = async (context) => {
         && (/^\/api\/organizer\/events\/[^/]+\/maps\/[^/]+\/background$/.test(url.pathname)
           || /^\/api\/organizer\/events\/[^/]+\/image$/.test(url.pathname)))
     );
-    if (contentType !== "application/json" && !privateFileUpload) return json({ error: "請求格式無效。" }, 415);
+    if (contentType !== "application/json" && !privateFileUpload) return json({ error: "請求格式無效。", ...errorCode("invalid_content_type") }, 415);
   }
 
   const html = SAFE_METHODS.has(request.method) && isHtmlRoute(url.pathname);

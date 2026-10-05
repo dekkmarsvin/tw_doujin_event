@@ -36,7 +36,7 @@ beforeEach(async () => {
 });
 async function signIn(email) {
   await handlers.requestLink(request("/api/auth/request-link", "POST", { email, audience: "organizer", turnstileToken: "test" }));
-  const token = decodeURIComponent(sent.at(-1).text.match(/\/organizer\?login=([^\s]+)/)[1]);
+  const token = new URL(sent.at(-1).text.split("\n").find(line => line.startsWith(`${ORIGIN}/organizer?`))).searchParams.get("login");
   const response = await handlers.verify(request("/api/auth/verify", "POST", { token }));
   assert.equal(response.status, 200);
   return response.headers.get("set-cookie").split(";")[0];

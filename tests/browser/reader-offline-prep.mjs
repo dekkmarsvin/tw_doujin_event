@@ -37,6 +37,20 @@ try {
   assert.equal(stored.visitPlans[0].status, "visited", "marking visited works offline");
   assert.equal(stored.favorites[0].memo, "離線備註", "the plan stays in the same store");
   await journey.capture(page, "reader-offline-prep-offline");
+  const planningBeforeSwitch = await page.evaluate((key) => localStorage.getItem(key), PLAN_KEY);
+  const originalUrl = new URL(page.url());
+  for (const [locale, tabName] of [["en", "Plan 1"], ["ja", "プラン 1"], ["zh-Hant", "行程 1"]]) {
+    await page.getByRole("combobox", { name: /^(介面語言|Language|表示言語)$/ }).selectOption(locale);
+    await page.getByRole("tab", { name: tabName, exact: true }).waitFor();
+    assert.equal(await page.locator("html").getAttribute("lang"), locale);
+    assert.equal(new URL(page.url()).searchParams.get("lang"), locale === "zh-Hant" ? null : locale);
+    for (const key of ["event", "day", "selected", "q"]) {
+      assert.equal(new URL(page.url()).searchParams.get(key), originalUrl.searchParams.get(key));
+    }
+    assert.equal(await page.evaluate((key) => localStorage.getItem(key), PLAN_KEY), planningBeforeSwitch,
+      "switching language offline preserves the saved plan and original memo");
+    await journey.capture(page, `reader-offline-prep-${locale}`);
+  }
   await page.context().setOffline(false);
   await page.close();
   await journey.finish();

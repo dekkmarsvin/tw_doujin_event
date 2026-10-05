@@ -13,7 +13,7 @@ const { IDENTITY_TABLES, IDENTITY_INDEXES, IDENTITY_COLUMN_MIGRATIONS } = await 
 const { initialVenueReferences } = await load("/app/organizer-reference-catalog.ts");
 const { INITIAL_ORGANIZER_VENUE_CATALOG, organizerVenueNameKey } = await load("/app/organizer-venue-catalog.ts");
 const version = JSON.parse(await readFile(new URL("../db/identity-runtime-version.json", import.meta.url), "utf8"));
-const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: "export default {fetch(){return new Response('ok')}}", d1Databases: Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`DB${i}`, `runtime-init-${i}`])) }));
+const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: "export default {fetch(){return new Response('ok')}}", d1Databases: Object.fromEntries(Array.from({ length: 13 }, (_, i) => [`DB${i}`, `runtime-init-${i}`])) }));
 after(async () => { await mf.dispose(); await vite.close(); });
 let nextDb = 0;
 const freshDatabase = () => mf.getD1Database(`DB${nextDb++}`);
@@ -105,6 +105,23 @@ test("version 5 upgrades add planning shares and their indexes without losing ex
   assert.equal(await count(database, "accounts"), 1);
   const indexes = await database.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'planning_shares' AND sql IS NOT NULL ORDER BY name").all();
   assert.deepEqual(indexes.results.map(row => row.name), ["planning_shares_expiry_idx", "planning_shares_ip_idx"]);
+});
+
+test("version 6 upgrades an existing notification preference table without losing its rows", async () => {
+  const database = await preparedDatabase();
+  await database.prepare("DROP TABLE account_notification_preferences").run();
+  await database.prepare(`CREATE TABLE account_notification_preferences (account_id TEXT PRIMARY KEY NOT NULL,
+    cadence TEXT NOT NULL CHECK (cadence IN ('off','hourly','daily')), version INTEGER NOT NULL,
+    enabled_since INTEGER NOT NULL, write_token TEXT NOT NULL)`).run();
+  await database.prepare("INSERT INTO account_notification_preferences VALUES ('keep', 'off', 3, 17, 'original')").run();
+  await database.prepare("UPDATE identity_runtime_state SET version = 6").run();
+  const repo = createIdentityRepository(database);
+  assert.deepEqual(await repo.getAccountNotificationPreferences("keep"), { cadence: "off", version: 3, locale: null });
+  assert.equal((await marker(database)).version, version.version);
+  assert.deepEqual(await database.prepare("SELECT * FROM account_notification_preferences WHERE account_id = 'keep'").first(),
+    { account_id: "keep", cadence: "off", version: 3, enabled_since: 17, write_token: "original", locale: null });
+  const columns = (await database.prepare("PRAGMA table_info(account_notification_preferences)").all()).results;
+  assert.equal(columns.find(column => column.name === "locale").type, "TEXT");
 });
 
 test("missing or stale marker reruns initialization without overwriting canonical references", async () => {

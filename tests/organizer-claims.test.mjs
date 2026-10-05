@@ -25,7 +25,7 @@ function request(candidate, cookie, decision, claimId = "claim-a") {
 }
 async function signIn(email) {
   await handlers.requestLink(new Request(`${origin}/api/auth/request-link`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ email, audience: "organizer", turnstileToken: "test" }) }));
-  const token = new URL(mail.at(-1).text.match(/https:\/\/\S+\/organizer\?login=\S+/)[0]).searchParams.get("login");
+  const token = new URL(mail.at(-1).text.split("\n").find(line => line.startsWith(`${origin}/organizer?`))).searchParams.get("login");
   const verified = await handlers.verify(new Request(`${origin}/api/auth/verify`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ token }) }));
   return verified.headers.get("set-cookie").split(";")[0];
 }
