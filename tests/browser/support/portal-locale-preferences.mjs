@@ -80,13 +80,17 @@ export async function verifyLocalePreferences(journey) {
 
   // A newly signed-in account with no preference is initialized once. This
   // uses another document, so rerenders cannot be mistaken for a new session.
-  let initialized = 0;
+  let initialized = 0, firstRead = true;
   const fresh = await journey.page({ url: `${base}/circle?event=sample&lang=en`, routes: async p => {
     await p.route("**/api/**", async route => {
       const path = new URL(route.request().url()).pathname;
       if (path === "/api/auth/session") return route.fulfill({ json: { email: "new-locale@example.test", isAdmin: false, isMapContributor: false } });
       if (path === "/api/claims") return route.fulfill({ json: { claims: [], eventId: "sample" } });
       if (path === "/api/account/notification-preferences") {
+        if (route.request().method() === "GET" && firstRead) {
+          firstRead = false;
+          return route.fulfill({ status: 503, json: { code: "service_unavailable", error: "無法載入通知設定。" } });
+        }
         if (route.request().method() === "PUT") {
           initialized++;
           assert.deepEqual(route.request().postDataJSON(), { version: 0, locale: "en" });
@@ -98,6 +102,12 @@ export async function verifyLocalePreferences(journey) {
     });
   } });
   await fresh.getByRole("button", { name: "Account", exact: true }).waitFor();
+  await fresh.getByRole("alert").waitFor();
+  assert.equal(initialized, 0);
+  const initializeWrite = fresh.waitForResponse(r => r.request().method() === "PUT" && new URL(r.url()).pathname === "/api/account/notification-preferences");
+  await fresh.getByRole("button", { name: "Reload settings", exact: true }).click();
+  await initializeWrite;
+  await fresh.getByRole("alert").waitFor({ state: "hidden" });
   await fresh.locator("#portal-search").fill("unclaimed name");
   await fresh.getByRole("button", { name: "Account", exact: true }).click();
   assert.equal(initialized, 1);

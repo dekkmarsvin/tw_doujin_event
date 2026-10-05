@@ -28,6 +28,7 @@ export function useAccountPreferences(email: string | undefined, initialLocale?:
     let active = true;
     let current = { ...INITIAL };
     let desiredLocale: Locale | null = null;
+    let initialReadComplete = false;
     const update = (patch: Partial<State>) => {
       current = { ...current, ...patch };
       if (active) setState(current);
@@ -57,6 +58,7 @@ export function useAccountPreferences(email: string | undefined, initialLocale?:
       try {
         const saved = await readAccountNotificationPreferences();
         if (!active) return;
+        initialReadComplete = true;
         // A conflict reload shows the server's state before another explicit
         // save. It must not replay a stale selection over a concurrent change.
         if (initialize && !desiredLocale && saved.locale === null) desiredLocale = localeAtEntry.current ?? null;
@@ -70,7 +72,7 @@ export function useAccountPreferences(email: string | undefined, initialLocale?:
       chooseLocale(locale) { desiredLocale = locale; update({ unsavedLocale: locale, savedNow: false }); if (!current.error) void write(); },
       chooseCadence(cadence) { if (!current.error && cadence !== current.saved?.cadence) void write(cadence); },
       retry() { if (!current.saved) void read(true); else void write(); },
-      reload() { if (!current.busy && !current.loading) void read(false); },
+      reload() { if (!current.busy && !current.loading) void read(!initialReadComplete); },
     };
     void read(true);
     return () => { active = false; actions.current = null; };
