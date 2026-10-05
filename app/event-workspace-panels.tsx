@@ -349,7 +349,7 @@ export function SearchResults({ records, circleCount, catalogStatus, catalogErro
       {Array.from({ length: 8 }, (unused, index) => <article key={index} className={styles.resultSkeleton}><span /><span /></article>)}
     </div> : catalogStatus === "error" ? <div className={styles.empty}>
       <b>{t("catalogFailed")}</b>
-      <p>{catalogError || t("catalogFailedHint")}</p>
+      <p>{locale === "zh-Hant" && catalogError ? catalogError : t("catalogFailedHint")}</p>
     </div> : records.length === 0 ? <div className={styles.empty}><b>{t("noResults")}</b><p>{query.trim() ? t("keepQuery", { query: query.trim() }) : t("removeFilters")}</p>{activeFilters.length > 0 && <div className={styles.emptyFilters} aria-label={t("appliedFilters")}>{activeFilters.map((filter) => <button key={filter.id} onClick={filter.onClear} aria-label={t("removeFilter", { label: filter.label })}>{filter.label}<UiIcon name="close" /></button>)}</div>}<button onClick={activeFilters.length > 0 ? onClearFilters : onClearQuery}>{activeFilters.length > 0 ? t("clearFilters") : t("clearQuery")}</button></div> : <div className={styles.resultList}>
       {records.slice(0, visibleCount).map((record) => {
         const plan = plans.get(record.circle.id);
@@ -361,7 +361,7 @@ export function SearchResults({ records, circleCount, catalogStatus, catalogErro
         // where the reader is asking why a row is here.
         const reasons = density === "informative" ? matchReasons.get(record.recordId) ?? [] : [];
         return <article key={record.recordId} className={`${selectedId === record.recordId ? styles.selectedResult : ""} ${density === "compact" ? styles.compactResult : ""}`}>
-          <a href={circlePath(record.placement.eventId, record.circle.id)} className={`${styles.resultMain} ${mediaCount > 0 && thumbnail ? styles.resultWithMedia : ""}`} onClick={(click) => {
+          <a href={localizedHref(circlePath(record.placement.eventId, record.circle.id), locale)} className={`${styles.resultMain} ${mediaCount > 0 && thumbnail ? styles.resultWithMedia : ""}`} onClick={(click) => {
             if (click.button !== 0 || click.metaKey || click.ctrlKey || click.shiftKey || click.altKey) return;
             click.preventDefault();
             onSelect(record);
@@ -513,7 +513,7 @@ export function CircleDetails({ record, sharedRecords, movedDestination = null, 
   const activeMediaIndex = mediaSelection.circleId === record.circle.id ? mediaSelection.index : 0;
   const visibleLinks = compact ? record.circle.externalLinks.slice(0, 6) : record.circle.externalLinks;
   const gallery = <CircleMediaGallery media={record.circle.media} activeIndex={activeMediaIndex} compact={compact} readOnly={readOnly} locale={locale} onActiveIndex={(index) => setMediaSelection({ circleId: record.circle.id, index })} onOpenFull={onOpenFull} />;
-  const header = <div className={styles.detailHeader}><div className={styles.placementMeta} aria-label={t("placement", { code: record.code, day: record.day })}><strong className={styles[record.tone]}>{record.code}</strong><span>DAY {record.day}</span><span>{t("allAreas")}</span></div>{!embedded && <button className={styles.detailClose} disabled={readOnly} onClick={onClose} aria-label={t("closeDetails")}><UiIcon name="close" /></button>}</div>;
+  const header = <div className={styles.detailHeader}><div className={styles.placementMeta} aria-label={t("placement", { code: record.code, day: record.day })}><strong className={styles[record.tone]}>{record.code}</strong><span>DAY {record.day}</span><span>{t("allAreas")}</span></div>{!embedded && <button className={styles.detailClose} disabled={readOnly} onClick={onClose} aria-label={t("closeDetails")} data-details-close><UiIcon name="close" /></button>}</div>;
   const title = <div className={styles.title}><div><h2>{record.name}</h2>{(record.circle.circleCategory || record.circle.creatorTypes.length > 0 || record.circle.pen) && <p>{[record.circle.circleCategory, optionList(record.circle.creatorTypes, locale, t("listSeparator")), record.circle.pen].filter(Boolean).join(" · ")}</p>}{record.circle.ageRatings.length > 0 && <small className={styles.rating}>{t("rating", { ratings: optionList(record.circle.ageRatings, locale, t("listSeparator")) })}</small>}</div><button className={`${styles.heart} ${favorite ? styles.saved : ""}`} disabled={readOnly} onClick={onToggleFavorite} aria-label={favorite ? t("unfavorite") : t("favorite")}><UiIcon name="heart" /></button></div>;
   const actions = <div className={styles.detailActions}><button className={styles.primary} disabled={readOnly} onClick={onTogglePlan}>{plan ? t("removePlan") : t("addPlan")}</button><button disabled={readOnly || plan?.status === "next"} onClick={onSetNext}>{plan?.status === "next" ? t("currentNext") : t("setNext")}</button></div>;
   const retiredNotice = record.placement.status !== "active" && <div className={styles.retiredNotice} role="status">

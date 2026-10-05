@@ -138,6 +138,21 @@ try {
     await page.close();
   }
 
+  {
+    // #524: typing in browse rewrites the URL; the language stays in it, even
+    // when the trimmed query (and so the browse key) does not change.
+    const page = await journey.page({ event: "sample", params: "&view=browse&lang=ja", viewport: { width: 390, height: 844 } });
+    const search = page.getByRole("textbox", { name: "作品・ジャンル・サークルを検索" });
+    await search.waitFor();
+    await search.fill(" ");
+    await search.press("End");
+    assert.match(page.url(), /[?&]lang=ja(&|$)/, "a blank query keeps the language");
+    await search.fill("S0");
+    assert.match(page.url(), /[?&]lang=ja(&|$)/, "a query keeps the language");
+    assert.match(await page.getByRole("link", { name: /^イベントを切り替え|範例創作市集/ }).first().getAttribute("href"), /lang=ja/, "the event link keeps the language for a new tab");
+    await page.close();
+  }
+
   // #439: what a first visit sees at the top, on the narrowest phone and a
   // desktop: "登入" as its own button, never a menu item, whole at every width,
   // and shown without the page asking the server who is reading.

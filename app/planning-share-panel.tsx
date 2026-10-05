@@ -214,10 +214,10 @@ export function ShareItineraryDialog({ eventId, document, onClose }: { eventId: 
         {state.kind === "error" && <p className={styles.errorText} role="alert">{shareFailureMessage(state.failure, locale)}</p>}
         {state.kind === "ready" && <div className={styles.shareResult}>
           <div className={styles.shareLink}>
-            <input readOnly aria-label={t("shortLink")} value={state.url} onFocus={(focused) => focused.currentTarget.select()} />
-            <button onClick={() => void share(state.url)}>{t("copyOrShare")}</button>
+            <input readOnly aria-label={t("shortLink")} value={localizedHref(state.url, locale)} onFocus={(focused) => focused.currentTarget.select()} />
+            <button onClick={() => void share(localizedHref(state.url, locale))}>{t("copyOrShare")}</button>
           </div>
-          <ShortLinkQr url={state.url} />
+          <ShortLinkQr url={localizedHref(state.url, locale)} />
           {message && <p className={styles.okText} role="status">{t(message)}</p>}
         </div>}
       </>}

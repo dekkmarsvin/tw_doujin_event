@@ -148,7 +148,7 @@
   .mapTools .navigationBanner { margin:6px 0 0; width:fit-content; max-width:100%; }
   .mapTools :global(.route) { position:static; transform:none; margin-top:6px; width:fit-content; max-width:100%; min-width:0; box-shadow:none; }
   .mapTools :global(.route) button:last-child { min-width:44px; min-height:44px; }
-  .mapTools :global(.route) button[aria-label="從行程移除下一站"] { font-size:calc(14px * var(--ui-font-scale,1)); }
+  .mapTools :global(.route) button[data-route-remove] { font-size:calc(14px * var(--ui-font-scale,1)); }
   .mapTools .routeMain b { max-width:100%; }
   .mapTools .navigationBanner button { min-height:44px; min-width:44px; }
   .planPanel>.navigationToggle { flex:0 0 auto; align-self:stretch; justify-content:center; min-height:44px; margin:10px; }
@@ -156,7 +156,7 @@
   .detailSlot { min-height:0; flex:0 1 auto; display:flex; overflow:hidden; }
   .mapCanvas :global(button:focus-visible),.desktopTabs button:focus-visible { outline:3px solid #8fac9c; outline-offset:-3px; }
   .rightRail button { min-height:44px; }
-  .rightRail button[aria-label="關閉攤位詳細資訊"] { min-width:44px; }
+  .rightRail button[data-details-close] { min-width:44px; }
   .planningPanel > :first-child { max-height:45%; overflow:auto; flex-shrink:0; }
   /* The open 行程、收藏與顯示 settings may use the whole rail instead of scrolling in 45%. */
   .planningPanel > :first-child:has([role="dialog"]) { max-height:100%; }
@@ -288,9 +288,9 @@
  .mobileTabs { flex:none; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); height:calc(64px + env(safe-area-inset-bottom)); padding:3px 16px env(safe-area-inset-bottom); gap:0; border:0; border-top:1px solid var(--line); background:#fff; }
  .mobilePanel { min-height:0; height:auto; flex:1; display:block; overflow:auto; overscroll-behavior:contain; scroll-padding-block:12px; }
  .mobilePanel>* { width:100%; min-width:0; max-width:none; }
- .mobilePanel[aria-label="探索結果"]:not([hidden]) { display:flex; flex-direction:column; overflow:hidden; }
- .mobilePanel[aria-label="探索結果"]>button { flex:none; }
- .mobilePanel[aria-label="探索結果"]>section { height:auto; min-height:0; }
+ .mobilePanel[data-results-panel]:not([hidden]) { display:flex; flex-direction:column; overflow:hidden; }
+ .mobilePanel[data-results-panel]>button { flex:none; }
+ .mobilePanel[data-results-panel]>section { height:auto; min-height:0; }
  .mobileFilterButton { min-height:44px; padding:8px 16px; border:0; border-bottom:1px solid var(--line); background:var(--surface-soft); text-align:left; font-weight:700; cursor:pointer; }
  .mobileSummary { min-height:0; flex:1; display:flex; flex-direction:column; padding:4px 16px 10px; }
  .mobileSummaryTitle { display:flex; align-items:center; gap:10px; min-width:0; flex:none; }

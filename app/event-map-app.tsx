@@ -842,7 +842,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
 
     </div>
     {navigationMode && <div className={styles.navigationBanner} role="status"><span><UiIcon name="locate" /></span><div><b>{t("navigationTitle", { day: String(day) })}</b><small>{t("navigationProgress", { visited: visitedCount, left: Math.max(0, dayPlan.length - visitedCount) })}{navigationTarget ? t("navigationTarget", { code: navigationTarget.code }) : ""}</small></div>{!desktop && <button onClick={toggleNavigationMode}>{t("exit")}</button>}</div>}
-        {nextRecord && !navigationMode && <div className="route"><span><UiIcon name="external" /></span><button className={styles.routeMain} onClick={() => selectRecord(nextRecord)}><small>{t("nextStop")}</small><b>{nextRecord.code} · {nextRecord.name}</b></button><button onClick={() => updatePlanning((current) => removeFromVisitPlan(current, eventId, day, nextRecord.circle.id))} aria-label={t("removeNextStop")}>{t("removeFromPlan")}</button></div>}
+        {nextRecord && !navigationMode && <div className="route"><span><UiIcon name="external" /></span><button className={styles.routeMain} onClick={() => selectRecord(nextRecord)}><small>{t("nextStop")}</small><b>{nextRecord.code} · {nextRecord.name}</b></button><button onClick={() => updatePlanning((current) => removeFromVisitPlan(current, eventId, day, nextRecord.circle.id))} aria-label={t("removeNextStop")} data-route-remove>{t("removeFromPlan")}</button></div>}
     <div className={styles.codeHint} aria-live={measurement ? undefined : "polite"}>{hintedCode ? t("selectedCode", { code: hintedCode }) : t("selectHint")}</div>
   </>;
 
@@ -858,7 +858,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   }, typeof window === "undefined" ? "https://event.invalid/" : window.location.href);
   const browseUrl = switchReaderViewUrl(event, readerUrl);
   const eventInfo = <div className={styles.eventInfo}><h1>{event.name}</h1>{desktop && <div className={styles.eventMeta}><span>{eventCalendar(event, locale).label}</span><span>{event.venue}</span></div>}</div>;
-  const eventIdentity = onChooseEvent ? <a className={styles.eventLink} href="/" onClick={(click) => {
+  const eventIdentity = onChooseEvent ? <a className={styles.eventLink} href={localizedHref("/", locale)} onClick={(click) => {
     if (click.button !== 0 || click.metaKey || click.ctrlKey || click.shiftKey || click.altKey) return;
     click.preventDefault();
     onChooseEvent();
@@ -917,7 +917,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
             </div>
           </section>}
           {mobileSummary && mobileSheetLevel === "full" && <div className={styles.mobilePanel} onFocusCapture={handleMobilePanelFocus}><CircleDetails record={selected} sharedRecords={sharedRecords} movedDestination={selectedMovedDestination} favorite={selectedFavorite} plan={selectedPlan} groups={planning.favoriteGroups} embedded onClose={closeDetails} {...detailActions} /></div>}
-          <div ref={mobileResultsRef} className={styles.mobilePanel} hidden={mobilePanel !== "results" && !(mobilePanel === "details" && !selected)} tabIndex={-1} aria-label={t("exploreResults")} onFocusCapture={handleMobilePanelFocus}><button className={styles.mobileFilterButton} onClick={() => { rememberMobileResultScroll(); setMobilePanel("filters"); }}>{activeResultFilters.length > 0 ? t("filterCount", { count: activeResultFilters.length }) : t("filtersTitle")}</button>{resultsPanel}</div>
+          <div ref={mobileResultsRef} className={styles.mobilePanel} hidden={mobilePanel !== "results" && !(mobilePanel === "details" && !selected)} tabIndex={-1} aria-label={t("exploreResults")} data-results-panel onFocusCapture={handleMobilePanelFocus}><button className={styles.mobileFilterButton} onClick={() => { rememberMobileResultScroll(); setMobilePanel("filters"); }}>{activeResultFilters.length > 0 ? t("filterCount", { count: activeResultFilters.length }) : t("filtersTitle")}</button>{resultsPanel}</div>
           <div className={styles.mobilePanel} hidden={mobilePanel !== "filters"} onFocusCapture={handleMobilePanelFocus}>{mobileFiltersPanel}</div>
           <div key={day} className={styles.mobilePanel} hidden={mobilePanel !== "plan"} onFocusCapture={handleMobilePanelFocus}>{navigationButton}{planningPanel}</div>
         </div>

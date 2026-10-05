@@ -4,6 +4,7 @@ import { venueAssignmentForArea } from "./event-catalog";
 import { dayDateLabel, eventCalendar, eventDayCalendarDate, shortDate } from "./event-calendar";
 import { placementStatusLabel } from "./circle-records";
 import { DEFAULT_ADVANCED_CIRCLE_SEARCH, normalizeWorkTopics } from "./circle-search";
+import { circleOptionLabel } from "./circle-overrides";
 import { catalogPreviewSize } from "./catalog-image-prepare";
 import { catalogBrowseUrl, parseCatalogBrowseUrl, switchReaderViewUrl, type CatalogBrowseState } from "./catalog-browse-url";
 import { projectCatalogBrowse, type CatalogBrowseCard } from "./catalog-browse-projection";
@@ -129,7 +130,7 @@ export default function CatalogBrowseApp({ event, onChooseEvent }: { event: Even
   }, [savePosition]);
   const change = (next: CatalogBrowseState, replace = false) => {
     savePosition();
-    const nextUrl = catalogBrowseUrl(event, next, window.location.origin);
+    const nextUrl = catalogBrowseUrl(event, next, window.location.origin, locale);
     window.history[replace ? "replaceState" : "pushState"]({ ...window.history.state, catalogBrowse: undefined }, "", nextUrl);
     restoring.current = true;
     setState(next); setShown(BROWSE_BATCH_SIZE); setTextShown(BROWSE_BATCH_SIZE);
@@ -175,7 +176,7 @@ export default function CatalogBrowseApp({ event, onChooseEvent }: { event: Even
   const allScope = state.day === null && state.venueSpaceId === null;
   return <div className={styles.page}>
     <header className={styles.header}>
-      <div className={styles.identity}><div className={`brand ${styles.brand}`}><span aria-hidden="true">場</span>場刊 Map</div>{/* As on the map: the event name leads back to the chooser only when there is another event to choose. */}{onChooseEvent ? <a className={styles.event} href="/" onClick={(pressed) => { if (!ordinaryLinkClick(pressed)) return; pressed.preventDefault(); savePosition(); onChooseEvent(); }}><span>{event.name}<small>{eventCalendar(event, locale).label}</small></span><span className={styles.eventSwitch}>{t("switchEvent")}<UiIcon name="chevron-right" /></span></a> : <div className={styles.event}><span>{event.name}<small>{eventCalendar(event, locale).label}</small></span></div>}<ReaderViewTabs className={styles.viewSwitch} event={event} view="browse" url={url} beforeNavigate={savePosition} /><PlanningTools eventId={event.id} /><LanguageSwitcher className={styles.languageSwitcher} narrow /><a className={`site-header-login reader-login ${styles.readerLogin}`} href={localizedHref(publicLoginHref({ eventId: event.id }), locale)}>{header("login")}</a></div>
+      <div className={styles.identity}><div className={`brand ${styles.brand}`}><span aria-hidden="true">場</span>場刊 Map</div>{/* As on the map: the event name leads back to the chooser only when there is another event to choose. */}{onChooseEvent ? <a className={styles.event} href={localizedHref("/", locale)} onClick={(pressed) => { if (!ordinaryLinkClick(pressed)) return; pressed.preventDefault(); savePosition(); onChooseEvent(); }}><span>{event.name}<small>{eventCalendar(event, locale).label}</small></span><span className={styles.eventSwitch}>{t("switchEvent")}<UiIcon name="chevron-right" /></span></a> : <div className={styles.event}><span>{event.name}<small>{eventCalendar(event, locale).label}</small></span></div>}<ReaderViewTabs className={styles.viewSwitch} event={event} view="browse" url={url} beforeNavigate={savePosition} /><PlanningTools eventId={event.id} /><LanguageSwitcher className={styles.languageSwitcher} narrow /><a className={`site-header-login reader-login ${styles.readerLogin}`} href={localizedHref(publicLoginHref({ eventId: event.id }), locale)}>{header("login")}</a></div>
     </header>
     <main className={styles.main}>
       <h1 className={styles.srOnly}>{t("heading", { name: event.name })}</h1>
@@ -261,7 +262,7 @@ function BrowseCard({ event, card, favorite, writable, onFavorite, beforeNavigat
     <div className={styles.cardBody}>
       {preview && <small className={styles.pages}>{t("pages", { count: card.catalog.length })}</small>}
       <div className={styles.cardTitle}><h3><a href={href} onClick={beforeNavigate}>{card.circle.name}</a></h3><button aria-label={t(favorite ? "unfavoriteNamed" : "favoriteNamed", { name: card.circle.name })} aria-pressed={favorite} disabled={!writable} onClick={onFavorite}><UiIcon name="heart" /><span>{favorite ? t("favorited") : t("favorite")}</span></button></div>
-      {(card.circle.referencedWorks.length > 0 || card.circle.ageRatings.length > 0) && <div className={styles.tags}>{card.circle.referencedWorks.map((topic) => <span key={topic}>{topic}</span>)}{card.circle.ageRatings.map((rating) => <span key={rating} className={styles.rating}>{rating}</span>)}</div>}
+      {(card.circle.referencedWorks.length > 0 || card.circle.ageRatings.length > 0) && <div className={styles.tags}>{card.circle.referencedWorks.map((topic) => <span key={topic}>{topic}</span>)}{card.circle.ageRatings.map((rating) => <span key={rating} className={styles.rating}>{circleOptionLabel(rating, locale)}</span>)}</div>}
       <ul className={styles.placements} aria-label={t("booths")}>{card.placements.map((record) => {
         const date = eventDayCalendarDate(event, record.day);
         const when = date ? shortDate(date, locale) : event.days.find((day) => String(day.id) === String(record.day))?.dateLabel ?? String(record.day);
