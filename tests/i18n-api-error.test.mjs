@@ -8,6 +8,7 @@ const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const errors = await environment.runner.import("/app/i18n/api-error.ts");
 const contract = await environment.runner.import("/app/i18n/api-contract.ts");
+const registry = await environment.runner.import("/app/i18n/api-error-codes.ts");
 const fixtures = JSON.parse(await readFile("tests/fixtures/i18n/api-errors.json", "utf8"));
 after(() => vite.close());
 
@@ -50,14 +51,14 @@ test("malformed envelopes drop invalid parameters and safely classify failures",
 });
 
 test("the frozen registry has unique condition names, failure statuses and endpoints", () => {
-  const names = Object.keys(errors.API_ERROR_CODES);
+  const names = Object.keys(registry.API_ERROR_CODES);
   assert.equal(new Set(names).size, names.length);
-  for (const [code, entry] of Object.entries(errors.API_ERROR_CODES)) {
+  for (const [code, entry] of Object.entries(registry.API_ERROR_CODES)) {
     assert.match(code, /^[a-z][a-z0-9_]*$/);
     assert.ok(entry.status >= 400 && entry.status < 600, code);
     assert.ok(entry.endpoints.length, code);
   }
-  for (const fixture of fixtures) if (fixture.body?.code) assert.equal(errors.API_ERROR_CODES[fixture.body.code].status, fixture.status);
+  for (const fixture of fixtures) if (fixture.body?.code) assert.equal(registry.API_ERROR_CODES[fixture.body.code].status, fixture.status);
 });
 
 test("request-link accepts only exact canonical explicit locales", () => {

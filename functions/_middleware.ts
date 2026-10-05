@@ -10,7 +10,7 @@
 
 import { isHtmlRoute, secureHtmlResponse, unconditionalHtmlRequest } from "./_html-security";
 import { applyCircleShareImage } from "./_circle-share-image";
-import { API_ERROR_CODES, type ApiErrorCode } from "../app/i18n/api-error";
+import { API_ERROR_CODES, type ApiErrorCode } from "../app/i18n/api-error-codes";
 
 const SAFE_METHODS = new Set(["GET", "HEAD"]);
 
