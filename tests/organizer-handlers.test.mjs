@@ -177,7 +177,7 @@ test("admin invitation creates an organizer event entry that only its owner can 
   assert.match(body.candidateId, /^[0-9a-f-]{36}$/);
   const loginUrl = new URL(sent.at(-1).text.split("\n").find(line => line.startsWith(`${ORIGIN}/organizer?`)));
   assert.ok(loginUrl.searchParams.get("login"));
-  assert.equal(loginUrl.searchParams.get("lang"), "zh-Hant");
+  assert.equal(loginUrl.searchParams.get("lang"), null, "organizer invitations keep their existing default-language link");
 
   const ownerCookie = await signIn("owner@example.test", "organizer");
   const listed = await handlers.listOrganizerCandidates(request("/api/organizer/events", "GET", undefined, ownerCookie));
