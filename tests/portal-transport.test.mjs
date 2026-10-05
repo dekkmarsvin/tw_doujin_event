@@ -17,7 +17,7 @@ const { onRequest } = await environment.runner.import("/functions/_middleware.ts
 const client = await environment.runner.import("/app/circle-editor-client.ts");
 const organizerClient = await environment.runner.import("/app/organizer-client.ts");
 const { adminLoginEntry, adminLoginDestination, notificationParameters } = await environment.runner.import("/app/notification-navigation.ts");
-const { requestedEventId } = await environment.runner.import("/functions/_portal.ts");
+const { requestedEventId, guard } = await environment.runner.import("/functions/_portal.ts");
 const { readAdminRoute, adminHref } = await environment.runner.import("/app/admin/admin-navigation.ts");
 
 test("Admin precise routes take precedence over legacy event links while old destinations remain reachable", () => {
@@ -71,6 +71,21 @@ test("a mutating request must come from this origin", async () => {
 
   const own = await onRequest(context(request("POST", "/api/claims", { "content-type": "application/json", origin: ORIGIN })));
   assert.equal(own.status, 200);
+});
+
+test("middleware and exception envelopes add circle codes while organizer errors retain their shape", async () => {
+  for (const [headers, status, code] of [[{ "content-type": "application/json" }, 403, "origin_mismatch"], [{ origin: ORIGIN, "content-type": "text/plain" }, 415, "invalid_content_type"]]) {
+    const response = await onRequest(context(request("POST", "/api/claims", headers)));
+    assert.equal(response.status, status); assert.equal((await response.json()).code, code);
+    const organizer = await onRequest(context(request("POST", "/api/organizer/events", headers)));
+    assert.equal(organizer.status, status); assert.equal((await organizer.json()).code, undefined);
+  }
+  for (const [message, status, code] of [["D1 unavailable", 503, "service_unavailable"], ["unexpected failure", 500, "server_error"]]) {
+    const run = async () => { throw new Error(message); };
+    const response = await guard(run, true);
+    assert.equal(response.status, status); assert.equal((await response.json()).code, code);
+    assert.equal((await (await guard(run)).json()).code, undefined);
+  }
 });
 
 test("a mutating request must declare json, which no html form can send", async () => {

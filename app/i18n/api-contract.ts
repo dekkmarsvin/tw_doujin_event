@@ -10,12 +10,12 @@ export function parseRequestLinkLocale(value: unknown): RequestLinkLocaleResult 
 export type AccountNotificationPreferencesView = { cadence: AccountNotificationCadence; version: number; locale: Locale | null };
 export type AccountNotificationPreferencesUpdate = { version: number; cadence?: AccountNotificationCadence; locale?: Locale };
 
-/** Omitting cadence means a locale-only write; servers must leave mail scheduling alone. */
+/** A null locale is omitted (no change). Omitting cadence means a locale-only write; servers must leave mail scheduling alone. */
 export function parseAccountNotificationPreferencesUpdate(body: unknown): { ok: true; value: AccountNotificationPreferencesUpdate } | { ok: false; code: "invalid_notification_preferences" | "invalid_locale" } {
   const invalid = { ok: false, code: "invalid_notification_preferences" } as const;
   if (!body || typeof body !== "object" || Array.isArray(body)) return invalid;
   const value = body as Record<string, unknown>;
-  const hasLocale = Object.hasOwn(value, "locale"), hasCadence = Object.hasOwn(value, "cadence");
+  const hasLocale = Object.hasOwn(value, "locale") && value.locale !== null, hasCadence = Object.hasOwn(value, "cadence");
   if (hasLocale && !isLocale(value.locale)) return { ok: false, code: "invalid_locale" };
   if (Object.keys(value).some(key => !["version", "cadence", "locale"].includes(key))
     || !Number.isSafeInteger(value.version) || (value.version as number) < 0 || (!hasLocale && !hasCadence)

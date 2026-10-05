@@ -69,7 +69,7 @@ export const IDENTITY_TABLES = [
   ]),
   table("account_notification_preferences", [
     "account_id TEXT PRIMARY KEY NOT NULL", "cadence TEXT NOT NULL CHECK (cadence IN ('off', 'hourly', 'daily'))",
-    "version INTEGER NOT NULL", "enabled_since INTEGER NOT NULL", "write_token TEXT NOT NULL",
+    "version INTEGER NOT NULL", "enabled_since INTEGER NOT NULL", "write_token TEXT NOT NULL", "locale TEXT",
   ]),
   table("account_notification_items", [
     "id TEXT PRIMARY KEY NOT NULL", "account_id TEXT NOT NULL", "kind TEXT NOT NULL", "occurrence TEXT NOT NULL",
@@ -649,6 +649,7 @@ export const IDENTITY_INDEXES = [
  * NOT EXISTS`, so duplicate-column errors are the idempotent success case.
  */
 export const IDENTITY_COLUMN_MIGRATIONS = [
+  { table: "account_notification_preferences", column: "locale", sql: "ALTER TABLE account_notification_preferences ADD COLUMN locale TEXT" },
   { table: "circle_claims", column: "notification_submission_id", sql: "ALTER TABLE circle_claims ADD COLUMN notification_submission_id TEXT" },
   { table: "organizer_event_candidates", column: "notification_submission_id", sql: "ALTER TABLE organizer_event_candidates ADD COLUMN notification_submission_id TEXT" },
   { table: "organizer_event_candidates", column: "publication_operation", sql: "ALTER TABLE organizer_event_candidates ADD COLUMN publication_operation TEXT NOT NULL DEFAULT 'CREATE' CHECK (publication_operation IN ('CREATE', 'AMEND'))" },

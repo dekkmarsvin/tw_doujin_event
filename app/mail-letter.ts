@@ -16,6 +16,8 @@
  * to missing.
  */
 
+import type { Locale } from "./i18n/locale";
+
 export type LetterKind = "general" | "system" | "urgent";
 
 export type LetterFact = {
@@ -28,6 +30,7 @@ export type LetterFact = {
 };
 
 export type Letter = {
+  locale?: Locale;
   /**
    * `general` and `system` look the same; the kind records what the letter is
    * for. `urgent` is the one that changes the letter: a warning band across
@@ -58,6 +61,11 @@ export type Letter = {
 export type RenderedLetter = { subject: string; text: string; html: string };
 
 const SUPPORT_ADDRESS = "circle@kotoban.top";
+const chrome = {
+  "zh-Hant": { support: "使用問題請寄", tagline: "同人展逛攤地圖", fallback: "按鈕無法開啟時，把這個網址貼到瀏覽器：", urgent: "【重要】" },
+  en: { support: "For help, email", tagline: "Doujin event booth map", fallback: "If the button does not open, paste this URL into your browser:", urgent: "[Important] " },
+  ja: { support: "お問い合わせ：", tagline: "同人イベントの配置マップ", fallback: "ボタンで開けない場合は、このURLをブラウザに貼り付けてください。", urgent: "【重要】" },
+} satisfies Record<Locale, { support: string; tagline: string; fallback: string; urgent: string }>;
 
 const SANS = "-apple-system,BlinkMacSystemFont,'PingFang TC','Noto Sans TC','Microsoft JhengHei',system-ui,sans-serif";
 const MONO = "ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace";
@@ -100,16 +108,16 @@ function renderText(letter: Letter) {
   if (letter.action) blocks.push(`${letter.action.label}：\n${letter.action.href}`);
   blocks.push(...(letter.notes ?? []));
   const footerLink = letter.footerLink ? `${letter.footerLink.label}：${letter.footerLink.href}\n` : "";
-  blocks.push(`-- \n${footerLink}使用問題請寄 ${SUPPORT_ADDRESS}\n場刊 Map · ${letter.origin}`);
+  blocks.push(`-- \n${footerLink}${chrome[letter.locale ?? "zh-Hant"].support} ${SUPPORT_ADDRESS}\n場刊 Map · ${letter.origin}`);
   return `${blocks.join("\n\n")}\n`;
 }
 
-function brandRow() {
+function brandRow(locale: Locale) {
   return `<table ${TABLE}><tr>`
     + `<td width="38" height="38" align="center" valign="middle" bgcolor="${INK}" aria-hidden="true" style="width:38px;height:38px;background-color:${INK};border-radius:11px 11px 11px 3px;box-shadow:3px 3px 0 ${GOLD};${text(19, 38, `font-weight:900;color:${ON_INK};`)}">場</td>`
     + `<td valign="middle" style="padding-left:12px;">`
     + `<div style="${text(16, 21, `font-weight:700;letter-spacing:0.08em;color:${INK};`)}">場刊 Map</div>`
-    + `<div style="${text(11, 15, `letter-spacing:0.12em;color:${MUTED};`)}">同人展逛攤地圖</div>`
+    + `<div style="${text(11, 15, `letter-spacing:0.12em;color:${MUTED};`)}">${chrome[locale].tagline}</div>`
     + `</td></tr></table>`;
 }
 
@@ -157,10 +165,10 @@ function button(action: { label: string; href: string }) {
     + `</td></tr></table>`;
 }
 
-function actionUrl(href: string) {
+function actionUrl(href: string, locale: Locale) {
   const escaped = escapeHtml(href);
   return `<table ${TABLE} width="100%">`
-    + `<tr><td style="padding-top:20px;border-top:1px solid ${LINE};"><p style="margin:0;${text(13, 22, `color:${MUTED};`)}">按鈕無法開啟時，把這個網址貼到瀏覽器：</p></td></tr>`
+    + `<tr><td style="padding-top:20px;border-top:1px solid ${LINE};"><p style="margin:0;${text(13, 22, `color:${MUTED};`)}">${chrome[locale].fallback}</p></td></tr>`
     + `<tr><td style="padding-top:8px;"><table ${TABLE} width="100%"><tr>`
     + `<td style="padding:10px 12px;background-color:${WELL};border:1px solid ${LINE};border-radius:7px;font-family:${MONO};font-size:12px;line-height:19px;color:${INK};word-break:break-all;">`
     + `<a href="${escaped}" style="color:${INK};text-decoration:none;word-break:break-all;">${escaped}</a>`
@@ -168,6 +176,7 @@ function actionUrl(href: string) {
 }
 
 function renderHtml(letter: Letter, subject: string) {
+  const locale = letter.locale ?? "zh-Hant";
   const row = (paddingTop: number, content: string) => `<tr><td style="padding-top:${paddingTop}px;">${content}</td></tr>`;
   const body = [
     `<tr><td><h1 style="margin:0;${text(20, 27, `font-weight:700;color:${INK};`)}">${escapeHtml(letter.title)}</h1></td></tr>`,
@@ -176,7 +185,7 @@ function renderHtml(letter: Letter, subject: string) {
   if (letter.facts?.length) body.push(row(20, factsTable(letter.facts)));
   if (letter.action) {
     body.push(row(24, button(letter.action)));
-    if (letter.showActionUrl) body.push(row(24, actionUrl(letter.action.href)));
+    if (letter.showActionUrl) body.push(row(24, actionUrl(letter.action.href, locale)));
   }
   for (const note of letter.notes ?? []) body.push(row(16, `<p style="margin:0;${text(13, 22, `color:${MUTED};`)}">${escapeHtml(note)}</p>`));
 
@@ -186,7 +195,7 @@ function renderHtml(letter: Letter, subject: string) {
     ? `<a href="${escapeHtml(letter.footerLink.href)}" style="color:${LINK};">${escapeHtml(letter.footerLink.label)}</a><br>`
     : "";
   return `<!doctype html>
-<html lang="zh-Hant">
+<html lang="${locale}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -200,14 +209,14 @@ function renderHtml(letter: Letter, subject: string) {
 <tr><td align="center" style="padding:32px 16px 40px;">
 <!--[if mso]><table ${TABLE} width="560"><tr><td><![endif]-->
 <table ${TABLE} width="100%" style="max-width:560px;">
-<tr><td style="padding-bottom:20px;">${brandRow()}</td></tr>
+<tr><td style="padding-bottom:20px;">${brandRow(locale)}</td></tr>
 <tr><td bgcolor="${CARD}" style="background-color:${CARD};border:1px solid ${LINE};border-radius:12px;">
 <table ${TABLE} width="100%">
 <tr>${topLine(letter)}</tr>
 <tr><td style="padding:24px 24px 28px;"><table ${TABLE} width="100%">${body.join("")}</table></td></tr>
 </table>
 </td></tr>
-<tr><td style="padding:20px 4px 0;${text(12, 20, `color:${MUTED};`)}">${footerLink}使用問題請寄 <a href="mailto:${SUPPORT_ADDRESS}" style="color:${LINK};">${SUPPORT_ADDRESS}</a><br>場刊 Map · <a href="${origin}" style="color:${LINK};">${host}</a></td></tr>
+<tr><td style="padding:20px 4px 0;${text(12, 20, `color:${MUTED};`)}">${footerLink}${chrome[locale].support} <a href="mailto:${SUPPORT_ADDRESS}" style="color:${LINK};">${SUPPORT_ADDRESS}</a><br>場刊 Map · <a href="${origin}" style="color:${LINK};">${host}</a></td></tr>
 </table>
 <!--[if mso]></td></tr></table><![endif]-->
 </td></tr>
@@ -218,18 +227,36 @@ function renderHtml(letter: Letter, subject: string) {
 }
 
 export function renderLetter(letter: Letter): RenderedLetter {
-  const subject = letter.kind === "urgent" ? `【重要】${letter.subject}` : letter.subject;
+  const subject = letter.kind === "urgent" ? `${chrome[letter.locale ?? "zh-Hant"].urgent}${letter.subject}` : letter.subject;
   return { subject, text: renderText(letter), html: renderHtml(letter, subject) };
 }
 
 /** The one-time sign-in link, for either entry; `href` already carries the token. */
-export function loginLinkLetter({ href, origin, requestedAt, expiresAt }: {
+export function loginLinkLetter({ href, origin, requestedAt, expiresAt, locale = "zh-Hant" }: {
   href: string;
   origin: string;
   requestedAt: number;
   expiresAt: number;
+  locale?: Locale;
 }) {
   const minutes = Math.round((expiresAt - requestedAt) / 60_000);
+  if (locale !== "zh-Hant") {
+    const copy = locale === "en" ? {
+      subject: "場刊 Map sign-in link", preheader: `Valid for ${minutes} minutes. Can be used only once.`,
+      category: "Sign in", title: "Sign in to 場刊 Map", paragraph: "This link can be used only once.",
+      expiry: "Valid until (Taiwan time, UTC+8)", action: "Sign in",
+      note: "If you did not request to sign in, ignore this email. Nothing will change.", zone: "Taiwan time (UTC+8)",
+    } : {
+      subject: "場刊 Map ログインリンク", preheader: `${minutes}分間有効です。一度だけ使用できます。`,
+      category: "ログイン", title: "場刊 Map にログイン", paragraph: "このリンクは一度だけ使用できます。",
+      expiry: "有効期限（台湾時間 UTC+8）", action: "ログイン",
+      note: "ログインを申し込んでいない場合は、このメールを無視してください。変更は行われません。", zone: "台湾時間 UTC+8",
+    };
+    return renderLetter({ kind: "system", locale, subject: copy.subject, preheader: copy.preheader, category: copy.category,
+      stamp: `${formatTaipeiTime(requestedAt)} ${copy.zone}`, title: copy.title, paragraphs: [copy.paragraph],
+      facts: [{ label: copy.expiry, value: formatTaipeiTime(expiresAt), data: true }],
+      action: { label: copy.action, href }, showActionUrl: true, notes: [copy.note], origin });
+  }
   return renderLetter({
     kind: "system",
     subject: "場刊 Map 登入連結",

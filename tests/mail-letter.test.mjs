@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test, { after } from "node:test";
 import { createServer, isRunnableDevEnvironment } from "vite";
 
@@ -7,6 +8,7 @@ const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { formatTaipeiTime, loginLinkLetter, organizerInvitationLetter, renderLetter } = await environment.runner.import("/app/mail-letter.ts");
 const { reviewDigest } = await environment.runner.import("/app/review-notifications.ts");
+const { accountNotificationLetter } = await environment.runner.import("/app/account-notifications.ts");
 after(() => vite.close());
 
 const ORIGIN = "https://map.kotoban.top";
@@ -52,6 +54,43 @@ test("the login letter's HTML carries the same link on the button and as copyabl
   assert.match(mail.html, /15 分鐘內有效，只能使用一次。/, "preheader");
   assert.match(mail.html, /<html lang="zh-Hant">/);
   assert.doesNotMatch(mail.html, /<style|<svg|<img|<script/i, "nothing a mail client strips or blocks");
+});
+
+test("default Chinese login rendering preserves the pre-i18n bytes for the same destination", () => {
+  const input = { href: HREF, origin: ORIGIN, requestedAt: REQUESTED_AT, expiresAt: REQUESTED_AT + 15 * 60_000 };
+  const mail = loginLinkLetter(input);
+  assert.equal(createHash("sha256").update(JSON.stringify(mail)).digest("hex"), "0e6603ed32a86657fa06f23a27bc14c3e0d3cc16586670ea03cf897e763df5af");
+  assert.deepEqual(loginLinkLetter({ ...input, locale: "zh-Hant" }), mail);
+});
+
+test("English and Japanese login letters localize every text surface and label Taiwan time", () => {
+  for (const [locale, subject, category, action, zone] of [["en", "sign-in link", "Sign in", "Sign in", "Taiwan time"], ["ja", "ログインリンク", "ログイン", "ログイン", "台湾時間"]]) {
+    const href = `${HREF}&lang=${locale}`;
+    const mail = loginLinkLetter({ href, origin: ORIGIN, requestedAt: REQUESTED_AT, expiresAt: REQUESTED_AT + 900000, locale });
+    assert.ok(mail.subject.includes(subject)); assert.ok(mail.html.includes(category)); assert.ok(mail.text.includes(action));
+    assert.ok(mail.html.includes(`<html lang="${locale}">`));
+    assert.ok(mail.text.includes(zone)); assert.ok(mail.html.includes(zone));
+    assert.ok(mail.text.split("\n").includes(href));
+    assert.doesNotMatch(mail.text + mail.html, /有效至|只能使用一次|使用問題請寄|按鈕無法開啟時/);
+  }
+});
+
+test("Chinese circle letters preserve the pre-i18n bytes apart from the required explicit lang in links", () => {
+  const hashes = {
+    "claim.approved": "b425f6192ac3c663b5a584550b7ce84d10c547db4998336128375d43da9e3f0a",
+    "claim.rejected": "a13ca741b5721adf69b0c1d39693bc68ba21012a29fb3a5e8d865df459d45bea",
+    "claim.revoked": "0161899796b9e689cf65fbc639303ebefd5c610090ad8feaf854c78152b9a650",
+    "circle.updated": "525a1b4a202fb56883890e6fed9d30cd4313616c4525e849a81e0e167355329c",
+    "circle.takendown": "aafcc388da3706b35aa328773ea200f765c82541f85a7a181a03ea497c37a529",
+  };
+  for (const [kind, hash] of Object.entries(hashes)) {
+    const item = { kind, name: "原文社團", event_id: "ff47", circle_id: "c-1", candidate_id: null, audience: "circle_owner",
+      detail: "補充資料、品書、恢復公開、保存設定、代表圖片、未知原文", occurred_at: REQUESTED_AT };
+    const letter = accountNotificationLetter(ORIGIN, [item]);
+    assert.ok(letter.text.includes("lang=zh-Hant"));
+    const normalized = Object.fromEntries(Object.entries(letter).map(([key, value]) => [key, value.replaceAll("&lang=zh-Hant", "").replaceAll("&#38;lang=zh-Hant", "")]));
+    assert.equal(createHash("sha256").update(JSON.stringify(normalized)).digest("hex"), hash, kind);
+  }
 });
 
 test("every caller-supplied string is escaped in the HTML and left as written in the text", () => {

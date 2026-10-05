@@ -1,7 +1,7 @@
 import { guard, portalHandlers } from "../../_portal";
 
 export const onRequestGet: PagesFunction<PortalEnv> = (context) =>
-  guard(() => portalHandlers(context).listClaims(context.request));
+  guard(() => portalHandlers(context).listClaims(context.request), true);
 
 export const onRequestPost: PagesFunction<PortalEnv> = (context) =>
-  guard(() => portalHandlers(context).createClaim(context.request));
+  guard(() => portalHandlers(context).createClaim(context.request), true);
