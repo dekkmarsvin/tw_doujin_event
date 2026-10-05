@@ -1,7 +1,7 @@
 import { guard, portalHandlers } from "../../_portal";
 
 export const onRequestGet: PagesFunction<PortalEnv> = context =>
-  guard(() => portalHandlers(context).getAccountNotificationPreferences(context.request));
+  guard(() => portalHandlers(context).getAccountNotificationPreferences(context.request), true);
 
 export const onRequestPut: PagesFunction<PortalEnv> = context =>
-  guard(() => portalHandlers(context).saveAccountNotificationPreferences(context.request));
+  guard(() => portalHandlers(context).saveAccountNotificationPreferences(context.request), true);

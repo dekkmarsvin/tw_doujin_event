@@ -1,7 +1,8 @@
 import { formatTaipeiTime, renderLetter } from "./mail-letter";
+import type { Locale } from "./i18n/locale";
 
 export type AccountNotificationCadence = "off" | "hourly" | "daily";
-export type AccountNotificationPreferences = { cadence: AccountNotificationCadence; version: number };
+export type AccountNotificationPreferences = { cadence: AccountNotificationCadence; version: number; locale: Locale | null };
 export type AccountNotificationKind = "claim.approved" | "claim.rejected" | "claim.revoked" |
   "circle.updated" | "circle.takendown" | "application.approved" | "application.rejected" |
   "member.granted" | "member.revoked" | "review.approved" | "review.changes_requested" |
@@ -35,7 +36,29 @@ const descriptions: Record<AccountNotificationKind, { title: string; text: strin
   "publication.failed": { title: "發布未完成", text: "這次發布未完成，請查看處理方式。已公開的舊版內容不因此撤下。", action: "查看發布狀態" },
 };
 
-export function notificationDestination(item: NotificationItem, origin: string) {
+type CircleNotificationKind = "claim.approved" | "claim.rejected" | "claim.revoked" | "circle.updated" | "circle.takendown";
+const circleDescriptions: Record<Exclude<Locale, "zh-Hant">, Record<CircleNotificationKind, { title: string; text: string; action: string }>> = {
+  en: {
+    "claim.approved": { title: "Circle claim approved", text: "Your circle claim has been approved. Sign in to view its current status and manage your circle details.", action: "Manage circle details" },
+    "claim.rejected": { title: "Circle claim rejected", text: "This circle claim was rejected.", action: "View claim status" },
+    "claim.revoked": { title: "Circle claim revoked", text: "Your circle claim was revoked at the time below. Revocation removes management access for that claim and stops publishing the associated circle details. Sign in to view your current claim status. Contact the site administrator if you need help.", action: "View claim status" },
+    "circle.updated": { title: "Circle details updated", text: "Your circle details have been updated.", action: "View circle details" },
+    "circle.takendown": { title: "Circle details taken down", text: "The site administrator has taken down these circle details. Sign in to view their current status. Contact the site administrator if you need help.", action: "View circle details" },
+  },
+  ja: {
+    "claim.approved": { title: "管理申請が承認されました", text: "サークル情報の管理申請が承認されました。ログインして現在の状態を確認し、サークル補足情報を管理できます。", action: "サークル情報を管理する" },
+    "claim.rejected": { title: "管理申請が承認されませんでした", text: "今回のサークル情報の管理申請は承認されませんでした。", action: "申請状況を確認する" },
+    "claim.revoked": { title: "管理権限が取り消されました", text: "サークル情報の管理権限は以下の日時に取り消されました。この申請による管理権限は失われ、関連するサークル補足情報は公開されなくなります。ログインして現在の申請状況を確認してください。お困りの場合はサイト管理者にお問い合わせください。", action: "申請状況を確認する" },
+    "circle.updated": { title: "サークル補足情報が更新されました", text: "サークル補足情報が更新されました。", action: "サークル情報を見る" },
+    "circle.takendown": { title: "サークル補足情報の公開停止", text: "サイト管理者がこのサークル補足情報を公開停止にしました。ログインして現在の状態を確認してください。お困りの場合はサイト管理者にお問い合わせください。", action: "サークル情報を見る" },
+  },
+};
+const detailTokens: Record<Exclude<Locale, "zh-Hant">, Record<string, string>> = {
+  en: { 補充資料: "Circle details", 品書: "Item list", 恢復公開: "Publication restored", 保存設定: "Retention settings", 代表圖片: "Featured image" },
+  ja: { 補充資料: "サークル補足情報", 品書: "お品書き", 恢復公開: "公開再開", 保存設定: "保存設定", 代表圖片: "代表画像" },
+};
+
+export function notificationDestination(item: NotificationItem, origin: string, locale?: Locale) {
   const url = new URL(item.candidate_id || item.kind.startsWith("application.") ? "/organizer" : "/circle", origin);
   if (item.kind === "publication.published" && item.event_id) return new URL(`/events/${encodeURIComponent(item.event_id)}/`, origin).href;
   if (item.candidate_id) {
@@ -47,39 +70,50 @@ export function notificationDestination(item: NotificationItem, origin: string) 
     if (item.event_id) url.searchParams.set("event", item.event_id);
     if (item.circle_id) url.searchParams.set("circle", item.circle_id);
   }
+  if (locale) url.searchParams.set("lang", locale);
   return url.href;
 }
 
-export function accountNotificationLetter(origin: string, items: NotificationItem[]) {
+export function accountNotificationLetter(origin: string, items: NotificationItem[], recipientLocale: Locale = "zh-Hant") {
   const base = new URL(origin);
   if (base.protocol !== "https:" || base.pathname !== "/" || base.search || base.hash || base.username || base.password) throw new Error("Invalid notification origin.");
   if (!items.length) throw new Error("Empty notification.");
   const first = items[0];
+  const circle = first.kind.startsWith("claim.") || first.kind.startsWith("circle.");
+  const locale = circle ? recipientLocale : "zh-Hant";
   const digest = first.kind === "circle.updated";
-  const description = descriptions[first.kind];
+  const description = locale === "zh-Hant" ? descriptions[first.kind] : circleDescriptions[locale][first.kind as CircleNotificationKind];
+  const copy = {
+    "zh-Hant": { circle: "社團", event: "活動", eventId: "活動代碼", time: "異動時間", settings: "通知設定", details: "補充資料", category: "審核與權限通知", digestCategory: "內容更新摘要", digestTitle: "社團補充資料更新", preheader: "查看這段時間的社團補充資料更新。", zone: "" },
+    en: { circle: "Circle", event: "Event", eventId: "Event ID", time: "Changed at (Taiwan time, UTC+8)", settings: "Notification settings", details: "Circle details", category: "Review and access notice", digestCategory: "Content update digest", digestTitle: "Circle details updates", preheader: "View circle details updated during this period.", zone: " Taiwan time (UTC+8)" },
+    ja: { circle: "サークル", event: "イベント", eventId: "イベントID", time: "変更日時（台湾時間 UTC+8）", settings: "通知設定", details: "サークル補足情報", category: "審査・権限のお知らせ", digestCategory: "更新内容のまとめ", digestTitle: "サークル補足情報の更新", preheader: "この期間に更新されたサークル補足情報を確認できます。", zone: " 台湾時間 UTC+8" },
+  }[locale];
   const ownMember = first.audience === "member";
   const title = ownMember ? first.kind === "member.revoked" ? "你的工作區權限曾被移除" : "你的工作區權限已更新" : description.title;
   const settings = new URL(first.candidate_id || first.kind.startsWith("application.") ? "/organizer" : "/circle", base);
   settings.searchParams.set("notifications", "1");
+  if (circle) settings.searchParams.set("lang", locale);
   const grouped = new Map<string, NotificationItem>();
   for (const item of items) {
     const key = `${item.event_id}:${item.circle_id}`, previous = grouped.get(key);
     grouped.set(key, { ...item, detail: [...new Set([...(previous?.detail.split("、") ?? []), ...item.detail.split("、")].filter(Boolean))].join("、") });
   }
   const summary = [...grouped.values()];
+  const detail = (value: string) => locale === "zh-Hant" ? value : value.split("、").map(token => Object.hasOwn(detailTokens[locale], token) ? detailTokens[locale][token] : token).join("、");
+  const destination = (item: NotificationItem) => notificationDestination(item, base.origin, circle ? locale : undefined);
   return renderLetter({
-    kind: digest ? "general" : "system", origin: base.origin,
-    subject: digest ? `場刊 Map｜${summary.length} 個社團的補充資料更新` : `場刊 Map｜${first.name} ${title}`,
-    preheader: digest ? "查看這段時間的社團補充資料更新。" : title,
-    category: digest ? "內容更新摘要" : "審核與權限通知", stamp: formatTaipeiTime(first.occurred_at), title: digest ? "社團補充資料更新" : title,
+    kind: digest ? "general" : "system", origin: base.origin, locale,
+    subject: digest ? locale === "en" ? `場刊 Map｜Circle details updated for ${summary.length} circles` : locale === "ja" ? `場刊 Map｜${summary.length}サークルの補足情報更新` : `場刊 Map｜${summary.length} 個社團的補充資料更新` : `場刊 Map｜${first.name} ${title}`,
+    preheader: digest ? copy.preheader : title,
+    category: digest ? copy.digestCategory : copy.category, stamp: formatTaipeiTime(first.occurred_at) + copy.zone, title: digest ? copy.digestTitle : title,
     paragraphs: digest ? [] : [ownMember ? "你的權限於以下時間發生異動。如需協助，請聯絡網站管理者。" : description.text],
-    facts: digest ? summary.map(item => ({ label: `${item.name}（${item.event_id}）`, value: item.detail || "補充資料", href: notificationDestination(item, base.origin) })) : [
-      { label: first.circle_id ? "社團" : "活動", value: first.name },
-      ...(first.event_id ? [{ label: "活動代碼", value: first.event_id }] : []),
+    facts: digest ? summary.map(item => ({ label: `${item.name}（${item.event_id}）`, value: detail(item.detail) || copy.details, href: destination(item) })) : [
+      { label: first.circle_id ? copy.circle : copy.event, value: first.name },
+      ...(first.event_id ? [{ label: copy.eventId, value: first.event_id }] : []),
       ...(first.edition ? [{ label: "內容版本", value: `第 ${first.edition} 版` }] : []),
-      { label: "異動時間", value: formatTaipeiTime(first.occurred_at) },
+      { label: copy.time, value: formatTaipeiTime(first.occurred_at) },
     ],
-    ...(!digest && !(ownMember && first.kind === "member.revoked") ? { action: { label: description.action, href: notificationDestination(first, base.origin) } } : {}),
-    footerLink: { label: "通知設定", href: settings.href },
+    ...(!digest && !(ownMember && first.kind === "member.revoked") ? { action: { label: description.action, href: destination(first) } } : {}),
+    footerLink: { label: copy.settings, href: settings.href },
   });
 }

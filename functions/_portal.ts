@@ -1,4 +1,5 @@
 import { mailFailure, sendPortalMail, previewMailRouteFor } from "../app/portal-mail";
+import type { ApiErrorCode } from "../app/i18n/api-error";
 export { previewMailRouteFor } from "../app/portal-mail";
 import { createCirclePortalHandlers, type CircleLookup, type CirclePortalHandlers } from "../app/circle-portal-handlers";
 import { buildCircleCatalog, isCircleCatalogPayload, normalizeCircleName, type CircleCatalogPayload } from "../app/circle-records";
@@ -454,13 +455,14 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
 }
 
 /** Map an unexpected failure onto the same envelope the client already parses. */
-export async function guard(run: () => Promise<Response>): Promise<Response> {
+export async function guard(run: () => Promise<Response>, circleErrors = false): Promise<Response> {
   try {
     return await run();
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     const unavailable = message.includes("Missing Pages secret") || message.includes("Missing Mailgun") || message.includes("D1");
-    return new Response(JSON.stringify({ error: unavailable ? "服務尚未設定完成，請稍後再試。" : "伺服器發生錯誤。" }), {
+    const code: ApiErrorCode = unavailable ? "service_unavailable" : "server_error";
+    return new Response(JSON.stringify({ error: unavailable ? "服務尚未設定完成，請稍後再試。" : "伺服器發生錯誤。", ...(circleErrors ? { code } : {}) }), {
       status: unavailable ? 503 : 500,
       headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
     });

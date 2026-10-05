@@ -1,4 +1,5 @@
-import { isAccountNotificationCadence } from "./account-notifications";
+import { parseRequestLinkLocale, parseAccountNotificationPreferencesUpdate } from "./i18n/api-contract";
+import type { ApiErrorCode } from "./i18n/api-error";
 import { canSubmitEventApplication, contactSettingsProblem, parseSiteSettings } from "./site-settings";
 import type { AdminCircleDetail } from "./admin-circle-detail";
 import type { AdminAccountCircleSearchResponse, AdminAccountDetailResponse } from "./admin-account-detail";
@@ -71,6 +72,7 @@ import {
  * Miniflare without a Pages runtime.
  */
 
+const errorCode = (code: ApiErrorCode) => code;
 export const SESSION_COOKIE = "__Host-ff47_session";
 
 const LOGIN_TOKEN_TTL_MS = 15 * 60 * 1000;
@@ -291,10 +293,10 @@ export function createCirclePortalHandlers({
    * session check on purpose: which events exist is not a secret, and a claim
    * for one event must never be answered with another event's data.
    */
-  function eventScoped<Rest extends unknown[]>(handler: (request: Request, ...rest: Rest) => Promise<Response>) {
+  function eventScoped<Rest extends unknown[]>(handler: (request: Request, ...rest: Rest) => Promise<Response>, circleErrors = false) {
     return async (request: Request, ...rest: Rest) => (await servesRequestedEvent())
       ? handler(request, ...rest)
-      : json({ error: "找不到這個活動。" }, 404);
+      : json({ error: "找不到這個活動。", ...(circleErrors ? { code: errorCode("event_not_found") } : {}) }, 404);
   }
 
   /** The public half of the Turnstile pair, so the sign-in page can render it. */
@@ -363,15 +365,19 @@ export function createCirclePortalHandlers({
   async function requestLink(request: Request) {
     const body = await readJson(request);
 
-    // Human verification runs first, before the address is even read. It is the
-    // only check here whose outcome does not depend on the mailbox, so it can
-    // answer honestly without telling an attacker which inboxes exist — and
+    // Human verification runs first, before the address is even read. The
+    // check does not depend on the mailbox, so it can answer honestly
+    // without telling an attacker which inboxes exist — and
     // nothing past it, neither the rate-limit counters nor the mailer, is
     // reachable by a script that cannot solve it.
     const humanToken = typeof body?.turnstileToken === "string" ? body.turnstileToken : "";
     if (!humanToken || !await verifyHuman(humanToken, request.headers.get("cf-connecting-ip"))) {
-      return json({ error: "真人驗證未通過，請重新驗證後再送出。" }, 403);
+      return json({ error: "真人驗證未通過，請重新驗證後再送出。", code: errorCode("turnstile_failed") }, 403);
     }
+
+    const parsedLocale = parseRequestLinkLocale(body?.locale);
+    if (!parsedLocale.ok) return json({ error: "請選擇支援的語言。", code: errorCode("invalid_locale") }, 400);
+    const { locale } = parsedLocale;
 
     const email = typeof body?.email === "string" ? normalizeEmail(body.email) : "";
     const audience = body?.audience === "organizer" ? "organizer" : "circle";
@@ -387,7 +393,7 @@ export function createCirclePortalHandlers({
     // 500 that reads like the server broke. Production supplies no predicate,
     // so this is unreachable there and the 202 above stays the only answer.
     if (mailRecipientAllowed && !mailRecipientAllowed(email)) {
-      return json({ error: "這個測試環境不會寄信到這個地址。" }, 400);
+      return json({ error: "這個測試環境不會寄信到這個地址。", code: errorCode("mail_recipient_not_allowed") }, 400);
     }
 
     const ipHash = await clientIpHash(request);
@@ -400,7 +406,7 @@ export function createCirclePortalHandlers({
       ipHash ? repository.countLoginTokensSince("request_ip_hash", ipHash, windowStart) : Promise.resolve(0),
     ]);
     if (byEmail >= LIMITS.loginPerEmailPerHour || byIp >= LIMITS.loginPerIpPerHour) {
-      return json({ error: "請求過於頻繁，請稍後再試。" }, 429);
+      return json({ error: "請求過於頻繁，請稍後再試。", code: errorCode("rate_limited") }, 429);
     }
 
     // These parameters select a form after login; ownership still comes only
@@ -417,6 +423,7 @@ export function createCirclePortalHandlers({
       }
     }
     for (const [key, value] of continuation) destination.searchParams.set(key, value);
+    destination.searchParams.set("lang", locale);
     const token = randomToken();
     destination.searchParams.set("login", token);
     const expiresAt = now + LOGIN_TOKEN_TTL_MS;
@@ -435,7 +442,7 @@ export function createCirclePortalHandlers({
       await sendMail({
         purpose: "login_link",
         to: email,
-        ...loginLinkLetter({ href: destination.href, origin: config.origin, requestedAt: now, expiresAt }),
+        ...loginLinkLetter({ href: destination.href, origin: config.origin, requestedAt: now, expiresAt, locale }),
       });
     } catch (error) {
       // The row exists but nobody can ever hold the link, and it counts against
@@ -454,18 +461,18 @@ export function createCirclePortalHandlers({
   async function verify(request: Request) {
     const body = await readJson(request);
     const token = typeof body?.token === "string" ? body.token : "";
-    if (!token) return json({ error: "登入連結無效。" }, 400);
+    if (!token) return json({ error: "登入連結無效。", code: errorCode("login_link_invalid") }, 400);
 
     const now = config.now();
     const login = await repository.consumeLoginTokenDetails(await sha256Hex(token), now);
-    if (!login) return json({ error: "登入連結已失效或已使用，請重新索取。" }, 400);
+    if (!login) return json({ error: "登入連結已失效或已使用，請重新索取。", code: errorCode("login_link_expired") }, 400);
     const { email, audience } = login;
 
     let accountId: string;
     try {
       accountId = await repository.upsertAccount(email, now);
     } catch (error) {
-      return json({ error: error instanceof Error ? error.message : "無法建立帳號。" }, 403);
+      return json({ error: error instanceof Error ? error.message : "無法建立帳號。", code: errorCode("account_creation_refused") }, 403);
     }
     if (audience === "organizer") {
       await repository.acceptOrganizerInvitations({ accountId, email, now });
@@ -494,7 +501,7 @@ export function createCirclePortalHandlers({
 
   async function session(request: Request) {
     const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!current) return json({ error: "尚未登入。", code: errorCode("unauthenticated") }, 401);
     const admin = await isAdmin(current.email);
     return json({
       email: current.email,
@@ -520,18 +527,19 @@ export function createCirclePortalHandlers({
     // The session that initiated deletion remains usable only on this route so
     // an R2 outage can be retried; every normal route rejects the tombstone.
     const current = await currentSession(request, true);
-    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!current) return json({ error: "尚未登入。", code: errorCode("unauthenticated") }, 401);
     if (await isAdmin(current.email)) {
-      return json({ error: "管理者帳號需先由另一位管理者移出名單，才能刪除。" }, 409);
+      return json({ error: "管理者帳號需先由另一位管理者移出名單，才能刪除。", code: errorCode("admin_account_delete_blocked") }, 409);
     }
     const body = await readJson(request);
     if (body?.confirm !== current.email) {
-      return json({ error: "請輸入目前登入的完整 email 以確認刪除帳號。" }, 400);
+      return json({ error: "請輸入目前登入的完整 email 以確認刪除帳號。", code: errorCode("account_delete_confirmation") }, 400);
     }
     const soleOwnerCandidates = await repository.listSoleOwnerOrganizerCandidates(current.accountId);
     if (soleOwnerCandidates.length > 0) {
       return json({
         error: "請先邀請另一位 Owner 接手所有活動，才能刪除帳號。",
+        code: errorCode("account_sole_owner"),
         candidates: soleOwnerCandidates.map((candidate) => ({
           candidateId: candidate.id,
           tentativeName: candidate.tentative_name,
@@ -541,12 +549,12 @@ export function createCirclePortalHandlers({
     const now = config.now();
     let claimScopes = await repository.listClaimScopesForAccount(current.accountId);
     let mapDraftKeys = await repository.listUnsubmittedMapDraftObjectKeysForAccount(current.accountId);
-    if (!thumbnailStore && claimScopes.length > 0) return json({ error: "暫時無法使用圖片功能，請稍後再試。" }, 503);
-    if (!mapContributionStore && mapDraftKeys.length > 0) return json({ error: "暫時無法使用地圖草稿檔案，請稍後再試。" }, 503);
+    if (!thumbnailStore && claimScopes.length > 0) return json({ error: "暫時無法使用圖片功能，請稍後再試。", code: errorCode("image_service_unavailable") }, 503);
+    if (!mapContributionStore && mapDraftKeys.length > 0) return json({ error: "暫時無法使用地圖草稿檔案，請稍後再試。", code: errorCode("account_files_unavailable") }, 503);
     if (!await repository.beginAccountDeletion({
       accountId: current.accountId, email: current.email, now, retrySessionId: current.sessionId,
     })) {
-      return json({ error: "找不到可刪除的帳號。" }, 404);
+      return json({ error: "找不到可刪除的帳號。", code: errorCode("account_not_found") }, 404);
     }
     // Re-read after the atomic contributor tombstone. An upload that already
     // put R2 bytes can no longer bind metadata and will roll its object back.
@@ -566,13 +574,13 @@ export function createCirclePortalHandlers({
       legacyEmailAuditDigest: await sha256Hex(current.email),
       now,
     });
-    if (!deleted) return json({ error: "找不到可刪除的帳號。" }, 404);
+    if (!deleted) return json({ error: "找不到可刪除的帳號。", code: errorCode("account_not_found") }, 404);
     return json({ ok: true }, 200, { "set-cookie": sessionCookie("", 0) });
   }
 
   async function listClaims(request: Request) {
     const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!current) return json({ error: "尚未登入。", code: errorCode("unauthenticated") }, 401);
     const claims = await repository.listClaimsForAccount(current.accountId, config.eventId);
     return json({
       eventId: config.eventId,
@@ -599,7 +607,7 @@ export function createCirclePortalHandlers({
    */
   async function searchCatalog(request: Request) {
     const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!current) return json({ error: "尚未登入。", code: errorCode("unauthenticated") }, 401);
 
     const parameters = new URL(request.url).searchParams;
     const circleId = parameters.get("circle");
@@ -627,7 +635,7 @@ export function createCirclePortalHandlers({
 
   async function createClaim(request: Request) {
     const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!current) return json({ error: "尚未登入。", code: errorCode("unauthenticated") }, 401);
 
     const body = await readJson(request);
     const circleId = typeof body?.circleId === "string" ? body.circleId : "";
@@ -636,7 +644,7 @@ export function createCirclePortalHandlers({
     const evidenceNote = typeof body?.evidenceNote === "string" ? body.evidenceNote.slice(0, 500) : null;
 
     const circle = await lookupCircle(circleId);
-    if (!circle) return json({ error: "找不到這個社團。" }, 404);
+    if (!circle) return json({ error: "找不到這個社團。", code: errorCode("circle_not_found") }, 404);
 
     const now = config.now();
     const mine = await repository.listClaimsForAccount(current.accountId, config.eventId);
@@ -650,16 +658,17 @@ export function createCirclePortalHandlers({
         error: existing.status === "verified"
           ? "你已經通過這個社團的認領。"
           : "你已經送出過這個社團的認領。若驗證碼遺失或過期，請先撤回這筆認領，再重新送出取得新的驗證碼。",
+        code: errorCode(existing.status === "verified" ? "claim_already_verified" : "claim_already_pending"),
         claimId: existing.id,
         claimStatus: existing.status,
       }, 409);
     }
     if (mine.filter((claim) => claim.created_at >= now - 24 * 60 * 60 * 1000).length >= LIMITS.claimsPerAccountPerDay) {
-      return json({ error: "今日認領次數已達上限。" }, 429);
+      return json({ error: "今日認領次數已達上限。", code: errorCode("claim_daily_limit") }, 429);
     }
     // Never name the existing claimant: that would leak who owns a circle.
     if (await repository.hasVerifiedClaim(config.eventId, circleId)) {
-      return json({ error: "此社團已有通過的認領。若這是你的社團，請聯絡管理者。" }, 409);
+      return json({ error: "此社團已有通過的認領。若這是你的社團，請聯絡管理者。", code: errorCode("circle_already_claimed") }, 409);
     }
 
     // Tier 0: the account's own domain already appears as this circle's site.
@@ -699,7 +708,7 @@ export function createCirclePortalHandlers({
       evidenceNote,
       now,
     });
-    if (!claimId) return json({ error: "此帳號正在刪除，無法建立認領。" }, 409);
+    if (!claimId) return json({ error: "此帳號正在刪除，無法建立認領。", code: errorCode("account_deleting"), params: { action: "create_claim" } }, 409);
     await repository.writeAudit({
       at: now, actorAccountId: current.accountId, actorRole: "circle",
       action: domainMatch ? "claim.auto_verified" : "claim.created",
@@ -729,15 +738,15 @@ export function createCirclePortalHandlers({
 
   async function withdrawClaim(request: Request, claimId: string) {
     const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!current) return json({ error: "尚未登入。", code: errorCode("unauthenticated") }, 401);
 
     const claim = await repository.getClaim(claimId);
-    if (!claimInScope(claim) || claim.account_id !== current.accountId) return json({ error: "找不到這筆認領。" }, 404);
+    if (!claimInScope(claim) || claim.account_id !== current.accountId) return json({ error: "找不到這筆認領。", code: errorCode("claim_not_found") }, 404);
     if (claim.status !== "pending") {
-      return json({ error: "只有審核中的認領可以撤回。" }, 409);
+      return json({ error: "只有審核中的認領可以撤回。", code: errorCode("claim_not_pending") }, 409);
     }
     if (!await repository.withdrawClaim(claimId, current.accountId)) {
-      return json({ error: "只有審核中的認領可以撤回。" }, 409);
+      return json({ error: "只有審核中的認領可以撤回。", code: errorCode("claim_not_pending") }, 409);
     }
 
     const now = config.now();
@@ -751,22 +760,22 @@ export function createCirclePortalHandlers({
 
   async function runChallenge(request: Request, claimId: string) {
     const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!current) return json({ error: "尚未登入。", code: errorCode("unauthenticated") }, 401);
 
     const claim = await repository.getClaim(claimId);
-    if (!claimInScope(claim) || claim.account_id !== current.accountId) return json({ error: "找不到這筆認領。" }, 404);
-    if (claim.status !== "pending") return json({ error: "這筆認領已經處理過了。" }, 409);
-    if (!claim.challenge_token_hash || !claim.target_url) return json({ error: "這筆認領需要人工審核。" }, 409);
+    if (!claimInScope(claim) || claim.account_id !== current.accountId) return json({ error: "找不到這筆認領。", code: errorCode("claim_not_found") }, 404);
+    if (claim.status !== "pending") return json({ error: "這筆認領已經處理過了。", code: errorCode("claim_already_decided") }, 409);
+    if (!claim.challenge_token_hash || !claim.target_url) return json({ error: "這筆認領需要人工審核。", code: errorCode("claim_requires_manual_review") }, 409);
 
     const now = config.now();
     if (claim.challenge_expires_at !== null && claim.challenge_expires_at < now) {
-      return json({ error: "驗證碼已過期。請撤回這筆認領後重新送出，即可取得新的驗證碼。" }, 410);
+      return json({ error: "驗證碼已過期。請撤回這筆認領後重新送出，即可取得新的驗證碼。", code: errorCode("claim_challenge_expired") }, 410);
     }
     if (claim.challenge_attempts >= LIMITS.challengeAttemptsPerClaim) {
-      return json({ error: "驗證次數已達上限，請改用人工審核。" }, 429);
+      return json({ error: "驗證次數已達上限，請改用人工審核。", code: errorCode("claim_challenge_attempts_exhausted") }, 429);
     }
     if (!await repository.recordChallengeAttempt(claim.id)) {
-      return json({ error: "此帳號正在刪除，無法繼續驗證。" }, 409);
+      return json({ error: "此帳號正在刪除，無法繼續驗證。", code: errorCode("account_deleting"), params: { action: "verify_claim" } }, 409);
     }
 
     const body = await fetchEvidence(claim.target_url);
@@ -783,7 +792,7 @@ export function createCirclePortalHandlers({
       subjectType: "claim", subjectId: claim.id,
       detail: { targetUrl: claim.target_url, evidenceBodyHash: await sha256Hex(body) },
     });
-    return json(verified ? { verified: true } : { verified: false, error: "此社團已有通過的認領。" }, verified ? 200 : 409);
+    return json(verified ? { verified: true } : { verified: false, error: "此社團已有通過的認領。", code: errorCode("circle_already_claimed") }, verified ? 200 : 409);
   }
 
   /** `null` for an event this build does not know: the bounded string rule then applies. */
@@ -798,9 +807,9 @@ export function createCirclePortalHandlers({
 
   async function putOverride(request: Request, circleId: string) {
     const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!current) return json({ error: "尚未登入。", code: errorCode("unauthenticated") }, 401);
     if (!await repository.ownsCircle(current.accountId, config.eventId, circleId)) {
-      return json({ error: "你尚未通過這個社團的認領。" }, 403);
+      return json({ error: "你尚未通過這個社團的認領。", code: errorCode("claim_not_verified") }, 403);
     }
 
     const body = await readJson(request);
@@ -809,14 +818,14 @@ export function createCirclePortalHandlers({
     // published event: the portal serves every published event (ADR-0043), and
     // a category catalog is per-event.
     const fieldsProblem = circleOverrideFieldsProblem(fields, eventCategories());
-    if (fieldsProblem) return json({ error: fieldsProblem }, 400);
+    if (fieldsProblem) return json({ error: fieldsProblem, code: errorCode("invalid_fields") }, 400);
 
     // Chosen while writing, in the same submission as the content (ADR-0018).
     // Absent means "did not answer this time", which leaves any earlier choice
     // alone and never becomes a choice to delete.
     const choice = body?.retention;
     if (choice !== undefined && !isRetentionChoice(choice)) {
-      return json({ error: "保存期限必須是「保留」或「活動後清除」。" }, 400);
+      return json({ error: "保存期限必須是「保留」或「活動後清除」。", code: errorCode("invalid_retention") }, 400);
     }
     const retention = choice === undefined
       ? undefined
@@ -832,32 +841,32 @@ export function createCirclePortalHandlers({
     const previousHostedUrl = previousKey && thumbnailStore ? thumbnailStore.url(previousKey) : null;
     const pointsAtHostedStore = !!(thumbnailStore && thumbnailUrl?.startsWith(thumbnailStore.url("")));
     if (pointsAtHostedStore && thumbnailUrl !== previousHostedUrl && !uploadedKey) {
-      return json({ error: "本站代管代表圖需要有效的上傳憑證，請重新選擇檔案。" }, 400);
+      return json({ error: "本站代管代表圖需要有效的上傳憑證，請重新選擇檔案。", code: errorCode("image_reselect_required"), params: { kind: "thumbnail" } }, 400);
     }
     if (uploadedKey && (!thumbnailStore
       || !new RegExp(`^${uploadPrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[a-f0-9]{64}\\.(?:jpg|png|webp)$`).test(uploadedKey)
       || (fields as CircleOverrideFields).thumbnail?.url !== thumbnailStore.url(uploadedKey))) {
-      return json({ error: "代表圖上傳憑證無效，請重新選擇檔案。" }, 400);
+      return json({ error: "代表圖上傳憑證無效，請重新選擇檔案。", code: errorCode("image_reselect_required"), params: { kind: "thumbnail" } }, 400);
     }
     if (uploadedKey && !await thumbnailStore!.list(uploadPrefix).then((keys) => keys.includes(uploadedKey))) {
-      return json({ error: "代表圖草稿已不存在，請重新選擇檔案。" }, 400);
+      return json({ error: "代表圖草稿已不存在，請重新選擇檔案。", code: errorCode("image_reselect_required"), params: { kind: "thumbnail" } }, 400);
     }
     const keepsHostedThumbnail = !!(previousKey && thumbnailStore
       && thumbnailUrl === thumbnailStore.url(previousKey));
     const nextHostedKey = uploadedKey ?? (keepsHostedThumbnail ? previousKey : null);
-    if (previousKey && previousKey !== nextHostedKey && !thumbnailStore) return json({ error: "暫時無法使用圖片功能，請稍後再試。" }, 503);
+    if (previousKey && previousKey !== nextHostedKey && !thumbnailStore) return json({ error: "暫時無法使用圖片功能，請稍後再試。", code: errorCode("image_service_unavailable") }, 503);
     // Sale-sheet images are hosted only. Each URL must name an object this
     // circle uploaded that is still there — published before or staged since;
     // the key is in the URL, so no separate upload token is needed.
     const catalogImages = (fields as CircleOverrideFields).catalogImages ?? [];
     if ((catalogImages.length > 0 || hasCatalogImages(previous)) && !thumbnailStore) {
-      return json({ error: "暫時無法使用圖片功能，請稍後再試。" }, 503);
+      return json({ error: "暫時無法使用圖片功能，請稍後再試。", code: errorCode("image_service_unavailable") }, 503);
     }
     const nextCatalogKeys = thumbnailStore ? catalogKeysOf(thumbnailStore, fields as CircleOverrideFields, config.eventId, circleId) : [];
-    if (nextCatalogKeys.some((key) => key === null)) return json({ error: "品書圖片需要在這裡上傳，請重新選擇檔案。" }, 400);
+    if (nextCatalogKeys.some((key) => key === null)) return json({ error: "品書圖片需要在這裡上傳，請重新選擇檔案。", code: errorCode("image_reselect_required"), params: { kind: "catalog" } }, 400);
     if (nextCatalogKeys.length > 0) {
       const stored = new Set(await thumbnailStore!.list(catalogObjectPrefix(config.eventId, circleId)));
-      if (nextCatalogKeys.some((key) => !stored.has(key!))) return json({ error: "有品書圖片已不存在，請重新選擇檔案。" }, 400);
+      if (nextCatalogKeys.some((key) => !stored.has(key!))) return json({ error: "有品書圖片已不存在，請重新選擇檔案。", code: errorCode("image_reselect_required"), params: { kind: "catalog" } }, 400);
     }
     const saved = await repository.putOverride({
       accountId: current.accountId, eventId: config.eventId, circleId,
@@ -866,7 +875,7 @@ export function createCirclePortalHandlers({
     });
     if (!saved) {
       if (uploadedKey && thumbnailStore) await thumbnailStore.delete(uploadedKey);
-      return json({ error: "此帳號正在刪除，無法儲存內容。" }, 409);
+      return json({ error: "此帳號正在刪除，無法儲存內容。", code: errorCode("account_deleting"), params: { action: "save_content" } }, 409);
     }
     await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now, await currentPhase());
     if (thumbnailStore) {
@@ -898,24 +907,24 @@ export function createCirclePortalHandlers({
 
   async function uploadThumbnail(request: Request, circleId: string) {
     const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!current) return json({ error: "尚未登入。", code: errorCode("unauthenticated") }, 401);
     if (!await repository.ownsCircle(current.accountId, config.eventId, circleId)) {
-      return json({ error: "你尚未通過這個社團的認領。" }, 403);
+      return json({ error: "你尚未通過這個社團的認領。", code: errorCode("claim_not_verified") }, 403);
     }
-    if (!thumbnailStore) return json({ error: "暫時無法使用圖片功能，請稍後再試。" }, 503);
+    if (!thumbnailStore) return json({ error: "暫時無法使用圖片功能，請稍後再試。", code: errorCode("image_service_unavailable") }, 503);
 
     let form: FormData;
     try {
       form = await request.formData();
     } catch {
-      return json({ error: "上傳格式無效。" }, 400);
+      return json({ error: "上傳格式無效。", code: errorCode("invalid_upload") }, 400);
     }
     const file = form.get("file");
     // Only the bytes are required: the circle that uploads its own artwork is
     // the source, and the two credit fields are optional (ADR-0053).
     const sourceUrl = form.get("sourceUrl");
     const provider = form.get("provider");
-    if (!(file instanceof File)) return json({ error: "請選擇圖片。" }, 400);
+    if (!(file instanceof File)) return json({ error: "請選擇圖片。", code: errorCode("image_required") }, 400);
 
     let prepared: Awaited<ReturnType<typeof prepareHostedThumbnail>>;
     try {
@@ -925,7 +934,7 @@ export function createCirclePortalHandlers({
         provider: typeof provider === "string" ? provider : "",
       });
     } catch (error) {
-      return json({ error: error instanceof Error ? error.message : "代表圖格式無效。" }, 400);
+      return json({ error: error instanceof Error ? error.message : "代表圖格式無效。", code: errorCode("invalid_image"), params: { kind: "thumbnail" } }, 400);
     }
 
     const thumbnail = hostedThumbnailFields(thumbnailStore, prepared);
@@ -939,7 +948,7 @@ export function createCirclePortalHandlers({
     await thumbnailStore.put(prepared.key, prepared.value, prepared.contentType);
     if (!await repository.isAccountWritable(current.accountId)) {
       await thumbnailStore.delete(prepared.key);
-      return json({ error: "此帳號正在刪除，無法上傳圖片。" }, 409);
+      return json({ error: "此帳號正在刪除，無法上傳圖片。", code: errorCode("account_deleting"), params: { action: "upload_image" } }, 409);
     }
     return json({ ok: true, thumbnail, uploadKey: prepared.key });
   }
@@ -956,21 +965,21 @@ export function createCirclePortalHandlers({
    */
   async function uploadCatalogImage(request: Request, circleId: string) {
     const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!current) return json({ error: "尚未登入。", code: errorCode("unauthenticated") }, 401);
     if (!await repository.ownsCircle(current.accountId, config.eventId, circleId)) {
-      return json({ error: "你尚未通過這個社團的認領。" }, 403);
+      return json({ error: "你尚未通過這個社團的認領。", code: errorCode("claim_not_verified") }, 403);
     }
-    if (!thumbnailStore) return json({ error: "暫時無法使用圖片功能，請稍後再試。" }, 503);
+    if (!thumbnailStore) return json({ error: "暫時無法使用圖片功能，請稍後再試。", code: errorCode("image_service_unavailable") }, 503);
 
     let form: FormData;
     try {
       form = await request.formData();
     } catch {
-      return json({ error: "上傳格式無效。" }, 400);
+      return json({ error: "上傳格式無效。", code: errorCode("invalid_upload") }, 400);
     }
     const file = form.get("file");
     const preview = form.get("preview");
-    if (!(file instanceof File) || !(preview instanceof File)) return json({ error: "請選擇圖片。" }, 400);
+    if (!(file instanceof File) || !(preview instanceof File)) return json({ error: "請選擇圖片。", code: errorCode("image_required") }, 400);
     // Addresses, not keys: only an address that is one of this circle's own
     // sale-sheet objects can keep anything.
     const keep = form.getAll("keep").flatMap((url) => typeof url === "string" ? [catalogKeyOf(thumbnailStore, url, config.eventId, circleId)] : []);
@@ -979,7 +988,7 @@ export function createCirclePortalHandlers({
     try {
       prepared = await prepareHostedCatalogImage({ eventId: config.eventId, circleId, file, preview });
     } catch (error) {
-      return json({ error: error instanceof Error ? error.message : "品書圖片格式無效。" }, 400);
+      return json({ error: error instanceof Error ? error.message : "品書圖片格式無效。", code: errorCode("invalid_image"), params: { kind: "catalog" } }, 400);
     }
 
     const previous = await repository.getOverride(config.eventId, circleId);
@@ -991,7 +1000,7 @@ export function createCirclePortalHandlers({
     await thumbnailStore.put(prepared.preview.key, prepared.preview.value, "image/jpeg");
     if (!await repository.isAccountWritable(current.accountId)) {
       await deleteObjectKeys(thumbnailStore, [prepared.full.key, prepared.preview.key]);
-      return json({ error: "此帳號正在刪除，無法上傳圖片。" }, 409);
+      return json({ error: "此帳號正在刪除，無法上傳圖片。", code: errorCode("account_deleting"), params: { action: "upload_image" } }, 409);
     }
     return json({ ok: true, image: hostedCatalogImage(thumbnailStore, prepared) });
   }
@@ -1010,9 +1019,9 @@ export function createCirclePortalHandlers({
    */
   async function deleteMyOverride(request: Request, circleId: string) {
     const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!current) return json({ error: "尚未登入。", code: errorCode("unauthenticated") }, 401);
     if (!await repository.ownsCircle(current.accountId, config.eventId, circleId)) {
-      return json({ error: "你尚未通過這個社團的認領。" }, 403);
+      return json({ error: "你尚未通過這個社團的認領。", code: errorCode("claim_not_verified") }, 403);
     }
 
     // The confirmation is the circle's own id, echoed back. A boolean would be
@@ -1021,17 +1030,17 @@ export function createCirclePortalHandlers({
     // decision. Re-sending a mail was the alternative, and it would have made
     // an irreversible action depend on deliverability.
     const body = await readJson(request);
-    if (body?.confirm !== circleId) return json({ error: "請輸入社團代號以確認刪除。" }, 400);
+    if (body?.confirm !== circleId) return json({ error: "請輸入社團代號以確認刪除。", code: errorCode("circle_delete_confirmation") }, 400);
 
     const now = config.now();
     const previous = await repository.getOverride(config.eventId, circleId);
-    if ((previous?.hosted_thumbnail_key || hasCatalogImages(previous)) && !thumbnailStore) return json({ error: "暫時無法使用圖片功能，請稍後再試。" }, 503);
+    if ((previous?.hosted_thumbnail_key || hasCatalogImages(previous)) && !thumbnailStore) return json({ error: "暫時無法使用圖片功能，請稍後再試。", code: errorCode("image_service_unavailable") }, 503);
     if (thumbnailStore) {
       const keys = await thumbnailStore.list(circleObjectPrefix(config.eventId, circleId));
       await deleteObjectKeys(thumbnailStore, keys);
     }
     if (!await repository.deleteOverride({ accountId: current.accountId, eventId: config.eventId, circleId, now: config.now() })) {
-      return json({ error: "沒有可刪除的內容。" }, 404);
+      return json({ error: "沒有可刪除的內容。", code: errorCode("nothing_to_delete") }, 404);
     }
     await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now, await currentPhase());
     // What was deleted is deliberately absent; that it was, and by whom, is not.
@@ -1052,30 +1061,30 @@ export function createCirclePortalHandlers({
    */
   async function previewOverride(request: Request, circleId: string) {
     const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!current) return json({ error: "尚未登入。", code: errorCode("unauthenticated") }, 401);
     if (!await repository.ownsCircle(current.accountId, config.eventId, circleId)) {
-      return json({ error: "你尚未通過這個社團的認領。" }, 403);
+      return json({ error: "你尚未通過這個社團的認領。", code: errorCode("claim_not_verified") }, 403);
     }
 
     const body = await readJson(request);
     const fields = body?.fields ?? {};
     const fieldsProblem = circleOverrideFieldsProblem(fields, eventCategories());
-    if (fieldsProblem) return json({ error: fieldsProblem }, 400);
+    if (fieldsProblem) return json({ error: fieldsProblem, code: errorCode("invalid_fields") }, 400);
 
     const projectedAt = new Date(config.now()).toISOString();
     const [records, baseRecords] = await Promise.all([
       projectCircle(circleId, fields as CircleOverrideFields, projectedAt),
       projectCircle(circleId, null, projectedAt),
     ]);
-    if (!records) return json({ error: "找不到這個社團。" }, 404);
+    if (!records) return json({ error: "找不到這個社團。", code: errorCode("circle_not_found") }, 404);
     return json({ records, baseRecords: baseRecords ?? [], projectedAt });
   }
 
   async function getMyOverride(request: Request, circleId: string) {
     const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!current) return json({ error: "尚未登入。", code: errorCode("unauthenticated") }, 401);
     if (!await repository.ownsCircle(current.accountId, config.eventId, circleId)) {
-      return json({ error: "你尚未通過這個社團的認領。" }, 403);
+      return json({ error: "你尚未通過這個社團的認領。", code: errorCode("claim_not_verified") }, 403);
     }
     const row = await repository.getOverride(config.eventId, circleId);
     return json({
@@ -1100,17 +1109,17 @@ export function createCirclePortalHandlers({
    */
   async function setPostEventVisibility(request: Request, circleId: string) {
     const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!current) return json({ error: "尚未登入。", code: errorCode("unauthenticated") }, 401);
     if (!await repository.ownsCircle(current.accountId, config.eventId, circleId)) {
-      return json({ error: "你尚未通過這個社團的認領。" }, 403);
+      return json({ error: "你尚未通過這個社團的認領。", code: errorCode("claim_not_verified") }, 403);
     }
 
     const body = await readJson(request);
-    if (typeof body?.hidden !== "boolean") return json({ error: "hidden 必須是 true 或 false。" }, 400);
+    if (typeof body?.hidden !== "boolean") return json({ error: "hidden 必須是 true 或 false。", code: errorCode("invalid_visibility") }, 400);
 
     const now = config.now();
     const applied = await repository.setPostEventHidden(current.accountId, config.eventId, circleId, body.hidden, config.now());
-    if (!applied) return json({ error: "請先儲存一次內容再設定。" }, 409);
+    if (!applied) return json({ error: "請先儲存一次內容再設定。", code: errorCode("save_required_first") }, 409);
 
     await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now, await currentPhase());
     await repository.writeAudit({
@@ -1921,21 +1930,19 @@ export function createCirclePortalHandlers({
 
   async function getAccountNotificationPreferences(request: Request) {
     const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!current) return json({ error: "尚未登入。", code: errorCode("unauthenticated") }, 401);
     return json(await repository.getAccountNotificationPreferences(current.accountId));
   }
 
   async function saveAccountNotificationPreferences(request: Request) {
     const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!current) return json({ error: "尚未登入。", code: errorCode("unauthenticated") }, 401);
     const body = await readJson(request);
-    if (!body || Object.keys(body).some(key => !["cadence", "version"].includes(key))
-      || !isAccountNotificationCadence(body.cadence) || !Number.isSafeInteger(body.version) || (body.version as number) < 0) {
-      return json({ error: "通知設定格式無效。" }, 400);
-    }
+    const parsed = parseAccountNotificationPreferencesUpdate(body);
+    if (!parsed.ok) return json({ error: parsed.code === "invalid_locale" ? "請選擇支援的語言。" : "通知設定格式無效。", code: errorCode(parsed.code) }, 400);
     const preferences = await repository.saveAccountNotificationPreferences({ accountId: current.accountId,
-      sessionId: current.sessionId, cadence: body.cadence, version: body.version as number, now: config.now() });
-    return preferences ? json(preferences) : json({ error: "設定已變更，請重新載入後再儲存。" }, 409);
+      sessionId: current.sessionId, ...parsed.value, now: config.now() });
+    return preferences ? json(preferences) : json({ error: "設定已變更，請重新載入後再儲存。", code: errorCode("version_conflict") }, 409);
   }
 
   async function adminGetNotificationPreferences(request: Request) {
@@ -3892,18 +3899,18 @@ export function createCirclePortalHandlers({
     submitOrganizerCandidate, adminReviewOrganizerCandidate, adminRetryOrganizerPublication, reopenOrganizerCandidate, abandonOrganizerAmendment,
     createOrganizerAmendment, getOrganizerAmendment, saveOrganizerAmendment,
     // Event-scoped: each answers only for the event the request named.
-    listClaims: eventScoped(listClaims),
-    createClaim: eventScoped(createClaim),
-    withdrawClaim: eventScoped(withdrawClaim),
-    runChallenge: eventScoped(runChallenge),
-    searchCatalog: eventScoped(searchCatalog),
-    getMyOverride: eventScoped(getMyOverride),
-    putOverride: eventScoped(putOverride),
-    uploadThumbnail: eventScoped(uploadThumbnail),
-    uploadCatalogImage: eventScoped(uploadCatalogImage),
-    deleteMyOverride: eventScoped(deleteMyOverride),
-    previewOverride: eventScoped(previewOverride),
-    setPostEventVisibility: eventScoped(setPostEventVisibility),
+    listClaims: eventScoped(listClaims, true),
+    createClaim: eventScoped(createClaim, true),
+    withdrawClaim: eventScoped(withdrawClaim, true),
+    runChallenge: eventScoped(runChallenge, true),
+    searchCatalog: eventScoped(searchCatalog, true),
+    getMyOverride: eventScoped(getMyOverride, true),
+    putOverride: eventScoped(putOverride, true),
+    uploadThumbnail: eventScoped(uploadThumbnail, true),
+    uploadCatalogImage: eventScoped(uploadCatalogImage, true),
+    deleteMyOverride: eventScoped(deleteMyOverride, true),
+    previewOverride: eventScoped(previewOverride, true),
+    setPostEventVisibility: eventScoped(setPostEventVisibility, true),
     adminListClaims: eventScoped(adminListClaims),
     adminDecideClaim: eventScoped(adminDecideClaim),
     adminTakedown: eventScoped(adminTakedown),

@@ -90,19 +90,136 @@ async function submitted(id = "candidate") {
 }
 
 test("account preferences require session, validate input, reject stale writes and preserve admin preferences", async () => {
-  assert.deepEqual(await (await handlers.getAccountNotificationPreferences(request())).json(), { cadence: "daily", version: 0 });
+  assert.deepEqual(await (await handlers.getAccountNotificationPreferences(request())).json(), { cadence: "daily", version: 0, locale: null });
+  assert.equal(await count("account_notification_preferences"), 0, "GET does not create a preference row");
   assert.equal((await handlers.getAccountNotificationPreferences(request("GET", undefined, ""))).status, 401);
   for (const change of [{ cadence: "weekly" }, { accountId: "other" }, { version: -1 }]) {
     assert.equal((await handlers.saveAccountNotificationPreferences(request("PUT", { ...await prefs(), ...change }))).status, 400);
   }
   assert.equal((await handlers.saveAccountNotificationPreferences(request("PUT", { cadence: "off", version: 0 }))).status, 200);
-  assert.equal((await handlers.saveAccountNotificationPreferences(request("PUT", { cadence: "hourly", version: 0 }))).status, 409);
+  const stale = await handlers.saveAccountNotificationPreferences(request("PUT", { cadence: "hourly", version: 0 }));
+  assert.equal(stale.status, 409);
+  assert.equal((await stale.json()).code, "version_conflict");
   assert.equal((await prefs()).cadence, "off");
   assert.deepEqual(await repo.getNotificationPreferences(ADMIN), { enabled: true, cadence: "five_minutes", version: 1 });
   for (const headers of [{ origin: "https://attacker.test", "content-type": "application/json" }, { origin: "https://map.kotoban.top", "content-type": "text/plain" }]) {
     const response = await middleware({ request: new Request("https://map.kotoban.top/api/account/notification-preferences", { method: "PUT", headers, body: "{}" }), next: () => { throw new Error("CSRF reached handler"); } });
     assert.ok([403, 415].includes(response.status));
   }
+});
+
+test("locale-only inserts and updates preserve pending schedules, leases, off state and completed mail", async () => {
+  await claim(); await tick(); await update();
+  const digest = (await items("kind = 'circle.updated'"))[0];
+  await db.prepare(`INSERT INTO account_notification_batches (id, account_id, lane, retry_at, created_at, lease_token, lease_until)
+    VALUES ('language-batch', ?1, 'digest', ?2, ?2, 'inflight', ?3)`).bind(owner, now, now + 120000).run();
+  await db.prepare("UPDATE account_notification_items SET batch_id = 'language-batch' WHERE id = ?1").bind(digest.id).run();
+  for (const cadence of [null, "off", "hourly", "daily"]) {
+    await db.prepare("DELETE FROM account_notification_preferences WHERE account_id = ?1").bind(owner).run();
+    if (cadence) await save({ cadence });
+    // Pin a retry and lease even for off; language must not cancel or fence it.
+    await db.prepare("UPDATE account_notification_items SET state = 'pending', due_at = 123, completed_at = NULL WHERE id = ?1").bind(digest.id).run();
+    await db.prepare("UPDATE account_notification_batches SET state = 'pending', retry_at = ?1, lease_token = 'inflight', lease_until = ?2, completed_at = NULL WHERE id = 'language-batch'")
+      .bind(now, now + 120000).run();
+    const before = await db.prepare("SELECT * FROM account_notification_preferences WHERE account_id = ?1").bind(owner).first();
+    const beforeItems = await items();
+    const beforeBatch = await db.prepare("SELECT * FROM account_notification_batches WHERE id = 'language-batch'").first();
+    const version = before?.version ?? 0;
+    const response = await handlers.saveAccountNotificationPreferences(request("PUT", { version, locale: "ja" }));
+    assert.equal(response.status, 200, await response.clone().text());
+    assert.deepEqual(await response.json(), { cadence: cadence ?? "daily", version: version + 1, locale: "ja" });
+    const after = await db.prepare("SELECT * FROM account_notification_preferences WHERE account_id = ?1").bind(owner).first();
+    assert.equal(after.enabled_since, before?.enabled_since ?? 0);
+    assert.notEqual(after.write_token, before?.write_token);
+    assert.deepEqual(await items(), beforeItems);
+    assert.deepEqual(await db.prepare("SELECT * FROM account_notification_batches WHERE id = 'language-batch'").first(), beforeBatch);
+    const stale = await handlers.saveAccountNotificationPreferences(request("PUT", { version, locale: "en" }));
+    assert.equal(stale.status, 409); assert.equal((await stale.json()).code, "version_conflict");
+    assert.deepEqual(await db.prepare("SELECT * FROM account_notification_preferences WHERE account_id = ?1").bind(owner).first(), after);
+    if (cadence !== "off") {
+      const message = await repo.readAccountNotificationBatch(beforeBatch, now);
+      assert.equal(message.locale, "ja", "a live lease reads the current language at delivery");
+    }
+  }
+  const unchanged = await prefs();
+  const response = await handlers.saveAccountNotificationPreferences(request("PUT", { version: unchanged.version, cadence: "hourly" }));
+  assert.equal(response.status, 200);
+  assert.equal((await prefs()).locale, "ja", "legacy cadence PUT preserves language");
+  assert.equal((await items("id = '" + digest.id + "'"))[0].due_at, nextNotificationSlot("hourly", now));
+  const rescheduled = await db.prepare("SELECT * FROM account_notification_batches WHERE id = 'language-batch'").first();
+  assert.equal(rescheduled.retry_at, nextNotificationSlot("hourly", now));
+  assert.equal(rescheduled.lease_token, null); assert.equal(rescheduled.lease_until, 0);
+  await db.prepare("UPDATE account_notification_items SET due_at = 3 WHERE id = ?1").bind(digest.id).run();
+  assert.equal((await handlers.saveAccountNotificationPreferences(request("PUT", { version: (await prefs()).version, cadence: "hourly", locale: "en" }))).status, 200);
+  assert.equal((await prefs()).locale, "en");
+  assert.equal((await items("id = '" + digest.id + "'"))[0].due_at, nextNotificationSlot("hourly", now), "present cadence reschedules even when unchanged");
+});
+
+test("locale preference writes refuse invalid bodies, other-account sessions, revoked or inactive accounts", async () => {
+  for (const [body, code] of [[{ version: 0, locale: "en-US" }, "invalid_locale"], [{ version: 0 }, "invalid_notification_preferences"], [{ version: 0, locale: "en", accountId: "other" }, "invalid_notification_preferences"]]) {
+    const response = await handlers.saveAccountNotificationPreferences(request("PUT", body));
+    assert.equal(response.status, 400); assert.equal((await response.json()).code, code);
+  }
+  assert.equal((await handlers.saveAccountNotificationPreferences(request("PUT", { version: 0, locale: "en" }, ""))).status, 401);
+  for (const change of [{ sessionId: ADMIN }, { sessionId: "missing" }]) {
+    assert.equal(await repo.saveAccountNotificationPreferences({ accountId: owner, sessionId: owner, version: 0, locale: "en", now, ...change }), null);
+  }
+  await repo.revokeSession(owner, now);
+  assert.equal((await handlers.saveAccountNotificationPreferences(request("PUT", { version: 0, locale: "en" }))).status, 401);
+  assert.equal(await repo.saveAccountNotificationPreferences({ accountId: owner, sessionId: owner, version: 0, locale: "en", now }), null);
+  await repo.createSession(owner, now, now + 86400000, "active");
+  for (const column of ["disabled_at", "deletion_started_at"]) {
+    await db.prepare(`UPDATE accounts SET ${column} = ?1 WHERE id = ?2`).bind(now, owner).run();
+    assert.equal(await repo.saveAccountNotificationPreferences({ accountId: owner, sessionId: "active", version: 0, locale: "en", now }), null);
+    const activeCookie = `${SESSION_COOKIE}=active.${await hmacSign("secret", "active")}`;
+    assert.equal((await handlers.saveAccountNotificationPreferences(request("PUT", { version: 0, locale: "en" }, activeCookie))).status, 401);
+    await db.prepare(`UPDATE accounts SET ${column} = NULL WHERE id = ?1`).bind(owner).run();
+  }
+  assert.equal(await count("account_notification_preferences"), 0);
+});
+
+test("all five circle letters use the stored delivery locale, legacy tokens survive and organizer mail stays Chinese", async () => {
+  const deliver = mail => sendPortalMail({ PREVIEW_MAIL_SINK: "d1", PREVIEW_TEST_RECIPIENTS: "owner@example.test" }, mail, async message => {
+    sent.push(message);
+    await repo.storePreviewMail({ email: message.to, subject: message.subject, text: message.text, now });
+  });
+  for (const locale of ["en", "ja", "zh-Hant"]) {
+    await db.prepare("DELETE FROM account_notification_preferences WHERE account_id = ?1").bind(owner).run();
+    await handlers.saveAccountNotificationPreferences(request("PUT", { version: 0, locale }));
+    await claim(`${locale}-approved`);
+    await claim(`${locale}-rejected`, "pending"); await repo.setClaimStatus(`${locale}-rejected`, "rejected", now, "admin", "pending");
+    await claim(`${locale}-revoked`); await repo.setClaimStatus(`${locale}-revoked`, "revoked", now, "admin", "verified");
+    await claim(`${locale}-taken`); await update({ pen: "原文作者" }, `${locale}-taken`);
+    await repo.takedownOverride({ eventId: "sample", circleId: `${locale}-taken`, reason: "人工原文", by: "admin", now });
+    await update({ pen: "原文作者" }, `${locale}-approved`);
+    await db.prepare("UPDATE account_notification_items SET detail = '補充資料、品書、恢復公開、保存設定、代表圖片、未知原文' WHERE kind = 'circle.updated' AND state = 'pending'").run();
+    sent = []; await tick(deliver); now = nextNotificationSlot("daily", now); await tick(deliver);
+    const expected = locale === "en" ? ["Circle claim approved", "Circle claim rejected", "Circle claim revoked", "Circle details taken down", "Circle details updated for"] : locale === "ja" ? ["管理申請が承認されました", "管理申請が承認されませんでした", "管理権限が取り消されました", "サークル補足情報の公開停止", "サークルの補足情報更新"] : ["認領通過", "認領未通過", "認領已撤銷", "補充資料撤下通知", "個社團的補充資料更新"];
+    for (const title of expected) assert.ok(sent.some(mail => mail.subject.includes(title)), title);
+    for (const mail of sent) {
+      assert.match(mail.html, new RegExp(`<html lang="${locale}">`));
+      assert.ok(mail.text.includes("同名社團")); assert.ok(mail.text.includes(`lang=${locale}`));
+      if (locale !== "zh-Hant") {
+        const zone = locale === "en" ? "Taiwan time" : "台湾時間";
+        assert.ok(mail.html.includes(zone));
+        // Digest text contains no timestamp; its HTML stamp labels the zone.
+        if (!mail.subject.includes(expected[4])) assert.ok(mail.text.includes(zone));
+      }
+    }
+    const digest = sent.find(mail => mail.subject.includes(expected[4]));
+    for (const token of locale === "en" ? ["Circle details", "Item list", "Publication restored", "Retention settings", "Featured image"] : locale === "ja" ? ["サークル補足情報", "お品書き", "公開再開", "保存設定", "代表画像"] : ["補充資料", "品書", "恢復公開", "保存設定", "代表圖片"]) assert.ok(digest.text.includes(token));
+    assert.ok(digest.text.includes("未知原文"));
+    assert.ok((await items("kind = 'circle.updated'")).every(item => item.detail.startsWith("補充資料、")), "queued detail remains Chinese");
+    const sink = (await db.prepare("SELECT subject, text FROM preview_mail_sink WHERE email = 'owner@example.test'").all()).results;
+    assert.ok(sent.every(mail => sink.some(row => row.subject === mail.subject && row.text === mail.text)), "all three languages reach the real local D1 mail sink");
+  }
+  await handlers.saveAccountNotificationPreferences(request("PUT", { version: (await prefs()).version, locale: "en" }));
+  await submit("organizer-locale");
+  const admin = await repo.upsertAccount(ADMIN, now);
+  await repo.reviewOrganizerApplication({ id: "organizer-locale", decision: "rejected", reason: "原文", reviewerAccountId: admin, sessionId: ADMIN, now, ipHash: null });
+  sent = []; await tick();
+  assert.equal(sent.length, 1); assert.match(sent[0].subject, /活動建置申請未通過/);
+  assert.match(sent[0].html, /<html lang="zh-Hant">/); assert.doesNotMatch(sent[0].text, /lang=en/);
 });
 
 test("automatic/manual claim approvals, rejection and revocation notify once per occurrence", async () => {
@@ -369,6 +486,7 @@ test("changing frequency fences an in-flight digest without losing its frozen it
 test("scheduled account delivery is independent of publication and admin digests; production logs are minimal", async t => {
   now = Date.now() - 1000;
   await claim();
+  await repo.saveAccountNotificationPreferences({ accountId: owner, sessionId: owner, now, version: 0, locale: "en" });
   const logs = [];
   t.mock.method(console, "log", value => logs.push(value));
   t.mock.method(console, "error", value => logs.push(value));
@@ -379,13 +497,15 @@ test("scheduled account delivery is independent of publication and admin digests
   await notificationWorker.scheduled({}, { DB: failingPublicationDB, ORGANIZER_PUBLICATION_MODE: "fake", PREVIEW_MAIL_SINK: "d1",
     NOTIFICATION_ORIGIN: "https://map.kotoban.top", PREVIEW_TEST_RECIPIENTS: "owner@example.test" });
   assert.equal(await count("account_notification_batches", "state = 'accepted'"), 1);
-  assert.match((await repo.latestPreviewMail("owner@example.test")).subject, /認領通過/);
+  const delivered = await repo.latestPreviewMail("owner@example.test");
+  assert.match(delivered.subject, /Circle claim approved/);
+  assert.match(delivered.text, /lang=en/);
   assert.doesNotMatch(logs.join(""), /owner@example|同名社團|publication unavailable/);
   assert.match(logs.join(""), /publication.tick_failed/);
 });
 
 test("account deletion removes preferences, queued items and leased batches permanently", async () => {
-  await claim(); await save({ cadence: "hourly" });
+  await claim(); await save({ cadence: "hourly", locale: "ja" });
   const due = (await repo.listDueAccountNotifications(now))[0];
   const batch = await repo.claimAccountNotificationBatch(due.account_id, due.lane, now);
   assert.ok(batch);
