@@ -19,6 +19,7 @@ try {
         const url = new URL(request.url());
         let body;
         if (url.pathname === "/api/auth/session") body = { email: "circle@example.test", isAdmin: false, isMapContributor: false, expiresAt: Date.now() + 86400000 };
+        else if (url.pathname === "/api/account/notification-preferences" && request.method() === "GET") body = { cadence: "daily", version: 1, locale: "zh-Hant" };
         else if (url.pathname === "/api/circle/search") {
           assert.equal(url.searchParams.get("event"), "sample");
           assert.equal(url.searchParams.get("circle"), "c-900001");
@@ -61,6 +62,7 @@ try {
         const url = new URL(request.url());
         let body;
         if (url.pathname === "/api/auth/session") body = { email: "visitor@example.test", isAdmin: false, isMapContributor: false, expiresAt: Date.now() + 86400000 };
+        else if (url.pathname === "/api/account/notification-preferences" && request.method() === "GET") body = { cadence: "daily", version: 1, locale: "zh-Hant" };
         else if (url.pathname === "/api/circle/search") body = { circles: [{ id: "c-900001", name: "北風畫室", links: [], linkCount: 1, claimed: true }] };
         else if (url.pathname === "/api/claims" && request.method() === "POST") { claimPosts += 1; body = {}; }
         else if (url.pathname === "/api/claims") body = { eventId: "sample", claims: [] };

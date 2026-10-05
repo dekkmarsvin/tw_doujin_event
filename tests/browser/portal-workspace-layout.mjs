@@ -23,6 +23,7 @@ function portalRoutes(claimsByEvent, claimsGate, failOnce = new Set()) {
       const url = new URL(route.request().url());
       let body;
       if (url.pathname === "/api/auth/session") body = { email: "circle@example.test", isAdmin: false, isMapContributor: false, expiresAt: Date.now() + 86400000 };
+      else if (url.pathname === "/api/account/notification-preferences" && route.request().method() === "GET") body = { cadence: "daily", version: 1, locale: "zh-Hant" };
       else if (url.pathname === "/api/claims") {
         await claimsGate;
         const event = url.searchParams.get("event");
