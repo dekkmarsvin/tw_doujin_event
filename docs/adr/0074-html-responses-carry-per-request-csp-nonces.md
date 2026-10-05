@@ -1,6 +1,6 @@
 # ADR-0074：HTML 回應使用每次請求的 CSP nonce
 
-- 狀態：已定案；部分取代 ADR-0008 的 HTML 直送要求
+- 狀態：部分被取代；[ADR-0077](./0077-circle-share-images-follow-published-media.md) 新增社團分享 HTML 重寫／持久化讀取例外，CSP nonce 與快取規則不變。本 ADR 部分取代 ADR-0008 的 HTML 直送要求。
 - HTML 不重寫／無持久化讀取的社團分享例外見 [ADR-0077](./0077-circle-share-images-follow-published-media.md)；CSP nonce 與快取規則不變。
 - 相關契約：[資料傳輸與離線](../contracts/delivery-and-offline.md)
 

@@ -1,6 +1,6 @@
 # ADR-0002：規劃資料只留在使用者裝置
 
-- 狀態：已定案
+- 狀態：部分被取代；[ADR-0079](./0079-shared-itineraries-use-short-links-and-qr-codes.md) 允許使用者主動建立匿名精簡行程 snapshot。完整規劃與私人欄位仍留在裝置，不建立帳號同步。
 - 相關契約：[收藏與走訪規劃契約](../contracts/planning.md)
 
 ## 脈絡

@@ -25,7 +25,7 @@ ADR 不搬動，決策不改寫；推翻舊決策時寫新的 ADR，並在舊的
 | 地圖貢獻 | 0033 |
 | 活動資料與 reference | 0012、0014、0026、0028、0032、0039、0068、0070 |
 | 保存期限與個資 | 0018、0021、0022、0027、0054、0068 |
-| 部署、Access 與配額 | 0009、0015、0029、0031、0034、0065 |
+| 部署、Access 與配額 | 0008、0009、0015、0029、0031、0034、0065、0074、0077、0079 |
 | 對外文案與來源標示 | 0024、0036、0053 |
 | 產品範圍 | 0025、0041 |
 | 對外政策 | 0019、0023 |
@@ -36,13 +36,13 @@ ADR 不搬動，決策不改寫；推翻舊決策時寫新的 ADR，並在舊的
 | ADR | 決策 | 狀態 |
 |---|---|---|
 | [0001](./0001-adopt-webcatalog-patterns-selectively.md) | 選擇性採納 Comike WebCatalog 的模式 | 生效 |
-| [0002](./0002-planning-data-stays-on-device.md) | 規劃資料只留在使用者裝置 | 生效 |
+| [0002](./0002-planning-data-stays-on-device.md) | 規劃資料只留在使用者裝置 | **部分被取代** — 0079 允許主動分享精簡 snapshot；完整規劃與私人欄位仍留在裝置 |
 | [0003](./0003-circle-identity-from-workbook-row.md) | 社團身分以試算表主資料列為準 | **已取代** — 全部由 0010 取代 |
 | [0004](./0004-plan-and-next-stop-are-separate-actions.md) | 加入行程與設為下一站是兩個獨立動作 | 生效 |
-| [0005](./0005-import-stays-p2-export-only.md) | 匯入維持 P2，一般介面只保留安全匯出 | 生效；自己的完整 JSON 備份由 0078 取代 |
-| [0006](./0006-split-search-planning-filter-and-display.md) | 把搜尋、規劃篩選與顯示設定拆成三組 | 生效；後果中的原創／二創由 0051 改寫，列為尚未實作的三項已實作 |
+| [0005](./0005-import-stays-p2-export-only.md) | 匯入維持 P2，一般介面只保留安全匯出 | **部分被取代** — 自己的完整 JSON 備份由 0078 取代；CSV 與外部服務匯入仍維持 P2 |
+| [0006](./0006-split-search-planning-filter-and-display.md) | 把搜尋、規劃篩選與顯示設定拆成三組 | **部分被取代** — 後果中的原創／二創由 0051 改寫；三組責任切分不變，列為尚未實作的三項已實作 |
 | [0007](./0007-circle-name-is-not-circle-editable.md) | 社團名稱不可由社團自行編輯 | 生效 |
-| [0008](./0008-static-public-reading-path.md) | 公開閱讀路徑純靜態，不經 Worker | 部分被取代（0074）；場刊／地圖與資產仍靜態 |
+| [0008](./0008-static-public-reading-path.md) | 公開閱讀路徑純靜態，不經 Worker | **部分被取代** — HTML 由 0074 調整，0077／0079 新增分享讀取／API 例外；場刊／地圖與資產仍靜態 |
 | [0009](./0009-single-pages-project-direct-upload.md) | 單一 Pages project + Direct Upload | 生效 |
 | [0010](./0010-circle-identity-is-an-allocated-serial.md) | 社團身分改用配發的流水號 | **部分被取代** — 三項遷移後果由 0013 取代；規則一（跨活動 ID 沿用）由 0039 暫緩 |
 | [0011](./0011-ff47-is-not-a-public-launch.md) | FF47 期間全站不公開 | **已取代** — 由 0029 取代；資料位置見 0014，解除條件見 0015 |
@@ -104,11 +104,11 @@ ADR 不搬動，決策不改寫；推翻舊決策時寫新的 ADR，並在舊的
 | [0067](./0067-audit-retention-follows-purpose.md) | 稽核依用途保存，先移除兩項重複寫入 | **草案，未生效**；#189 方案，期限與實作範圍待決策 |
 | [0068](./0068-published-event-settings-are-declared-amendments.md) | 活動別稱是活動資料，已發布活動的設定以宣告更正 | 生效；延續 0045、0028 |
 | [0069](./0069-restored-unpublished-amendments-retain-failed-history.md) | 還原未公開修正後，保留失敗紀錄並重新送審 | 生效；延續 0059、0068 |
-| [0070](./0070-event-images-are-published-by-approval-under-their-hash.md) | 活動圖片由核准公開，以內容雜湊命名 | 生效；延續 0017、0057，擴充 0068；社團分享部分由 0077 取代 |
+| [0070](./0070-event-images-are-published-by-approval-under-their-hash.md) | 活動圖片由核准公開，以內容雜湊命名 | **部分被取代** — 社團分享部分由 0077 取代；活動圖片規則不變，延續 0017、0057，擴充 0068 |
 | [0071](./0071-organizer-review-confirms-cross-day-circle-grouping.md) | 主辦在匯入預覽確認跨日同名社團 | 生效；部分取代 0044 |
 | [0072](./0072-sale-sheet-pages-are-prepared-in-the-browser-and-hosted-as-a-set.md) | 品書在瀏覽器縮圖，以一組代管圖片保存 | 生效；延續 0017、0053 |
 | [0073](./0073-reviewed-grouping-corrections-have-explicit-amendment-baselines.md) | 已核准的身分整合以固定紀錄承接修正基準 | 生效；延續 0071、0069 |
-| [0074](./0074-html-responses-carry-per-request-csp-nonces.md) | HTML 回應使用每次請求的 CSP nonce | 生效；部分取代 0008；社團分享部分由 0077 取代 |
+| [0074](./0074-html-responses-carry-per-request-csp-nonces.md) | HTML 回應使用每次請求的 CSP nonce | **部分被取代** — 社團分享部分由 0077 取代；CSP nonce 與快取規則不變，部分取代 0008 |
 | [0075](./0075-catalog-browse-shares-the-reader-catalog-and-public-search.md) | 品書瀏覽共用 Reader 場刊與公開搜尋 | 生效 |
 | [0076](./0076-phones-switch-reader-views-from-the-bottom-bar.md) | 手機以底部探索／行程／逛品書切換，桌機切換留在頁首 | 生效；部分取代 0056 |
 | [0077](./0077-circle-share-images-follow-published-media.md) | 社團分享縮圖使用已公開的圖片選擇 | 生效；部分取代 0070、0074 |

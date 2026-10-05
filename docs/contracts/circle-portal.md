@@ -14,10 +14,12 @@
 **實作**：`app/admin/admin-notification-panel.tsx`、`app/review-notifications.ts`、`app/portal-mail.ts`、`app/review-notification-scheduler.ts`、`db/review-notification-repository.ts`、`functions/api/admin/notification-preferences.ts`、`workers/publication-dispatch`
 **測試**：`tests/review-notifications.test.mjs`、`tests/account-notifications.test.mjs`
 **實作**：`app/account-notifications.ts`、`app/account-notification-scheduler.ts`、`app/account-notification-settings.tsx`、`app/notification-navigation.ts`、`db/account-notification-repository.ts`、`functions/api/account/notification-preferences.ts`
+**實作**：`app/portal-sign-in.tsx`、`app/portal-sign-in.module.css`
+**測試**：[tests/browser/portal-claim-entry.mjs](../../tests/browser/portal-claim-entry.mjs)、[tests/browser/portal-organizer-entry.mjs](../../tests/browser/portal-organizer-entry.mjs)
 
 > **活動範圍**：`/circle` 是跨活動共用入口，寫入面與公開讀取面都支援多活動；帳號跨活動、認領逐活動，`env.EVENT_ID` 只是請求沒有指名活動時的預設值（[ADR-0043](../adr/0043-the-circle-portal-is-event-agnostic.md)）。
 
-> 本文的「登入」指**社團為了維護自己的資料**而登入。這與 [資料匯入契約](./data-import.md) 裡「使用者授權外部服務以便匯入」是相反方向的兩件事，後者仍屬 P2 且未實作。
+> 本文的「登入」指本站帳號驗證，不是外部服務授權。資料匯入的不同入口見[資料匯入範圍](./data-import.md)。
 
 ## 公開入口與 preview 邊界
 
@@ -29,10 +31,10 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 ## 入口分離
 
-- **社團登入與編輯只存在於 `/circle`，不與閱讀端共用 bundle。** 閱讀端不得出現登入介面、寫入 route 或 session cookie 名稱，由 `tests/public-artifact.test.mjs` 以建置產物比對把關。
+- **社團登入與編輯只存在於 `/circle`，不與閱讀端共用 bundle。** 閱讀端不得出現登入介面、社團資料寫入 route 或 session cookie 名稱，由 `tests/public-artifact.test.mjs` 以建置產物比對把關。匿名行程分享另依[收藏與走訪規劃契約](./planning.md#分享行程)。
 - **入口分離指的是程式邊界，不是把 `/circle` 藏起來。** 公開閱讀端不嵌入登入表單、session 邏輯或資料寫入控制，但頁首固定提供前往控制面的「登入」入口；公開瀏覽、搜尋、收藏與行程仍不要求登入。活動選擇頁、活動介紹與社團公開頁的頁首「登入」分別連到 `/circle`、`/circle?event=<eventId>`、`/circle?event=<eventId>&circle=<circleId>`，值取自該頁的資料，由 `tests/public-artifact.test.mjs` 核對建置產物。控制面因此開在同一場、同一個社團，不落到瀏覽器上次維護或依日期選出的那場；沒有指名社團時不猜測。「使用說明」面板的「你是參展社團嗎？」段落與社團頁的「認領／管理資料」保留，仍是針對眼前活動或社團的入口；面板另有「你是活動主辦嗎？」段落，與前者一起連到 `/portal/` 介紹頁的對應段落。這些連結是純靜態 `href`：不查詢 session、不載入 Turnstile、不呼叫任何寫入 route，因此不牴觸上一條。
 - 一般參觀者公開瀏覽、不需登入。社團登入**不介入**參觀者的收藏與行程。
-- [主辦單位工作區](./organizer-workspace.md)的 `/organizer` 是第三個入口：與 `/circle` 共用帳號、session cookie 與本節的登入機制，但不共用 bundle。公開頁不直接連到 `/organizer`，唯一例外是 `/portal/` 介紹頁主辦段落的「前往主辦工作區」；`/circle` 與 `/organizer` 在未登入與已登入時都列出「社團資料」「主辦工作區」兩個工作區，兩邊只共用一個不 import 任何工作區的小型導覽元件。選擇工作區只是導覽，不是註冊另一種帳號，也不授予權限；同一個有效 session 進入另一邊時不再索取登入信。
+- [主辦單位工作區](./organizer-workspace.md)的 `/organizer` 是第三個入口：與 `/circle` 共用帳號、session cookie 與本節的登入機制，各有獨立的工作區 bundle。公開頁不直接連到 `/organizer`，唯一例外是 `/portal/` 介紹頁主辦段落的「前往主辦工作區」；`/circle` 與 `/organizer` 在未登入與已登入時都提供「社團資料」「主辦工作區」導覽。導覽與登入畫面使用共用元件，不 import 任一工作區；登入表單以 audience 保留各自的目的地。未登入時不顯示活動選單或工作區內容，登入後才依既有目標與授權開啟。選擇工作區只是導覽，不是註冊另一種帳號，也不授予權限；同一個有效 session 進入另一邊時不再索取登入信。
 - `/admin` 是獨立且 noindex 的管理入口，沿用同一 session；沒有登入表單，未登入時連向 `/circle`。非管理者不載入管理內容。`/circle` 只保留管理者身分與管理連結，不掛載管理面板或發出其管理 API 呼叫。管理資產不進 Reader precache，Reader 不新增管理導覽。
 - 社團入口不下載場刊：認領時的社團搜尋走 `/api/circle/search`，需要 session 且只回傳比對到的社團。
 
@@ -54,8 +56,8 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 - **登入信同時寄出 HTML 與純文字兩份內容**，由 `app/mail-letter.ts` 產生。純文字版必須能單獨使用：登入連結自成一行，preview 收信槽只存這一份，E2E 從這裡取連結。有效時間以台灣時間寫出。
 - Pages 登入／邀請及排程摘要共用 `sendPortalMail` 收件路由：啟用 D1 preview 時，測試收信槽優先於人工白名單，其餘地址拒絕且不回退 production。只有此模式的人工白名單路徑可記錄最多 300 字的 Mailgun 拒絕本文；production 不記地址或本文，即使殘留白名單設定也不能開啟。
 - Pages 每次呼叫寄信 adapter 後輸出一筆 `portal.mail` 即時診斷，包含呼叫端指定的 `login_link`／`organizer_invitation` 用途，以及 `accepted`／`preview_sink`／`failed`／`unknown` 結果；只附真實 provider ID（缺失或收信槽為 null）或安全錯誤碼，不附地址、主旨、信件內容、登入連結、權杖或原始錯誤。這不是匿名 API 回傳值，也不是送達證明；不新增 webhook 或 D1 寄送歷史。Pages 串流不保存，追查方法見部署 runbook。
-- **Organizer 邀請是唯一由他人代為鑄造登入連結的路徑**，因此不走本節的 Turnstile，改由三道獨立預算限制，並以 `login_tokens.minted_by` 與本人自助索取分開計數。規則寫在[主辦單位工作區契約](./organizer-workspace.md#邀請制不能自助開活動)。
-- Turnstile 的 script 只在 `/circle` 載入，CSP 也只在該路徑放寬，見[資料傳輸與離線契約](./delivery-and-offline.md#快取標頭)與 `public/_headers`。
+- **Organizer 邀請是唯一由他人代為鑄造登入連結的路徑**，因此不走本節的 Turnstile，改由三道獨立預算限制，並以 `login_tokens.minted_by` 與本人自助索取分開計數。規則寫在[主辦單位工作區契約](./organizer-workspace.md#管理者建立與邀請)。
+- Turnstile 的 script 只在 `/circle` 與 `/organizer` 的登入表單載入，CSP 也只在這兩個控制面放寬，見[資料傳輸與離線契約](./delivery-and-offline.md#快取標頭)與 `public/_headers`。
 
 ## 從地圖接續認領
 

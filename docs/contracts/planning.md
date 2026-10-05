@@ -5,7 +5,7 @@
 **實作**：[`app/planning-store.ts`](../../app/planning-store.ts)、[`app/use-planning.ts`](../../app/use-planning.ts)、[`app/planning-tools.tsx`](../../app/planning-tools.tsx)、[`app/planning-transfer.ts`](../../app/planning-transfer.ts)、[`app/planning-transfer-panel.tsx`](../../app/planning-transfer-panel.tsx)、[`app/planning-share.ts`](../../app/planning-share.ts)、[`app/planning-share-client.ts`](../../app/planning-share-client.ts)、[`app/planning-share-snapshot.ts`](../../app/planning-share-snapshot.ts)、[`app/planning-share-handlers.ts`](../../app/planning-share-handlers.ts)、[`app/planning-share-panel.tsx`](../../app/planning-share-panel.tsx)、[`app/download-text.ts`](../../app/download-text.ts)、`app/reader-planning.tsx`
 **測試**：`tests/planning-store.test.mjs`、`tests/planning-transfer.test.mjs`、`tests/planning-share.test.mjs`、`tests/planning-share-client.test.mjs`、`tests/planning-share-api.test.mjs`
 
-規劃資料只儲存在使用者當下的瀏覽器，不跨裝置同步。這是刻意的隱私姿態，不是尚未完成的功能——決策與代價見 [ADR-0002](../adr/0002-planning-data-stays-on-device.md)。
+完整規劃資料儲存在使用者當下的瀏覽器，不跨裝置自動同步。使用者主動分享時，只有[分享行程](#分享行程)定義的精簡 snapshot 送到伺服器；完整資料可由[JSON 備份](#匯出與匯入分期)自行攜帶及復原。裝置端保存的決策與分享例外見 [ADR-0002](../adr/0002-planning-data-stays-on-device.md)、[ADR-0079](../adr/0079-shared-itineraries-use-short-links-and-qr-codes.md)。
 
 ## 責任邊界
 
@@ -138,7 +138,7 @@ type PlanningDocument = {
   - 取消、解析失敗或未確認時不寫入；預覽與確認都讀取瀏覽器目前保存的資料（含其他分頁剛寫入的內容），預覽後若已改變，重新計算並再次確認。整份透過 store 單次寫入，儲存失敗時不宣稱成功、已保存的資料不變。
   - 瀏覽器保有無法讀取的舊資料（受保護的原始字串）時不開放匯入。
   - 本站未公開的活動無法從閱讀端開啟，其收藏與行程列在「目前無法匹配的規劃資料」，可逐筆移除並隨完整備份匯出。
-- **仍屬 P2**：CSV 匯入、外部服務匯入（[資料匯入契約](./data-import.md)、[ADR-0005](../adr/0005-import-stays-p2-export-only.md)），以及登入後持續同步與協作清單。轉移是單次的，之後兩台裝置各自修改。
+- **仍屬 P2**：CSV 匯入、外部服務匯入（[ADR-0005](../adr/0005-import-stays-p2-export-only.md)），以及登入後持續同步與協作清單。轉移是單次的，之後兩台裝置各自修改。
 
 ## 分享行程
 
