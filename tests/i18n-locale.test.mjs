@@ -144,7 +144,8 @@ test("page metadata names its language without changing the canonical address", 
   const japanese = seo.pageMetadata(undefined, undefined, [], "ja");
   assert.equal(japanese.canonical, home.canonical);
   assert.match(discovery.metadataHtml(japanese), /<meta property="og:locale" content="ja_JP">/);
-  const { locale: _omitted, ...own } = home;
+  const own = { ...home };
+  delete own.locale;
   assert.match(discovery.metadataHtml(own), /content="zh_TW"/, "metadata built without a locale stays Traditional Chinese");
 });
 
