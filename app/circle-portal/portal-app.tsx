@@ -1,20 +1,26 @@
 "use client";
 
+import { localizedHref } from "../i18n/locale";
+import { LanguageSwitcher } from "../i18n/language-switcher";
+import { useAccountPreferences } from "./use-account-preferences";
+import { usePortalText, portalNotice, noticeError, type PortalNotice } from "./portal-i18n";
+import { useLocale, useDocumentLanguage } from "../i18n/locale-context";
+
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  createClaim, deleteMyAccount, deleteMyOverride, listMyClaims, PortalError, readMyOverride,
+  createClaim, deleteMyAccount, deleteMyOverride, listMyClaims, readMyOverride,
   previewOverride, readSession, readClaimCircle, setPostEventVisibility, runChallenge, saveOverride, searchCircles, signOut, uploadThumbnail, verifyLoginToken, withdrawClaim,
   setPortalEventId,
   type CircleMatch, type ClaimSummary, type PortalSession,
 } from "../circle-editor-client";
 import {
   AGE_RATING_OPTIONS, CIRCLE_OVERRIDE_LIST_FIELDS, CREATOR_TYPE_OPTIONS, LINK_KINDS, OVERRIDE_LIMITS, WORK_TYPE_OPTIONS,
-  circleOverrideFieldMode, clearCircleOverrideField, inheritCircleOverrideField,
+  circleOverrideFieldMode, clearCircleOverrideField, inheritCircleOverrideField, circleOptionLabel,
   type CircleOverrideFieldKey, type CircleOverrideFields, type CircleOverrideThumbnail,
 } from "../circle-overrides";
 import { linkUrlProblem, thumbnailUrlProblem, THUMBNAIL_NOT_AN_IMAGE } from "../circle-override-messages";
 import { CircleDetails } from "../event-workspace-panels";
-import { LINK_KIND_LABEL } from "../circle-presentation";
+import { linkKindLabel } from "../circle-presentation";
 import { useModalFocus } from "../use-modal-focus";
 import type { CircleExternalLink, CircleViewRecord } from "../circle-records";
 import { projectCircleDraftRecords } from "../circle-records";
@@ -39,7 +45,7 @@ import styles from "./portal.module.css";
  * everything else in the editor's action bar. One value rather than three, so
  * a new action always replaces the last message instead of standing next to it.
  */
-type Status = { kind: "idle" | "busy" | "ok" | "error"; message: string; at?: "setting" | "delete" };
+type Status = { kind: "idle" | "busy" | "ok" | "error"; message: PortalNotice; at?: "setting" | "delete" };
 
 const IDLE: Status = { kind: "idle", message: "" };
 const SAVED_MESSAGE = "已儲存，公開頁面會在一分鐘內更新。";
@@ -101,7 +107,7 @@ function initialPortalEventId() {
  */
 const DRAFT_STORAGE_PREFIX = "circle-portal-draft:";
 
-const DRAFT_TIME = new Intl.DateTimeFormat("zh-TW", { dateStyle: "short", timeStyle: "short" });
+
 
 type StoredDraft = {
   fields: CircleOverrideFields;
@@ -187,15 +193,16 @@ function FieldModeControls({ mode, label, onInherit, onClear, onRestore }: {
   /** Present while there is the author's own content to put back. */
   onRestore?: () => void;
 }) {
-  return <div className={styles.fieldMode} role="group" aria-label={`${label}顯示什麼`}>
-    <span><b>{FIELD_MODE_LABEL[mode]}</b></span>
-    <button type="button" aria-pressed={mode === "inherit"} disabled={mode === "inherit" && !onRestore} onClick={mode === "inherit" ? onRestore : onInherit}>使用場刊資料</button>
-    <button type="button" aria-pressed={mode === "clear"} disabled={mode === "clear" && !onRestore} onClick={mode === "clear" ? onRestore : onClear}>不顯示</button>
+  const t = usePortalText();
+  return <div className={styles.fieldMode} role="group" aria-label={t("{label}顯示什麼", { label: t(label) })}>
+    <span><b>{t(FIELD_MODE_LABEL[mode])}</b></span>
+    <button type="button" aria-pressed={mode === "inherit"} disabled={mode === "inherit" && !onRestore} onClick={mode === "inherit" ? onRestore : onInherit}>{t("使用場刊資料")}</button>
+    <button type="button" aria-pressed={mode === "clear"} disabled={mode === "clear" && !onRestore} onClick={mode === "clear" ? onRestore : onClear}>{t("不顯示")}</button>
   </div>;
 }
 
 function errorMessage(error: unknown) {
-  return error instanceof PortalError || error instanceof Error ? error.message : "操作失敗，請稍後再試。";
+  return noticeError(error);
 }
 
 /** Read and immediately erase the emailed token before anything can await. */
@@ -209,7 +216,12 @@ function takeLoginToken() {
 }
 
 export default function CirclePortalApp() {
+  const t = usePortalText();
+  const { locale } = useLocale();
+  useDocumentLanguage();
+  useEffect(() => { document.title = `${t("社團資料")}｜場刊 Map`; }, [t]);
   const [session, setSession] = useState<PortalSession | null>(null);
+  const preferences = useAccountPreferences(session?.email, locale);
   const [ready, setReady] = useState(false);
   const [status, setStatus] = useState<Status>(IDLE);
   const [claims, setClaims] = useState<ClaimSummary[]>([]);
@@ -332,19 +344,19 @@ export default function CirclePortalApp() {
   }, [readClaimsFor, signedInAs]);
 
   if (entry.eventId && !getPublishedEvent(entry.eventId)) return <div className={styles.page}>
-    <header className={styles.masthead}><div className={styles.titleRow}><h1>社團資料</h1></div></header>
-    <main className={styles.card}><h2>找不到指定的活動</h2><p className={styles.backLink}><a href="/circle">返回社團資料</a></p></main>
+    <header className={styles.masthead}><div className={styles.titleRow}><h1>{t("社團資料")}</h1></div></header>
+    <main className={styles.card}><h2>{t("找不到指定的活動")}</h2><p className={styles.backLink}><a href={localizedHref("/circle", locale)}>{t("返回社團資料")}</a></p></main>
   </div>;
 
   // The public header's "登入" lands here, organizers included; the sign-in
   // screen is the one `/organizer` shows too.
   if (ready && !session) return <SignInScreen
-    title="社團資料"
+    title={t("社團資料")}
     current="circle"
     circleId={targetCircleId}
-    notice={status.kind === "ok" || status.kind === "error" ? { kind: status.kind, message: status.message } : null}
+    notice={status.kind === "ok" || status.kind === "error" ? { kind: status.kind, message: portalNotice(status.message, locale) } : null}
   >
-    <SignInFinePrint>個資與著作權爭議請寄 <code>maintain@kotoban.top</code>，網站操作問題請寄 <code>circle@kotoban.top</code>。</SignInFinePrint>
+    <SignInFinePrint>{t("個資與著作權爭議請寄")}<code>maintain@kotoban.top</code>{t("，網站操作問題請寄")}<code>circle@kotoban.top</code>。</SignInFinePrint>
   </SignInScreen>;
 
   return <div className={styles.page}>
@@ -356,21 +368,22 @@ export default function CirclePortalApp() {
         {/* Shows which identity the server resolved, so a mismatch against
             ADMIN_EMAILS is visible rather than silently hiding the panel. */}
         <p className={styles.identityWho}>
-          <span>{session.email}{session.isAdmin ? "・管理者" : ""}{session.isMapContributor ? "・地圖貢獻者" : ""}</span>
+          <span>{session.email}{session.isAdmin ? t("・管理者") : ""}{session.isMapContributor ? t("・地圖貢獻者") : ""}</span>
         </p>
+        <LanguageSwitcher onChange={preferences.chooseLocale} />
         <AccountMenu>
           {/* Signing in here does not hide the way to the organizer workspace:
               the same session opens it, and that page decides what it allows. */}
           <WorkspaceSwitch current="circle" />
-          <AccountNotificationSettings key={session.email} session={session} />
+          <AccountNotificationSettings key={session.email} session={session} preferences={preferences} />
           <ContactLink url={session.contactUrl} />
-          {session.isMapContributor && <a href="#map-contribution">地圖草稿</a>}
-          {session.isAdmin && <a href="/admin">網站管理</a>}
-          <button type="button" className={styles.accountMenuEnd} onClick={() => void signOut().then(forgetSession)}>登出</button>
+          {session.isMapContributor && <a href="#map-contribution">{t("地圖草稿")}</a>}
+          {session.isAdmin && <a href="/admin">{t("網站管理")}</a>}
+          <button type="button" className={styles.accountMenuEnd} onClick={() => void signOut().then(forgetSession)}>{t("登出")}</button>
         </AccountMenu>
       </div>}
       <div className={styles.titleRow}>
-        <h1>社團資料</h1>
+        <h1>{t("社團資料")}</h1>
         {/* The event is the page's context, not a task of its own: the picker
             sits where its name would, and one event needs no picker at all. */}
         {/* Signed out, no event is named: the browser's last event is only
@@ -383,14 +396,23 @@ export default function CirclePortalApp() {
             onReach={() => readClaimsFor(PUBLISHED_EVENTS.map((item) => item.id).filter((id) => !(id in claimsByEvent)))}
             onChoose={(next) => { setEventId(next); setClaims([]); setClaimsLoadedFor(""); setClaimsFailedFor(""); setStatus(IDLE); }}
           />
-          : <p>{event.name}・{eventCalendar(event).label}</p>)}
-        <a className={styles.backLink} href={mapHref(event.id)}>返回活動地圖</a>
+          : <p>{event.name}・{eventCalendar(event, locale).label}</p>)}
+        <a className={styles.backLink} href={localizedHref(mapHref(event.id), locale)}>{t("返回活動地圖")}</a>
       </div>
     </header>
 
-    {status.kind !== "idle" && <p className={status.kind === "error" ? styles.error : styles.notice} role="status">{status.message}</p>}
+    {session && preferences.error && <p className={styles.error} role="alert">
+      {t("通知語言尚未儲存。")} {portalNotice(preferences.error, locale)}
+      <button type="button" className={styles.inlineButton} disabled={preferences.loading || preferences.busy} onClick={preferences.conflict || !preferences.unsavedLocale ? preferences.reload : preferences.retry}>
+        {preferences.conflict || !preferences.unsavedLocale ? t("重新載入設定") : t("重試儲存通知語言")}
+      </button>
+    </p>}
+    {session && !preferences.error && preferences.unsavedLocale && !preferences.busy && !preferences.loading && <p className={styles.notice}>
+      {t("通知語言尚未儲存。")} <button type="button" onClick={preferences.retry}>{t("重試儲存通知語言")}</button>
+    </p>}
+    {status.kind !== "idle" && <p className={status.kind === "error" ? styles.error : styles.notice} role="status">{portalNotice(status.message, locale)}</p>}
 
-    {!ready || !session ? <p className={styles.notice}>載入中…</p>
+    {!ready || !session ? <p className={styles.notice}>{t("載入中…")}</p>
         : <div className={styles.workspace}>
           {/* Keyed on the event: claims, drafts and editor drafts all belong to
               one event, and carrying them across a switch would show one
@@ -407,7 +429,7 @@ export default function CirclePortalApp() {
               </div>
             </div>
             {claims.filter((claim) => claim.status === "verified").sort((a, b) => Number(b.circleId === targetCircleId) - Number(a.circleId === targetCircleId)).map((claim) => <CircleEditor key={claim.circleId} event={event} claim={claim} />)}
-            {session.isMapContributor && <MapContributorPanel event={event} />}
+            {session.isMapContributor && <div lang="zh-Hant"><MapContributorPanel event={event} /></div>}
           </Fragment>
           {/* Account-wide, so after the event's work rather than inside it
               (ADR-0043); still keyed on the event so its notice never outlives
@@ -419,12 +441,12 @@ export default function CirclePortalApp() {
 }
 
 /** What this account holds in an event, as the picker says it; nothing until the event has been read. */
-function claimSummaryLabel(claims: readonly ClaimSummary[] | undefined) {
+function claimSummaryLabel(claims: readonly ClaimSummary[] | undefined, t: ReturnType<typeof usePortalText>) {
   if (!claims) return "";
   const names = (status: ClaimSummary["status"]) => [...new Set(claims.filter((claim) => claim.status === status).map((claim) => claim.circleName))].join("、");
   const parts = ([["已認領", names("verified")], ["審核中", names("pending")]] as const)
-    .filter(([, circles]) => circles).map(([label, circles]) => `${label}：${circles}`);
-  return `（${parts.join("；") || "未認領"}）`;
+    .filter(([, circles]) => circles).map(([label, circles]) => `${t(label)}：${circles}`);
+  return `（${parts.join("；") || t("未認領")}）`;
 }
 
 /**
@@ -438,19 +460,21 @@ function EventPicker({ eventId, claimsByEvent, onReach, onChoose }: {
   onReach: () => void;
   onChoose: (eventId: string) => void;
 }) {
+  const t = usePortalText();
+  const { locale } = useLocale();
   const [today] = useState(() => taipeiDate(Date.now()));
-  const ordered = eventsByProximity(PUBLISHED_EVENTS, today);
+  const ordered = eventsByProximity(PUBLISHED_EVENTS, today, locale);
   const groups = [
     { label: "即將舉辦、舉辦中", entries: ordered.filter((entry) => entry.group !== "past") },
     { label: "已結束", entries: ordered.filter((entry) => entry.group === "past") },
   ].filter((group) => group.entries.length > 0);
   return <div className={styles.eventPicker}>
-    <label htmlFor="portal-event" className={styles.visuallyHidden}>活動</label>
+    <label htmlFor="portal-event" className={styles.visuallyHidden}>{t("活動")}</label>
     {/* Pressing and focusing both reach it: Safari opens a select without focusing it. */}
     <select id="portal-event" value={eventId} onFocus={onReach} onPointerDown={onReach} onChange={(event) => onChoose(event.target.value)}>
-      {groups.map((group) => <optgroup key={group.label} label={group.label}>
+      {groups.map((group) => <optgroup key={group.label} label={t(group.label)}>
         {group.entries.map(({ event: item, label }) => <option key={item.id} value={item.id}>
-          {item.name}・{label}{claimSummaryLabel(claimsByEvent[item.id])}
+          {item.name}・{label}{claimSummaryLabel(claimsByEvent[item.id], t)}
         </option>)}
       </optgroup>)}
     </select>
@@ -458,43 +482,47 @@ function EventPicker({ eventId, claimsByEvent, onReach, onChoose }: {
 }
 
 function AccountDeletion({ session, onDeleted }: { session: PortalSession; onDeleted: () => void }) {
+  const t = usePortalText();
+  const { locale } = useLocale();
   const [confirm, setConfirm] = useState("");
   const [status, setStatus] = useState<Status>(IDLE);
-  return <section className={styles.accountZone} aria-label="帳號">
+  return <section className={styles.accountZone} aria-label={t("帳號")}>
     <details className={styles.danger}>
-    <summary>刪除帳號</summary>
-    <p>刪除帳號會一併刪除你在所有活動的認領與自行填寫的資料。場刊中的社團與攤位資料不受影響。</p>
+    <summary>{t("刪除帳號")}</summary>
+    <p>{t("刪除帳號會一併刪除你在所有活動的認領與自行填寫的資料。場刊中的社團與攤位資料不受影響。")}</p>
     {session.isAdmin
-      ? <p>管理者需先由另一位管理者移出名單，才能刪除帳號。</p>
+      ? <p>{t("管理者需先由另一位管理者移出名單，才能刪除帳號。")}</p>
       : <>
-        <label htmlFor="delete-account-confirm">輸入完整 email 確認：{session.email}</label>
+        <label htmlFor="delete-account-confirm">{t("輸入完整 email 確認：")}{session.email}</label>
         <input id="delete-account-confirm" type="email" value={confirm} onChange={(event) => setConfirm(event.target.value)} />
         <button type="button" className={styles.dangerButton} disabled={confirm !== session.email || status.kind === "busy"} onClick={() => {
           setStatus({ kind: "busy", message: "刪除中…" });
           void deleteMyAccount(session.email)
             .then(() => { onDeleted(); })
             .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
-        }}>永久刪除帳號</button>
+        }}>{t("永久刪除帳號")}</button>
       </>}
-    {status.kind === "error" && <p className={styles.error}>{status.message}</p>}
+    {status.kind === "error" && <p className={styles.error}>{portalNotice(status.message, locale)}</p>}
     </details>
   </section>;
 }
 
 function ClaimList({ claims, session, onChanged }: { claims: ClaimSummary[]; session: PortalSession; onChanged: () => void }) {
+  const t = usePortalText();
+  const { locale } = useLocale();
   const [status, setStatus] = useState<Status>(IDLE);
   if (claims.length === 0) return null;
 
   return <section className={styles.card}>
-    <h2>我的社團</h2>
+    <h2>{t("我的社團")}</h2>
     <ul className={styles.claimList}>
       {claims.map((claim) => <li key={claim.id}>
         <div>
           <b>{claim.circleName}</b>
         </div>
-        {claim.status === "verified" && <a href={`#circle-editor-${claim.circleId}`}>編輯資料</a>}
+        {claim.status === "verified" && <a href={`#circle-editor-${claim.circleId}`}>{t("編輯資料")}</a>}
         <span className={styles[`claim_${claim.status}`]}>{
-          { pending: "審核中", verified: "已通過", rejected: "已婉拒", revoked: "已撤銷", withdrawn: "已撤回" }[claim.status]
+          t({ pending: "審核中", verified: "已通過", rejected: "已婉拒", revoked: "已撤銷", withdrawn: "已撤回" }[claim.status])
         }</span>
         {claim.status === "pending" && claim.targetUrl && <button type="button" onClick={() => {
           setStatus({ kind: "busy", message: "驗證中…" });
@@ -504,7 +532,7 @@ function ClaimList({ claims, session, onChanged }: { claims: ClaimSummary[]; ses
               onChanged();
             })
             .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
-        }}>重新驗證</button>}
+        }}>{t("重新驗證")}</button>}
         {claim.status === "pending" && <button type="button" className={styles.secondaryButton} onClick={() => {
           setStatus({ kind: "busy", message: "撤回中…" });
           void withdrawClaim(claim.id)
@@ -513,14 +541,14 @@ function ClaimList({ claims, session, onChanged }: { claims: ClaimSummary[]; ses
               onChanged();
             })
             .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
-        }}>撤回</button>}
+        }}>{t("撤回")}</button>}
       </li>)}
     </ul>
     {/* Only manual review waits on the maintainers; a code claim verifies itself. */}
     {session.claimReviewNotice && claims.some((claim) => claim.status === "pending" && !claim.targetUrl) && <p className={styles.notice}>
       {session.claimReviewNotice}{session.contactUrl && <> <ContactLink url={session.contactUrl} /></>}
     </p>}
-    {status.kind !== "idle" && <p className={status.kind === "error" ? styles.error : styles.notice}>{status.message}</p>}
+    {status.kind !== "idle" && <p className={status.kind === "error" ? styles.error : styles.notice}>{portalNotice(status.message, locale)}</p>}
   </section>;
 }
 
@@ -552,7 +580,9 @@ function useCircleSearch(query: string) {
 function ClaimDestination({ circleId, claims, ready, failed, onChanged }: {
   circleId: string; claims: ClaimSummary[]; ready: boolean; failed: boolean; onChanged: () => void;
 }) {
-  const [result, setResult] = useState<{ circle: CircleMatch | null; error?: string } | null>(null);
+  const t = usePortalText();
+  const { locale } = useLocale();
+  const [result, setResult] = useState<{ circle: CircleMatch | null; error?: PortalNotice } | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [created, setCreated] = useState<Awaited<ReturnType<typeof createClaim>> | null>(null);
   const claim = claims.find((item) => item.circleId === circleId && (item.status === "verified" || item.status === "pending"));
@@ -565,17 +595,17 @@ function ClaimDestination({ circleId, claims, ready, failed, onChanged }: {
   }, [circleId, ready, claim, attempt]);
   // A challenge is returned only once. Keep it above the form so the claims
   // refresh can replace that form with the pending state without losing it.
-  const proof = created?.challenge && <><p>請把驗證碼公開貼在驗證用連結頁面，再到「我的社團」按重新驗證。</p><p className={styles.challenge}><span>驗證碼</span><code>{created.challenge}</code></p></>;
-  if (failed) return <section className={styles.card}>{proof}<p role="status">無法讀取認領資料。</p><button type="button" onClick={onChanged}>重新讀取</button></section>;
-  if (!ready) return <p className={styles.notice} role="status">正在讀取社團…</p>;
+  const proof = created?.challenge && <><p>{t("請把驗證碼公開貼在驗證用連結頁面，再到「我的社團」按重新驗證。")}</p><p className={styles.challenge}><span>{t("驗證碼")}</span><code>{created.challenge}</code></p></>;
+  if (failed) return <section className={styles.card}>{proof}<p role="status">{t("無法讀取認領資料。")}</p><button type="button" onClick={onChanged}>{t("重新讀取")}</button></section>;
+  if (!ready) return <p className={styles.notice} role="status">{t("正在讀取社團…")}</p>;
   if (claim) return <section className={styles.card}><h2>{claim.circleName}</h2>{claim.status === "verified"
-    ? <a href={`#circle-editor-${claim.circleId}`}>管理社團資料</a>
-    : created?.id === claim.id && proof ? proof : <p>審核中，進度見「我的社團」。</p>}</section>;
-  if (!result) return <p className={styles.notice} role="status">正在讀取社團…</p>;
-  if (result.error) return <section className={styles.card}><p className={styles.error} role="status">{result.error}</p><button type="button" onClick={() => { setResult(null); setAttempt((value) => value + 1); }}>重新讀取</button></section>;
+    ? <a href={`#circle-editor-${claim.circleId}`}>{t("管理社團資料")}</a>
+    : created?.id === claim.id && proof ? proof : <p>{t("審核中，進度見「我的社團」。")}</p>}</section>;
+  if (!result) return <p className={styles.notice} role="status">{t("正在讀取社團…")}</p>;
+  if (result.error) return <section className={styles.card}><p className={styles.error} role="status">{portalNotice(result.error, locale)}</p><button type="button" onClick={() => { setResult(null); setAttempt((value) => value + 1); }}>{t("重新讀取")}</button></section>;
   // Same words as the refusal `createClaim` would give after the form was filled in.
-  if (result.circle?.claimed) return <section className={styles.card}><h2>{result.circle.name}</h2><p>此社團已有通過的認領。若這是你的社團，請聯絡管理者。</p></section>;
-  return <>{!result.circle && <p className={styles.notice}>在這個活動找不到指定社團，請重新搜尋。</p>}<ClaimForm key={result.circle?.id ?? "search"} initialCircle={result.circle} firstClaim={claims.length === 0} onCreated={(answer) => { setCreated(answer); onChanged(); }} /></>;
+  if (result.circle?.claimed) return <section className={styles.card}><h2>{result.circle.name}</h2><p>{t("此社團已有通過的認領。若這是你的社團，請聯絡管理者。")}</p></section>;
+  return <>{!result.circle && <p className={styles.notice}>{t("在這個活動找不到指定社團，請重新搜尋。")}</p>}<ClaimForm key={result.circle?.id ?? "search"} initialCircle={result.circle} firstClaim={claims.length === 0} onCreated={(answer) => { setCreated(answer); onChanged(); }} /></>;
 }
 
 /**
@@ -586,11 +616,12 @@ function ClaimDestination({ circleId, claims, ready, failed, onChanged }: {
 const FIRST_CLAIM_STEPS = ["認領社團", "驗證身分", "編輯社團資料"] as const;
 
 function FirstClaimSteps() {
-  return <ol className={styles.startSteps} aria-label="開始使用">
+  const t = usePortalText();
+  return <ol className={styles.startSteps} aria-label={t("開始使用")}>
     {FIRST_CLAIM_STEPS.map((step, index) => <li key={step} aria-current={index === 0 ? "step" : undefined}>
       <span aria-hidden="true">{index + 1}</span>
-      <b>{step}</b>
-      {index === 0 && <small>從這裡開始</small>}
+      <b>{t(step)}</b>
+      {index === 0 && <small>{t("從這裡開始")}</small>}
     </li>)}
   </ol>;
 }
@@ -601,6 +632,8 @@ function ClaimForm({ onCreated, initialCircle = null, firstClaim = false }: {
   /** Only once the claims have answered: a guess before then flashes the steps at a circle that has one. */
   firstClaim?: boolean;
 }) {
+  const t = usePortalText();
+  const { locale } = useLocale();
   const [query, setQuery] = useState(initialCircle?.name ?? "");
   const [selected, setSelected] = useState<CircleMatch | null>(initialCircle);
   const [targetUrl, setTargetUrl] = useState("");
@@ -612,35 +645,35 @@ function ClaimForm({ onCreated, initialCircle = null, firstClaim = false }: {
   const matches = useCircleSearch(selected ? "" : query);
 
   return <section className={styles.card}>
-    <h2>認領社團</h2>
+    <h2>{t("認領社團")}</h2>
     {firstClaim && <FirstClaimSteps />}
-    <p>搜尋你的社團，並選擇一個可用來驗證身分的連結。沒有可用連結時會改由人工確認。</p>
+    <p>{t("搜尋你的社團，並選擇一個可用來驗證身分的連結。沒有可用連結時會改由人工確認。")}</p>
 
-    <label htmlFor="portal-search">社團名稱</label>
-    <input id="portal-search" value={query} onChange={(event) => { setQuery(event.target.value); setSelected(null); }} placeholder="輸入至少 2 個字" />
+    <label htmlFor="portal-search">{t("社團名稱")}</label>
+    <input id="portal-search" value={query} onChange={(event) => { setQuery(event.target.value); setSelected(null); }} placeholder={t("輸入至少 2 個字")} />
     {matches.length > 0 && !selected && <ul className={styles.matchList}>
       {matches.map((match) => <li key={match.id}>
         <button type="button" onClick={() => { setSelected(match); setQuery(match.name); }}>
-          <b>{match.name}</b><small>{match.linkCount} 個已登錄連結</small>
+          <b>{match.name}</b><small>{t("{count} 個已登錄連結", { count: match.linkCount })}</small>
         </button>
       </li>)}
     </ul>}
 
     {selected && <>
-      <label htmlFor="portal-target">驗證用連結（選填）</label>
+      <label htmlFor="portal-target">{t("驗證用連結（選填）")}</label>
       <select id="portal-target" value={targetUrl} onChange={(event) => setTargetUrl(event.target.value)}>
-        <option value="">不使用自動驗證，改由人工審核</option>
+        <option value="">{t("不使用自動驗證，改由人工審核")}</option>
         {selected.links.map((link) => <option key={link.url} value={link.url}>{link.provider}：{link.url}</option>)}
       </select>
 
       {/* Manual review is the third tier and never issues a code: the reviewer
           reads the link and the note. Asking for a code here described the
           second tier's flow in the third tier's field (#142). */}
-      <label htmlFor="portal-evidence">佐證連結（人工審核用，選填）</label>
-      <input id="portal-evidence" value={evidenceUrl} onChange={(event) => setEvidenceUrl(event.target.value)} placeholder="https://…（可證明你是這個社團的頁面）" />
-      <small>人工審核不會發驗證碼。管理者會看這個連結與下方說明，人工核對你與社團的關係。</small>
+      <label htmlFor="portal-evidence">{t("佐證連結（人工審核用，選填）")}</label>
+      <input id="portal-evidence" value={evidenceUrl} onChange={(event) => setEvidenceUrl(event.target.value)} placeholder={t("https://…（可證明你是這個社團的頁面）")} />
+      <small>{t("人工審核不會發驗證碼。管理者會看這個連結與下方說明，人工核對你與社團的關係。")}</small>
 
-      <label htmlFor="portal-note">補充說明（選填）</label>
+      <label htmlFor="portal-note">{t("補充說明（選填）")}</label>
       <textarea id="portal-note" rows={2} value={evidenceNote} onChange={(event) => setEvidenceNote(event.target.value)} />
 
       <button type="button" disabled={status.kind === "busy"} onClick={() => {
@@ -662,11 +695,11 @@ function ClaimForm({ onCreated, initialCircle = null, firstClaim = false }: {
             onCreated(result);
           })
           .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
-      }}>送出認領</button>
+      }}>{t("送出認領")}</button>
     </>}
 
-    {challenge && <p className={styles.challenge}><span>驗證碼</span><code>{challenge}</code></p>}
-    {status.kind !== "idle" && status.kind !== "busy" && <p className={status.kind === "error" ? styles.error : styles.notice}>{status.message}</p>}
+    {challenge && <p className={styles.challenge}><span>{t("驗證碼")}</span><code>{challenge}</code></p>}
+    {status.kind !== "idle" && status.kind !== "busy" && <p className={status.kind === "error" ? styles.error : styles.notice}>{portalNotice(status.message, locale)}</p>}
   </section>;
 }
 
@@ -677,18 +710,18 @@ function ClaimForm({ onCreated, initialCircle = null, firstClaim = false }: {
  * mandatory before a deletion, and this is the weaker version of the same idea
  * — nobody should be able to delete something they cannot see (ADR-0020).
  */
-function deletionSummary(fields: CircleOverrideFields) {
+function deletionSummary(fields: CircleOverrideFields, t: ReturnType<typeof usePortalText>) {
   const lines: string[] = [];
-  if (fields.pen) lines.push(`筆名：${fields.pen}`);
-  if (fields.saleInfo) lines.push(`販售資訊 ${[...fields.saleInfo].length} 字`);
-  if (fields.circleCategory) lines.push(`社團主題：${fields.circleCategory}`);
+  if (fields.pen) lines.push(t("筆名：{value}", { value: fields.pen }));
+  if (fields.saleInfo) lines.push(t("販售資訊 {count} 字", { count: [...fields.saleInfo].length }));
+  if (fields.circleCategory) lines.push(t("社團主題：{value}", { value: fields.circleCategory }));
   for (const { key, label } of CIRCLE_OVERRIDE_LIST_FIELDS) {
     const items = fields[key];
-    if (items?.length) lines.push(`${label} ${items.length} 項`);
+    if (items?.length) lines.push(t("{label} {count} 項", { label: t(label), count: items.length }));
   }
-  if (fields.links?.length) lines.push(`連結 ${fields.links.length} 條`);
-  if (fields.thumbnail) lines.push("代表圖 1 張");
-  if (fields.catalogImages?.length) lines.push(`品書 ${fields.catalogImages.length} 張`);
+  if (fields.links?.length) lines.push(t("連結 {count} 條", { count: fields.links.length }));
+  if (fields.thumbnail) lines.push(t("代表圖 1 張"));
+  if (fields.catalogImages?.length) lines.push(t("品書 {count} 張", { count: fields.catalogImages.length }));
   return lines;
 }
 
@@ -700,11 +733,12 @@ function deletionSummary(fields: CircleOverrideFields) {
  * it.
  */
 function PublicationPreview({ records, compact = false }: { records: CircleViewRecord[]; compact?: boolean }) {
-  if (records.length === 0) return <p>這個社團目前沒有配置攤位，公開頁面不會顯示。</p>;
+  const t = usePortalText();
+  if (records.length === 0) return <p>{t("這個社團目前沒有配置攤位，公開頁面不會顯示。")}</p>;
   const record = records[0];
   return <>
-    {records.length > 1 && <p>此社團有 {records.length} 天配置；以下預覽 DAY {record.day} {record.code}，其他天的內容相同。</p>}
-    <div className={styles.previewFrame} aria-label="刊登預覽">
+    {records.length > 1 && <p>{t("此社團有 {count} 天配置；以下預覽 DAY {day} {booth}，其他天的內容相同。", { count: records.length, day: record.day, booth: record.code })}</p>}
+    <div className={styles.previewFrame} aria-label={t("刊登預覽")}>
       <CircleDetails
         record={record}
         sharedRecords={records.filter((candidate) => candidate.day === record.day && candidate.code === record.code)}
@@ -718,29 +752,33 @@ function PublicationPreview({ records, compact = false }: { records: CircleViewR
 }
 
 function ReviewSummary({ fields }: { fields: CircleOverrideFields }) {
+  const t = usePortalText();
+  const { locale } = useLocale();
   const value = (candidate: string | string[] | undefined) => Array.isArray(candidate)
-    ? candidate.join("、") || "未提供" : candidate?.trim() || "未提供";
+    ? candidate.join("、") || t("未提供") : candidate?.trim() || t("未提供");
   const rows = [
     ["筆名", value(fields.pen)],
     ["販售資訊", value(fields.saleInfo)],
-    ["本次品書", fields.catalogImages?.length ? `${fields.catalogImages.length} 張` : "未提供"],
+    ["本次品書", fields.catalogImages?.length ? t("{count} 張", { count: fields.catalogImages.length }) : t("未提供")],
     ["社團主題", value(fields.circleCategory)],
-    ...CIRCLE_OVERRIDE_LIST_FIELDS.map(({ key, label }) => [label, value(fields[key])]),
-    ["連結", fields.links?.length ? `${fields.links.length} 條` : "未提供"],
-    ["代表圖", fields.thumbnail ? fields.thumbnail.provider || "已提供" : "未提供"],
+    ...CIRCLE_OVERRIDE_LIST_FIELDS.map(({ key, label }) => [label, value(key in CHOICE_FIELD_OPTIONS ? fields[key]?.map(option => circleOptionLabel(option, locale)) : fields[key])]),
+    ["連結", fields.links?.length ? t("{count} 條", { count: fields.links.length }) : t("未提供")],
+    ["代表圖", fields.thumbnail ? fields.thumbnail.provider || t("已提供") : t("未提供")],
   ];
-  const shareImage = selectedCircleShareImage(fields);
+  const shareImage = selectedCircleShareImage(fields, locale);
   return <dl className={styles.reviewSummary}>
-    {rows.map(([label, content]) => <div key={label}><dt>{label}</dt><dd>{content}</dd></div>)}
+    {rows.map(([label, content]) => <div key={label}><dt>{t(label)}</dt><dd>{content}</dd></div>)}
     {/* The picture stays with the row that names it. */}
     <div>
-      <dt>分享縮圖</dt>
-      <dd>{shareImage.label}<img className={styles.shareImagePreview} src={shareImage.image.url} alt="儲存後的分享縮圖" /></dd>
+      <dt>{t("分享縮圖")}</dt>
+      <dd>{shareImage.label}<img className={styles.shareImagePreview} src={shareImage.image.url} alt={t("儲存後的分享縮圖")} /></dd>
     </div>
   </dl>;
 }
 
 function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSummary }) {
+  const t = usePortalText();
+  const { locale } = useLocale();
   const [fields, setFields] = useState<CircleOverrideFields>({});
   // Keep separators and in-progress IME text intact while the author types.
   const [listInputs, setListInputs] = useState<Partial<Record<CircleOverrideFieldKey, string>>>({});
@@ -766,7 +804,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
   // The editor is usable before the preview baseline arrives, and that request
   // can fail; gating the draft on it would silently stop saving drafts.
   const [hydrated, setHydrated] = useState(false);
-  const [hydrationError, setHydrationError] = useState<string | null>(null);
+  const [hydrationError, setHydrationError] = useState<PortalNotice | null>(null);
   const [hydrationAttempt, setHydrationAttempt] = useState(0);
   // What the server holds, as opposed to the draft in `fields`: the deletion
   // summary has to describe what would actually be deleted, not unsaved edits.
@@ -947,11 +985,11 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
   const listField = (key: CircleOverrideListFieldKey, label: string) => {
     const id = `${key}-${claim.circleId}`;
     if (isMultiChoiceField(key)) return <div className={styles.field}>
-      {fieldHead(key, label, <span id={`${id}-label`} className={styles.fieldLabel}>{label}</span>)}
+      {fieldHead(key, label, <span id={`${id}-label`} className={styles.fieldLabel}>{t(label)}</span>)}
       <fieldset className={styles.choiceGroup} aria-labelledby={`${id}-label`}>
         {optionsFor(key).map((option) => <label key={option}>
           <input type="checkbox" checked={(fields[key] ?? []).includes(option)} onChange={(event) => toggleChoice(key, option, event.target.checked)} />
-          <span>{option}</span>
+          <span>{circleOptionLabel(option, locale)}</span>
         </label>)}
       </fieldset>
     </div>;
@@ -959,23 +997,23 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       const choiceKey = key as ChoiceFieldKey;
       const values = fields[choiceKey] ?? [];
       return <div className={styles.field}>
-        {fieldHead(key, label, <label htmlFor={id}>{label}</label>)}
+        {fieldHead(key, label, <label htmlFor={id}>{t(label)}</label>)}
         {/* 這個欄位以前可以填多個。多值時每一個都要看得到、刪得掉，不能只把
             第一個當成選取值，把其餘的留在送出的資料裡卻不顯示。 */}
         {values.length > 1 && <div className={styles.extraValues}>
-          <span>目前有 {values.length} 個值，選一項會取代全部：</span>
+          <span>{t("目前有 {count} 個值，選一項會取代全部：", { count: values.length })}</span>
           {values.map((value) => <button key={value} type="button" onClick={() => removeChoice(choiceKey, value)}>
-            {value}<span aria-hidden="true">✕</span><span className={styles.visuallyHidden}>移除</span>
+            {circleOptionLabel(value, locale)}<span aria-hidden="true">✕</span><span className={styles.visuallyHidden}>{t("移除")}</span>
           </button>)}
         </div>}
         <select id={id} value={values.length === 1 ? values[0] : ""} onChange={(event) => setChoice(choiceKey, event.target.value)}>
-          <option value="">尚未選擇</option>
-          {optionsFor(choiceKey).map((option) => <option key={option} value={option}>{option}</option>)}
+          <option value="">{t("尚未選擇")}</option>
+          {optionsFor(choiceKey).map((option) => <option key={option} value={option}>{circleOptionLabel(option, locale)}</option>)}
         </select>
       </div>;
     }
     return <div className={styles.field}>
-      {fieldHead(key, label, <label htmlFor={id}>{label}（以逗號分隔，最多 {OVERRIDE_LIMITS.listItems} 項）</label>)}
+      {fieldHead(key, label, <label htmlFor={id}>{t("{label}（以逗號分隔，最多 {max} 項）", { label: t(label), max: OVERRIDE_LIMITS.listItems })}</label>)}
       <input id={id} value={listInputs[key] ?? (fields[key] ?? []).join("、")} onChange={(event) => setList(key, event.target.value)} />
     </div>;
   };
@@ -1069,14 +1107,14 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       const item = items.findIndex((candidate) => candidate.length > OVERRIDE_LIMITS.listItemLength);
       return [
         items.length > OVERRIDE_LIMITS.listItems
-          ? { id: `${key}-${claim.circleId}`, message: `${label}最多 ${OVERRIDE_LIMITS.listItems} 項，目前有 ${items.length} 項。` } : null,
+          ? { id: `${key}-${claim.circleId}`, message: t("{label}最多 {max} 項，目前有 {count} 項。", { label: t(label), max: OVERRIDE_LIMITS.listItems, count: items.length }) } : null,
         item >= 0
-          ? { id: `${key}-${claim.circleId}`, message: `${label}第 ${item + 1} 項超過 ${OVERRIDE_LIMITS.listItemLength} 字。` } : null,
+          ? { id: `${key}-${claim.circleId}`, message: t("{label}第 {index} 項超過 {max} 字。", { label: t(label), index: item + 1, max: OVERRIDE_LIMITS.listItemLength }) } : null,
       ];
     }),
     ...links.map((link, index) => {
       const problem = linkUrlProblem(link.url) || (link.provider.trim() ? "" : "請填寫平台名稱。");
-      return problem ? { id: linkUrlProblem(link.url) ? `link-url-${claim.circleId}-${index}` : `link-provider-${claim.circleId}-${index}`, message: `第 ${index + 1} 個連結：${problem}` } : null;
+      return problem ? { id: linkUrlProblem(link.url) ? `link-url-${claim.circleId}-${index}` : `link-provider-${claim.circleId}-${index}`, message: t("第 {index} 個連結：{problem}", { index: index + 1, problem: t(problem) }) } : null;
     }),
     thumbnail && thumbnailUrlProblem(thumbnail.url) ? { id: `thumb-url-${claim.circleId}`, message: thumbnailUrlProblem(thumbnail.url) } : null,
     // Pending counts as not yet checked, not as fine: a slow address could
@@ -1088,7 +1126,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       } : null,
     thumbnail?.sourceUrl?.trim() && linkUrlProblem(thumbnail.sourceUrl) ? { id: `thumb-source-${claim.circleId}`, message: linkUrlProblem(thumbnail.sourceUrl) } : null,
     JSON.stringify(fields).length > OVERRIDE_LIMITS.serializedFields
-      ? { id: `editor-fields-${claim.circleId}`, message: `全部欄位合計超過 ${OVERRIDE_LIMITS.serializedFields} 字元，請縮短內容或連結。` } : null,
+      ? { id: `editor-fields-${claim.circleId}`, message: t("全部欄位合計超過 {max} 字元，請縮短內容或連結。", { max: OVERRIDE_LIMITS.serializedFields }) } : null,
   ].filter((problem): problem is { id: string; message: string } => problem !== null);
 
   const closeReview = () => {
@@ -1145,18 +1183,17 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
   const formMessage = !status.at && (status.kind === "ok" || status.kind === "error") ? status : null;
 
   return <section id={`circle-editor-${claim.circleId}`} className={`${styles.card} ${styles.editorCard}`} aria-busy={!hydrated && !hydrationError}>
-    <h2>編輯：{claim.circleName}</h2>
-    <p>儲存後約一分鐘內公開。社團名稱、攤位與日期無法在此修改；名稱有誤請聯絡管理者。</p>
+    <h2>{t("編輯：{name}", { name: claim.circleName })}</h2>
+    <p>{t("儲存後約一分鐘內公開。社團名稱、攤位與日期無法在此修改；名稱有誤請聯絡管理者。")}</p>
 
-    {!hydrated && !hydrationError && <p className={styles.notice} role="status">正在載入已儲存內容，完成前無法編輯。</p>}
+    {!hydrated && !hydrationError && <p className={styles.notice} role="status">{t("正在載入已儲存內容，完成前無法編輯。")}</p>}
     {hydrationError && <p className={styles.error} role="alert">
-      無法載入已儲存內容：{hydrationError}
-      <button type="button" className={styles.inlineButton} onClick={retryHydration}>重試載入已儲存內容</button>
+      {t("無法載入已儲存內容：")}{portalNotice(hydrationError, locale)}
+      <button type="button" className={styles.inlineButton} onClick={retryHydration}>{t("重試載入已儲存內容")}</button>
     </p>}
 
     {draftRestoredAt && draftDiffersFromSaved && <p className={styles.notice} role="status">
-      這是你在這台裝置上{DRAFT_TIME.format(new Date(draftRestoredAt))}編輯到一半、還沒儲存的內容。
-      <button type="button" className={styles.inlineButton} onClick={discardDraft}>還原為已儲存的版本</button>
+      {t("這是你在這台裝置上 {time} 編輯到一半、還沒儲存的內容。", { time: new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Taipei" }).format(new Date(draftRestoredAt)) })}<button type="button" className={styles.inlineButton} onClick={discardDraft}>{t("還原為已儲存的版本")}</button>
     </p>}
 
     <div className={styles.editorLayout}>
@@ -1167,18 +1204,18 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       <fieldset className={styles.editorFieldset} disabled={!hydrated || reviewOpen}>
 
     <div className={styles.editorSection}>
-      {fieldHead("saleInfo", "販售資訊", <h3><label htmlFor={`sale-${claim.circleId}`}>販售資訊</label></h3>)}
+      {fieldHead("saleInfo", "販售資訊", <h3><label htmlFor={`sale-${claim.circleId}`}>{t("販售資訊")}</label></h3>)}
       <textarea
         id={`sale-${claim.circleId}`} rows={4} maxLength={OVERRIDE_LIMITS.saleInfo}
         aria-describedby={`sale-limit-${claim.circleId}`}
         value={fields.saleInfo ?? ""}
         onChange={(event) => setFields((current) => ({ ...current, saleInfo: event.target.value }))}
       />
-      <p id={`sale-limit-${claim.circleId}`} className={styles.editorHint}>最多 {OVERRIDE_LIMITS.saleInfo} 字</p>
+      <p id={`sale-limit-${claim.circleId}`} className={styles.editorHint}>{t("最多 {max} 字", { max: OVERRIDE_LIMITS.saleInfo })}</p>
     </div>
 
     <div className={styles.editorSection}>
-      {fieldHead("catalogImages", "品書", <h3>本次品書</h3>)}
+      {fieldHead("catalogImages", "品書", <h3>{t("本次品書")}</h3>)}
       <CatalogImagesField
         circleId={claim.circleId} images={fields.catalogImages ?? []} busy={status.kind === "busy"}
         onUpdate={(update) => setFields((current) => ({ ...current, catalogImages: update(current.catalogImages ?? []) }))}
@@ -1187,9 +1224,9 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     </div>
 
     <div className={styles.editorSection}>
-      <h3>作者與作品</h3>
+      <h3>{t("作者與作品")}</h3>
       <div className={styles.field}>
-        {fieldHead("pen", "筆名", <label htmlFor={`pen-${claim.circleId}`}>筆名（最多 {OVERRIDE_LIMITS.pen} 字）</label>)}
+        {fieldHead("pen", "筆名", <label htmlFor={`pen-${claim.circleId}`}>{t("筆名（最多 {max} 字）", { max: OVERRIDE_LIMITS.pen })}</label>)}
         <input
           id={`pen-${claim.circleId}`} maxLength={OVERRIDE_LIMITS.pen}
           value={fields.pen ?? ""}
@@ -1197,13 +1234,13 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
         />
       </div>
       <div className={styles.field}>
-        {fieldHead("circleCategory", "社團主題", <label htmlFor={`circle-category-${claim.circleId}`}>社團主題</label>)}
+        {fieldHead("circleCategory", "社團主題", <label htmlFor={`circle-category-${claim.circleId}`}>{t("社團主題")}</label>)}
         <select
           id={`circle-category-${claim.circleId}`}
           value={fields.circleCategory ?? ""}
           onChange={(event) => setFields((current) => ({ ...current, circleCategory: event.target.value }))}
         >
-          <option value="">尚未選擇</option>
+          <option value="">{t("尚未選擇")}</option>
           {event.circleCategories.categories.map((category) => <option key={category.id} value={category.label}>{category.label}</option>)}
         </select>
       </div>
@@ -1211,7 +1248,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     </div>
 
     <div className={styles.editorSection}>
-      {fieldHead("thumbnail", "代表圖", <h3>代表圖</h3>)}
+      {fieldHead("thumbnail", "代表圖", <h3>{t("代表圖")}</h3>)}
       <div className={styles.thumbnailLayout}>
         {/* The only check left on an external address is whether it is really
             an image, and the browser is the one that can answer it (ADR-0052).
@@ -1219,17 +1256,17 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
             needs; it leads so the current picture is seen before changing it. */}
         {thumbnail?.url && !thumbnailUrlProblem(thumbnail.url) && <div className={styles.thumbnailPreview}>
           <img
-            src={thumbnail.url} alt="代表圖預覽"
+            src={thumbnail.url} alt={t("代表圖預覽")}
             onLoad={() => setThumbnailLoad({ url: thumbnail.url, ok: true })}
             onError={() => setThumbnailLoad({ url: thumbnail.url, ok: false })}
           />
-          {thumbnailLoad?.url === thumbnail.url && !thumbnailLoad.ok && <p className={styles.error}>{THUMBNAIL_NOT_AN_IMAGE}</p>}
+          {thumbnailLoad?.url === thumbnail.url && !thumbnailLoad.ok && <p className={styles.error}>{t(THUMBNAIL_NOT_AN_IMAGE)}</p>}
           {/* The way to take the picture away where 不顯示 is not offered; an
               emptied address alone would only be a field still to fill in. */}
-          {!officialHas("thumbnail") && <button type="button" onClick={() => clearField("thumbnail")}>移除圖片</button>}
+          {!officialHas("thumbnail") && <button type="button" onClick={() => clearField("thumbnail")}>{t("移除圖片")}</button>}
         </div>}
         <div className={styles.thumbnailFields}>
-          <label htmlFor={`thumb-file-${claim.circleId}`}>上傳圖片</label>
+          <label htmlFor={`thumb-file-${claim.circleId}`}>{t("上傳圖片")}</label>
           <input
             id={`thumb-file-${claim.circleId}`} type="file" accept="image/jpeg,image/png,image/webp"
             aria-describedby={`thumb-file-hint-${claim.circleId}`}
@@ -1258,42 +1295,42 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
                 .finally(() => { input.value = ""; });
             }}
           />
-          <p id={`thumb-file-hint-${claim.circleId}`} className={styles.editorHint}>JPEG、PNG、WebP，最大 5 MB</p>
-          {uploadNotice.kind !== "idle" && <p className={uploadNotice.kind === "error" ? styles.error : styles.notice}>{uploadNotice.message}</p>}
+          <p id={`thumb-file-hint-${claim.circleId}`} className={styles.editorHint}>{t("JPEG、PNG、WebP，最大 5 MB")}</p>
+          {uploadNotice.kind !== "idle" && <p className={uploadNotice.kind === "error" ? styles.error : styles.notice}>{portalNotice(uploadNotice.message, locale)}</p>}
 
-          <label htmlFor={`thumb-url-${claim.circleId}`}>外部圖片網址</label>
+          <label htmlFor={`thumb-url-${claim.circleId}`}>{t("外部圖片網址")}</label>
           <input
             id={`thumb-url-${claim.circleId}`} value={thumbnail?.url ?? ""} inputMode="url" placeholder="https://"
             aria-invalid={thumbnail?.url && thumbnailUrlProblem(thumbnail.url) ? true : undefined}
             onChange={(event) => editThumbnail({ url: event.target.value })}
           />
-          {thumbnail?.url && thumbnailUrlProblem(thumbnail.url) && <p className={styles.error}>{thumbnailUrlProblem(thumbnail.url)}</p>}
+          {thumbnail?.url && thumbnailUrlProblem(thumbnail.url) && <p className={styles.error}>{t(thumbnailUrlProblem(thumbnail.url))}</p>}
 
-          <label htmlFor={`thumb-source-${claim.circleId}`}>圖片出處頁面（選填）</label>
+          <label htmlFor={`thumb-source-${claim.circleId}`}>{t("圖片出處頁面（選填）")}</label>
           <input
             id={`thumb-source-${claim.circleId}`} value={thumbnail?.sourceUrl ?? ""} inputMode="url" placeholder="https://"
             aria-invalid={thumbnail?.sourceUrl && linkUrlProblem(thumbnail.sourceUrl) ? true : undefined}
             onChange={(event) => editThumbnail({ sourceUrl: event.target.value })}
           />
-          {thumbnail?.sourceUrl && linkUrlProblem(thumbnail.sourceUrl) && <p className={styles.error}>{linkUrlProblem(thumbnail.sourceUrl)}</p>}
+          {thumbnail?.sourceUrl && linkUrlProblem(thumbnail.sourceUrl) && <p className={styles.error}>{t(linkUrlProblem(thumbnail.sourceUrl))}</p>}
 
-          <label htmlFor={`thumb-provider-${claim.circleId}`}>來源標示（選填，例如轉載或委託繪師）</label>
+          <label htmlFor={`thumb-provider-${claim.circleId}`}>{t("來源標示（選填，例如轉載或委託繪師）")}</label>
           <input
             id={`thumb-provider-${claim.circleId}`} value={thumbnail?.provider ?? ""} maxLength={OVERRIDE_LIMITS.listItemLength}
-            placeholder="例如：Pixiv" onChange={(event) => editThumbnail({ provider: event.target.value })}
+            placeholder={t("例如：Pixiv")} onChange={(event) => editThumbnail({ provider: event.target.value })}
           />
         </div>
       </div>
     </div>
 
     <div className={styles.editorSection}>
-      {fieldHead("links", "連結", <h3>連結</h3>)}
+      {fieldHead("links", "連結", <h3>{t("連結")}</h3>)}
       {/* The HTTPS rule lives in `linkUrlProblem`, which names the row that
           broke it; teaching it up here as well is a rule stated twice. */}
-      <p className={styles.editorHint}>地圖側欄顯示前 {SIDE_PANEL_LINK_LIMIT} 個連結，最多可填 {OVERRIDE_LIMITS.links} 個。</p>
+      <p className={styles.editorHint}>{t("地圖側欄顯示前 {visible} 個連結，最多可填 {max} 個。", { visible: SIDE_PANEL_LINK_LIMIT, max: OVERRIDE_LIMITS.links })}</p>
 
       {links.length === 0
-        ? modeFor("links") === "inherit" && <p className={styles.editorHint}>新增後會改用你填寫的連結。</p>
+        ? modeFor("links") === "inherit" && <p className={styles.editorHint}>{t("新增後會改用你填寫的連結。")}</p>
         : <ol className={styles.linkList}>
           {links.map((link, index) => {
             const problem = linkUrlProblem(link.url);
@@ -1303,27 +1340,24 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
                 {/* Each label owns its control, so a row lays out as three fields
                     rather than six items the grid has to guess the pairing of. */}
                 <label htmlFor={`link-provider-${claim.circleId}-${index}`}>
-                  平台名稱
-                  <input
+                  {t("平台名稱")}<input
                     id={`link-provider-${claim.circleId}-${index}`}
                     value={link.provider} maxLength={OVERRIDE_LIMITS.listItemLength}
-                    placeholder="例如：X、Pixiv、巴哈"
+                    placeholder={t("例如：X、Pixiv、巴哈")}
                     onChange={(event) => editLink(index, { provider: event.target.value })}
                   />
                 </label>
                 <label htmlFor={`link-kind-${claim.circleId}-${index}`}>
-                  類型
-                  <select
+                  {t("類型")}<select
                     id={`link-kind-${claim.circleId}-${index}`}
                     value={link.kind}
                     onChange={(event) => editLink(index, { kind: event.target.value as CircleExternalLink["kind"] })}
                   >
-                    {LINK_KINDS.map((kind) => <option key={kind} value={kind}>{LINK_KIND_LABEL[kind]}</option>)}
+                    {LINK_KINDS.map((kind) => <option key={kind} value={kind}>{linkKindLabel(kind, locale)}</option>)}
                   </select>
                 </label>
                 <label htmlFor={`link-url-${claim.circleId}-${index}`} className={styles.linkUrlField}>
-                  網址
-                  <input
+                  {t("網址")}<input
                     id={`link-url-${claim.circleId}-${index}`}
                     value={link.url} inputMode="url" placeholder="https://"
                     aria-invalid={problem ? true : undefined}
@@ -1331,20 +1365,20 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
                   />
                 </label>
                 <div className={styles.linkActions}>
-                  <button type="button" disabled={index === 0} onClick={() => moveLink(index, -1)} aria-label={`把第 ${index + 1} 個連結往前移`}>↑</button>
-                  <button type="button" disabled={index === links.length - 1} onClick={() => moveLink(index, 1)} aria-label={`把第 ${index + 1} 個連結往後移`}>↓</button>
-                  <button type="button" onClick={() => setLinks(links.filter((unused, position) => position !== index))} aria-label={`移除第 ${index + 1} 個連結`}>移除</button>
+                  <button type="button" disabled={index === 0} onClick={() => moveLink(index, -1)} aria-label={t("把第 {index} 個連結往前移", { index: index + 1 })}>↑</button>
+                  <button type="button" disabled={index === links.length - 1} onClick={() => moveLink(index, 1)} aria-label={t("把第 {index} 個連結往後移", { index: index + 1 })}>↓</button>
+                  <button type="button" onClick={() => setLinks(links.filter((unused, position) => position !== index))} aria-label={t("移除第 {index} 個連結", { index: index + 1 })}>{t("移除")}</button>
                 </div>
               </div>
-              {problem && <p className={styles.error}>{problem}</p>}
+              {problem && <p className={styles.error}>{t(problem)}</p>}
               {index === SIDE_PANEL_LINK_LIMIT - 1 && links.length > SIDE_PANEL_LINK_LIMIT
-                && <p className={styles.linkCut}>以下的連結不會出現在地圖側欄</p>}
+                && <p className={styles.linkCut}>{t("以下的連結不會出現在地圖側欄")}</p>}
             </li>;
           })}
         </ol>}
 
       <div className={styles.linkAdd}>
-        <button type="button" disabled={links.length >= OVERRIDE_LIMITS.links} onClick={() => setLinks([...links, { ...EMPTY_LINK }])}>新增連結</button>
+        <button type="button" disabled={links.length >= OVERRIDE_LIMITS.links} onClick={() => setLinks([...links, { ...EMPTY_LINK }])}>{t("新增連結")}</button>
         {links.length > 0 && <span>{links.length} / {OVERRIDE_LIMITS.links}</span>}
       </div>
     </div>
@@ -1363,13 +1397,13 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
           reach, and nothing else — least of all the deletion — sits beside it. */}
       <div className={styles.saveBar}>
         {problems.length > 0 && <ul className={styles.problemList} aria-live="polite">
-          {problems.map((problem) => <li key={`${problem.id}-${problem.message}`}><a href={`#${problem.id}`}>{problem.message}</a></li>)}
+          {problems.map((problem) => <li key={`${problem.id}-${t(problem.message)}`}><a href={`#${problem.id}`}>{t(problem.message)}</a></li>)}
         </ul>}
         <div className={styles.saveBarRow}>
           <p className={formMessage?.kind === "error" ? styles.actionError : formMessage ? styles.actionOk : styles.actionState} role="status">
             {formMessage
-              ? <>{formMessage.message}{formMessage.message === SAVED_MESSAGE && <a className={styles.inlineButton} href={mapHref(event.id, firstDayRecord)}>返回活動地圖</a>}</>
-              : !hydrated ? null : draftDiffersFromSaved ? "尚未儲存" : justReverted ? "已還原為已儲存的版本" : null}
+              ? <>{portalNotice(formMessage.message, locale)}{formMessage.message === SAVED_MESSAGE && <a className={styles.inlineButton} href={localizedHref(mapHref(event.id, firstDayRecord), locale)}>{t("返回活動地圖")}</a>}</>
+              : !hydrated ? null : draftDiffersFromSaved ? t("尚未儲存") : justReverted ? t("已還原為已儲存的版本") : null}
           </p>
           {/* Beside the step that publishes, so an edit gone wrong can be
               walked back where it would otherwise be sent; only once there is
@@ -1377,26 +1411,26 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
           {hydrated && saved && (draftDiffersFromSaved || justReverted) && <button
             type="button" className={styles.secondaryButton} disabled={status.kind === "busy" || reviewOpen}
             onClick={justReverted ? undoRevert : discardDraft}
-          >{justReverted ? "取消還原" : "還原為已儲存的版本"}</button>}
+          >{justReverted ? t("取消還原") : t("還原為已儲存的版本")}</button>}
           <button type="button" disabled={!hydrated || status.kind === "busy" || reviewOpen} aria-disabled={problems.length > 0 || undefined} onClick={openReview}>
-            {status.kind === "busy" ? "檢查中…" : "預覽並送出"}
+            {status.kind === "busy" ? t("檢查中…") : t("預覽並送出")}
           </button>
         </div>
       </div>
       </div>
 
-      <aside className={`${styles.previewColumn} ${reviewOpen ? styles.reviewOpen : ""}`} aria-label={reviewOpen ? "儲存前確認" : "即時公開預覽"}>
+      <aside className={`${styles.previewColumn} ${reviewOpen ? styles.reviewOpen : ""}`} aria-label={reviewOpen ? t("儲存前確認") : t("即時公開預覽")}>
         {reviewOpen && reviewedFields && serverPreview
           ? <div ref={reviewPanel} className={styles.reviewPanel} role="region" tabIndex={-1} aria-labelledby={`review-title-${claim.circleId}`}>
             <div className={styles.reviewHeading}>
-              <div><h3 id={`review-title-${claim.circleId}`}>儲存前確認</h3></div>
-              <button type="button" className={styles.backButton} onClick={closeReview}>返回修改</button>
+              <div><h3 id={`review-title-${claim.circleId}`}>{t("儲存前確認")}</h3></div>
+              <button type="button" className={styles.backButton} onClick={closeReview}>{t("返回修改")}</button>
             </div>
             <PublicationPreview records={serverPreview} />
-            <h4>這次填寫的欄位</h4>
+            <h4>{t("這次填寫的欄位")}</h4>
             <ReviewSummary fields={reviewedFields} />
             <div ref={reviewActions} className={styles.reviewActions}>
-              <button type="button" className={styles.backButton} disabled={status.kind === "busy"} onClick={closeReview}>返回修改</button>
+              <button type="button" className={styles.backButton} disabled={status.kind === "busy"} onClick={closeReview}>{t("返回修改")}</button>
               {/* Re-checked here, not only when the review opened: an image
                   verdict can arrive after that, and a confirmation taken before
                   it must not be the one that publishes. */}
@@ -1422,22 +1456,22 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
                     closeReview();
                   })
                   .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
-              }}>{status.kind === "busy" ? "儲存中…" : "確認儲存"}</button>
+              }}>{status.kind === "busy" ? t("儲存中…") : t("確認儲存")}</button>
             </div>
             {problems.length > 0 && <ul className={styles.problemList} aria-live="polite">
-              {problems.map((problem) => <li key={`${problem.id}-${problem.message}`}>{problem.message}</li>)}
+              {problems.map((problem) => <li key={`${problem.id}-${t(problem.message)}`}>{t(problem.message)}</li>)}
             </ul>}
-            {status.kind === "error" && !status.at && <p className={styles.error} role="status">{status.message}</p>}
+            {status.kind === "error" && !status.at && <p className={styles.error} role="status">{portalNotice(status.message, locale)}</p>}
           </div>
           : <div className={styles.livePreview}>
-            <small>尚未儲存</small>
+            <small>{t("尚未儲存")}</small>
             <div className={styles.previewHeading}>
-              <h3>公開預覽</h3>
+              <h3>{t("公開預覽")}</h3>
               {/* `useModalFocus` returns focus here on close, so the button
                   needs no ref of its own. */}
-              {livePreview?.length ? <button type="button" className={styles.inlineButton} onClick={() => setExpanded(true)}>開啟完整詳細資訊</button> : null}
+              {livePreview?.length ? <button type="button" className={styles.inlineButton} onClick={() => setExpanded(true)}>{t("開啟完整詳細資訊")}</button> : null}
             </div>
-            {livePreview ? <PublicationPreview records={livePreview} compact /> : <p>正在準備預覽…</p>}
+            {livePreview ? <PublicationPreview records={livePreview} compact /> : <p>{t("正在準備預覽…")}</p>}
           </div>}
       </aside>
 
@@ -1447,11 +1481,11 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       >
         <div
           ref={expandedPreview} className={styles.previewDialog} role="dialog" aria-modal="true"
-          aria-label="完整詳細資訊預覽" tabIndex={-1}
+          aria-label={t("完整詳細資訊預覽")} tabIndex={-1}
         >
           <div className={styles.previewHeading}>
-            <h3>完整詳細資訊</h3>
-            <button type="button" className={styles.backButton} onClick={() => setExpanded(false)}>關閉</button>
+            <h3>{t("完整詳細資訊")}</h3>
+            <button type="button" className={styles.backButton} onClick={() => setExpanded(false)}>{t("關閉")}</button>
           </div>
           <PublicationPreview records={livePreview} />
         </div>
@@ -1465,7 +1499,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
           {/* Saved on the spot rather than with the draft: it is one switch with an
               immediate answer, and it survives a tab closed before submitting. */}
           <fieldset className={styles.retention}>
-            <legend>活動結束後</legend>
+            <legend>{t("活動結束後")}</legend>
             <div className={styles.retentionChoices}>
               {([{ value: false, title: "繼續公開" }, { value: true, title: "不再公開" }] as const).map((option) => <label key={option.title}>
                 <input
@@ -1478,10 +1512,10 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
                       .catch((error: unknown) => { setHidden(!option.value); setStatus({ kind: "error", message: errorMessage(error), at: "setting" }); });
                   }}
                 />
-                <span>{option.title}</span>
+                <span>{t(option.title)}</span>
               </label>)}
             </div>
-            {status.at === "setting" && <p className={status.kind === "error" ? styles.error : styles.notice} role="status">{status.message}</p>}
+            {status.at === "setting" && <p className={status.kind === "error" ? styles.error : styles.notice} role="status">{portalNotice(status.message, locale)}</p>}
           </fieldset>
         </div>
 
@@ -1491,20 +1525,20 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
             Its answer stays here even once the details are gone with the data. */}
         {(saved || status.at === "delete") && <div className={styles.dangerZone}>
         {saved && <details className={styles.danger}>
-          <summary>刪除資料</summary>
+          <summary>{t("刪除資料")}</summary>
           {/* Clearing a field writes an empty value and leaves the row; this
               removes the row. ADR-0020 requires the two to read as different
               things, because only one of them is undoable. */}
-          <p>永久刪除你填寫的內容與上一版備份，<b>無法復原</b>。場刊中的社團名、攤位與日期不受影響。</p>
-          <p>將被刪除的內容：</p>
-          {deletionSummary(savedFields).length === 0
-            ? <ul className={styles.dangerSummary}><li>（目前沒有任何欄位有內容，但資料列仍然存在）</li></ul>
-            : <ul className={styles.dangerSummary}>{deletionSummary(savedFields).map((line) => <li key={line}>{line}</li>)}</ul>}
+          <p>{t("永久刪除你填寫的內容與上一版備份，")}<b>{t("無法復原")}</b>{t("。場刊中的社團名、攤位與日期不受影響。")}</p>
+          <p>{t("將被刪除的內容：")}</p>
+          {deletionSummary(savedFields, t).length === 0
+            ? <ul className={styles.dangerSummary}><li>{t("（目前沒有任何欄位有內容，但資料列仍然存在）")}</li></ul>
+            : <ul className={styles.dangerSummary}>{deletionSummary(savedFields, t).map((line) => <li key={line}>{line}</li>)}</ul>}
           {/* Not a single button: a session lasts 30 days, and one click from a
               stale tab must not be able to do this. Re-sending a mail would have
               been the other option, and it would put an irreversible action behind
               deliverability. */}
-          <label htmlFor={`confirm-${claim.circleId}`}>請輸入社團代號 <code>{claim.circleId}</code> 以確認</label>
+          <label htmlFor={`confirm-${claim.circleId}`}>{t("請輸入社團代號")}<code>{claim.circleId}</code> {t("以確認")}</label>
           <input
             id={`confirm-${claim.circleId}`} value={confirmText} autoComplete="off" spellCheck={false}
             onChange={(event) => setConfirmText(event.target.value)} placeholder={claim.circleId}
@@ -1529,9 +1563,9 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
                 })
                 .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error), at: "delete" }));
             }}
-          >刪除資料</button>
+          >{t("刪除資料")}</button>
         </details>}
-        {status.at === "delete" && status.kind !== "busy" && <p className={status.kind === "error" ? styles.error : styles.notice} role="status">{status.message}</p>}
+        {status.at === "delete" && status.kind !== "busy" && <p className={status.kind === "error" ? styles.error : styles.notice} role="status">{portalNotice(status.message, locale)}</p>}
         </div>}
       </fieldset>
     </div>

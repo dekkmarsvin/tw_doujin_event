@@ -1,4 +1,6 @@
 import type { AccountNotificationPreferences } from "./account-notifications";
+import type { AccountNotificationPreferencesUpdate } from "./i18n/api-contract";
+import { DEFAULT_LOCALE, type Locale } from "./i18n/locale";
 import type { AdminSiteSettings, ServiceChecks, SiteSettingsInput } from "./site-settings";
 
 export function readAdminSiteSettings() { return call<AdminSiteSettings>("/api/admin/site-settings"); }
@@ -19,7 +21,7 @@ export type { AdminAccountDetailResponse, AdminAccountDetail, AdminAccountOrgani
 export function readAccountNotificationPreferences() {
   return call<AccountNotificationPreferences>("/api/account/notification-preferences");
 }
-export function saveAccountNotificationPreferences(preferences: AccountNotificationPreferences) {
+export function saveAccountNotificationPreferences(preferences: AccountNotificationPreferencesUpdate) {
   return call<AccountNotificationPreferences>("/api/account/notification-preferences", { method: "PUT", body: JSON.stringify(preferences) });
 }
 
@@ -163,9 +165,9 @@ export function readTurnstileSitekey() {
   return call<{ turnstileSitekey: string }>("/api/auth/config").then((body) => body.turnstileSitekey);
 }
 
-export function requestLoginLink(email: string, turnstileToken: string, audience: "circle" | "organizer" = "circle", circleId?: string) {
+export function requestLoginLink(email: string, turnstileToken: string, audience: "circle" | "organizer" = "circle", circleId?: string, locale: Locale = DEFAULT_LOCALE) {
   const destination = typeof window === "undefined" ? {} : Object.fromEntries(notificationParameters(Object.fromEntries(new URLSearchParams(window.location.search)), audience));
-  return call<{ ok: true }>("/api/auth/request-link", { method: "POST", body: JSON.stringify({ email, turnstileToken, audience, circleId, destination }) });
+  return call<{ ok: true }>("/api/auth/request-link", { method: "POST", body: JSON.stringify({ email, turnstileToken, audience, circleId, destination, locale }) });
 }
 
 export function verifyLoginToken(token: string) {

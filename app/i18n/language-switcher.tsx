@@ -20,7 +20,7 @@ const LABEL: Record<Locale, string> = { "zh-Hant": "介面語言", en: "Language
  * shortens the face up to 1050px too, for a header with no room at narrow
  * desktop widths.
  */
-export function LanguageSwitcher({ className, narrow = false }: { className?: string; narrow?: boolean }) {
+export function LanguageSwitcher({ className, narrow = false, onChange }: { className?: string; narrow?: boolean; onChange?: (locale: Locale) => void }) {
   const { locale, setLocale } = useLocale();
   return <label className={[styles.switcher, narrow && styles.narrow, className].filter(Boolean).join(" ")}>
     <UiIcon name="globe" className={styles.icon} />
@@ -29,7 +29,10 @@ export function LanguageSwitcher({ className, narrow = false }: { className?: st
       <span className={styles.short} lang={locale}>{ENDONYM[locale].short}</span>
     </span>
     <UiIcon name="chevron-down" className={styles.chevron} />
-    <select aria-label={LABEL[locale]} value={locale} onChange={(changed) => setLocale(changed.currentTarget.value as Locale)}>
+    <select aria-label={LABEL[locale]} value={locale} onChange={(changed) => {
+      const next = LOCALES.find(option => option === changed.currentTarget.value);
+      if (next) { setLocale(next); onChange?.(next); }
+    }}>
       {LOCALES.map((option) => <option key={option} value={option} lang={option}>{ENDONYM[option].name}</option>)}
     </select>
   </label>;

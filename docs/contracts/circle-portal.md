@@ -391,7 +391,9 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 GET 回 `{ cadence, version, locale }`，未選語言時 `locale: null`，讀取不建立偏好列。PUT 的 cadence／locale 可省略其一；省略 locale 保留原值，省略 cadence 僅更新語言、version 與 write_token，不改 enabled_since、待寄時間、重試、lease 或取消狀態。首次只改語言插入 daily／enabled_since 0，與無偏好列相同。明確帶 cadence 仍依原規則重排，即使頻率未變；版本衝突回 `409 version_conflict`，不覆寫。
 
-五類社團通知（claim.approved／claim.rejected／claim.revoked／circle.updated／circle.takendown）在寄送時讀取帳號語言，null 沿用繁中；目的地與通知設定連結都明確帶 lang。摘要的五個固定中文明細詞在呈現時翻譯，保留「、」合併與未知詞，既有佇列不改寫；名稱、活動代碼與人工內容保持原文。主辦／管理通知與邀請維持繁中。
+社團介面登入後，僅在通知語言為 null 時以當次介面語言初始化一次；網址帶入語言不覆寫既存偏好。明確切換介面／通知語言立即更新 UI，並以 `{ version, locale }` 儲存。失敗保留目前介面與草稿、顯示未儲存與重試；版本衝突先重新讀取，不自動重送舊選擇。頁首與通知設定共用版本，頻率操作只送 `{ version, cadence }`。主辦／管理者維持原本繁中與頻率設定。
+
+五類社團通知（claim.approved／claim.rejected／claim.revoked／circle.updated／circle.takendown）在寄送時讀取帳號語言，null 沿用繁中；目的地與通知設定連結都明確帶 lang。摘要的固定中文明細詞在呈現時翻譯，保留「、」合併與未知詞，既有佇列不改寫；名稱、活動代碼與人工內容保持原文。主辦／管理通知與邀請維持繁中。
 
 社團可達與共用帳號 API 的錯誤在原 error、HTTP status 與結構化欄位上增補 code／必要 params，依 `app/i18n/api-error.ts` 的 registry；主辦／管理專用錯誤不變。挑戰驗證找不到驗證碼仍回 HTTP 200 與 `verified: false`。
 

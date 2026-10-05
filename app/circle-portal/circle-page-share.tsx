@@ -1,5 +1,9 @@
 "use client";
 
+import { localizedHref } from "../i18n/locale";
+import { usePortalText } from "./portal-i18n";
+import { useLocale } from "../i18n/locale-context";
+
 import { useId, useMemo, useRef, useState } from "react";
 import { circlePromotion } from "../circle-share";
 import { circlePath } from "../seo";
@@ -44,20 +48,22 @@ export function CirclePageShare({ event, circle, records, failed, onRetry, field
   savedFields?: CircleOverrideFields;
   onImageChange?: (value: string) => void;
 }) {
+  const t = usePortalText();
+  const { locale } = useLocale();
   const id = useId();
   const box = useRef<HTMLTextAreaElement>(null);
   const [result, setResult] = useState("");
-  const pageUrl = `${window.location.origin}${circlePath(event.id, circle.id)}`;
+  const pageUrl = localizedHref(`${window.location.origin}${circlePath(event.id, circle.id)}`, locale);
   // The claim keeps the name as it was when it was made; an organizer can have
   // corrected it since, and the post has to name the circle the page does.
   const name = records?.[0]?.circle.name ?? circle.name;
   const promotion = useMemo(
-    () => records ? circlePromotion(event, { id: circle.id, name }, records.map((record) => record.placement), window.location.origin) : null,
-    [circle.id, event, name, records],
+    () => records ? circlePromotion(event, { id: circle.id, name }, records.map((record) => record.placement), window.location.origin, locale) : null,
+    [circle.id, event, name, records, locale],
   );
   const canShare = typeof navigator.share === "function";
-  const selectedImage = selectedCircleShareImage(fields);
-  const savedImage = selectedCircleShareImage(savedFields);
+  const selectedImage = selectedCircleShareImage(fields, locale);
+  const savedImage = selectedCircleShareImage(savedFields, locale);
   const imageChanged = selectedImage.value !== savedImage.value || selectedImage.image.url !== savedImage.image.url;
 
   const selectText = () => {
@@ -84,31 +90,31 @@ export function CirclePageShare({ event, circle, records, failed, onRetry, field
   // `discoveryPages` writes a page only for circles with a placement.
   if (records?.length === 0) return null;
   return <section className={styles.sharePanel} aria-labelledby={`${id}-title`}>
-    <h3 id={`${id}-title`}>分享公開頁</h3>
+    <h3 id={`${id}-title`}>{t("分享公開頁")}</h3>
     {onImageChange && <div className={styles.shareImageField}>
-      <label htmlFor={`${id}-image`}>分享縮圖</label>
+      <label htmlFor={`${id}-image`}>{t("分享縮圖")}</label>
       <select id={`${id}-image`} value={selectedImage.value} onChange={event => onImageChange(event.target.value)}>
-        {circleShareImageOptions(fields).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+        {circleShareImageOptions(fields, locale).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
-      <img className={styles.shareImagePreview} src={selectedImage.image.url} alt="分享縮圖預覽" />
-      <p className={styles.editorHint}>建議使用橫式 1.91:1（例如 1200×630）的圖片，其他比例會置中裁切。</p>
-      <p className={styles.editorHint}>{imageChanged ? "縮圖尚未儲存，請預覽並送出。" : "已套用到公開頁；分享平台可能稍後才更新。"}</p>
+      <img className={styles.shareImagePreview} src={selectedImage.image.url} alt={t("分享縮圖預覽")} />
+      <p className={styles.editorHint}>{t("建議使用橫式 1.91:1（例如 1200×630）的圖片，其他比例會置中裁切。")}</p>
+      <p className={styles.editorHint}>{imageChanged ? t("縮圖尚未儲存，請預覽並送出。") : t("已套用到公開頁；分享平台可能稍後才更新。")}</p>
     </div>}
     {promotion
       ? <>
-        <label htmlFor={`${id}-text`}>宣傳文字</label>
+        <label htmlFor={`${id}-text`}>{t("宣傳文字")}</label>
         <textarea id={`${id}-text`} ref={box} readOnly rows={3} value={promotion.full} onFocus={(event) => event.currentTarget.select()} />
       </>
       : failed
-        ? <p className={styles.shareResult} role="alert">無法取得攤位資料，宣傳文字暫時無法產生。<button type="button" className={styles.inlineButton} onClick={onRetry}>重新取得</button></p>
-        : <p className={styles.shareResult} role="status">正在準備宣傳文字…</p>}
+        ? <p className={styles.shareResult} role="alert">{t("無法取得攤位資料，宣傳文字暫時無法產生。")}<button type="button" className={styles.inlineButton} onClick={onRetry}>{t("重新取得")}</button></p>
+        : <p className={styles.shareResult} role="status">{t("正在準備宣傳文字…")}</p>}
     <div className={styles.shareActions}>
       {records
-        ? <a className={styles.shareLink} href={pageUrl} target="_blank" rel="noreferrer">查看公開頁</a>
-        : <button type="button" className={styles.secondaryButton} disabled>查看公開頁</button>}
-      <button type="button" disabled={!promotion} onClick={copy}>複製宣傳文字與連結</button>
-      {canShare && <button type="button" className={styles.secondaryButton} disabled={!promotion} onClick={share}>分享</button>}
+        ? <a className={styles.shareLink} href={pageUrl} target="_blank" rel="noreferrer">{t("查看公開頁")}</a>
+        : <button type="button" className={styles.secondaryButton} disabled>{t("查看公開頁")}</button>}
+      <button type="button" disabled={!promotion} onClick={copy}>{t("複製宣傳文字與連結")}</button>
+      {canShare && <button type="button" className={styles.secondaryButton} disabled={!promotion} onClick={share}>{t("分享")}</button>}
     </div>
-    <p className={styles.shareResult} role="status">{result}</p>
+    <p className={styles.shareResult} role="status">{t(result)}</p>
   </section>;
 }

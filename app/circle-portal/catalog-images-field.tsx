@@ -1,5 +1,8 @@
 "use client";
 
+import { usePortalText, portalNotice, noticeError, type PortalNotice } from "./portal-i18n";
+import { useLocale } from "../i18n/locale-context";
+
 import { useId, useRef, useState } from "react";
 import { catalogFileProblem, prepareCatalogImage } from "../catalog-image-prepare";
 import { uploadCatalogImage } from "../circle-editor-client";
@@ -7,7 +10,7 @@ import { OVERRIDE_LIMITS, type CircleCatalogImage } from "../circle-overrides";
 import { pointTo } from "./point-to";
 import styles from "./portal.module.css";
 
-type Notice = { kind: "idle" | "busy" | "ok" | "error"; message: string };
+type Notice = { kind: "idle" | "busy" | "ok" | "error"; message: PortalNotice };
 const IDLE: Notice = { kind: "idle", message: "" };
 
 /**
@@ -30,6 +33,8 @@ export function CatalogImagesField({ circleId, images, busy, onUpdate, onUploadi
   onUpdate: (update: (current: CircleCatalogImage[]) => CircleCatalogImage[]) => void;
   onUploading: (active: boolean) => void;
 }) {
+  const t = usePortalText();
+  const { locale } = useLocale();
   const id = useId();
   const [confirmed, setConfirmed] = useState(false);
   const [notice, setNotice] = useState<Notice>(IDLE);
@@ -64,7 +69,7 @@ export function CatalogImagesField({ circleId, images, busy, onUpdate, onUploadi
         if (!prepared.readable) setSmall((current) => new Set([...current, image.url]));
         setNotice({ kind: "ok", message: "品書已上傳，儲存後公開。" });
       })
-      .catch((error: unknown) => setNotice({ kind: "error", message: error instanceof Error ? error.message : "品書上傳失敗，請再試一次。" }))
+      .catch((error: unknown) => setNotice({ kind: "error", message: noticeError(error) }))
       .finally(() => onUploading(false));
   };
   const move = (index: number, direction: -1 | 1) => onUpdate((current) => {
@@ -76,32 +81,32 @@ export function CatalogImagesField({ circleId, images, busy, onUpdate, onUploadi
   });
 
   return <div className={styles.catalogField}>
-    <p className={styles.editorHint}>最多 {OVERRIDE_LIMITS.catalogImages} 張，依順序顯示。JPG、PNG、WebP；PDF 或 PSD 請先匯出成圖片。</p>
+    <p className={styles.editorHint}>{t("最多 {max} 張，依順序顯示。JPG、PNG、WebP；PDF 或 PSD 請先匯出成圖片。", { max: OVERRIDE_LIMITS.catalogImages })}</p>
     <label className={`${styles.confirmCheck} ${confirmed ? "" : styles.gate} ${!confirmed && called ? styles.calledOut : ""}`}>
       <input ref={confirmBox} type="checkbox" checked={confirmed} onChange={(event) => { setConfirmed(event.target.checked); setCalled(false); }} />
-      <span>我確認這些圖片適合所有年齡的讀者觀看。</span>
+      <span>{t("我確認這些圖片適合所有年齡的讀者觀看。")}</span>
     </label>
     {/* One tile per page in reading order, and the next free place as the
         last tile: the list never has more tiles than the limit has pages, so
         the row is filled rather than a strip of small pictures down the left. */}
     <ol className={styles.catalogList}>
       {images.map((image, index) => <li key={image.url} className={styles.catalogPage}>
-        <img src={image.previewUrl} alt={`第 ${index + 1} 張品書預覽`} />
+        <img src={image.previewUrl} alt={t("第 {index} 張品書預覽", { index: index + 1 })} />
         <div className={styles.catalogPageHead}>
-          <b>第 {index + 1} 張</b>
+          <b>{t("第 {index} 張", { index: index + 1 })}</b>
           <span>
-            <button type="button" disabled={busy || index === 0} onClick={() => move(index, -1)} aria-label={`把第 ${index + 1} 張品書往前移`}>←</button>
-            <button type="button" disabled={busy || index === images.length - 1} onClick={() => move(index, 1)} aria-label={`把第 ${index + 1} 張品書往後移`}>→</button>
+            <button type="button" disabled={busy || index === 0} onClick={() => move(index, -1)} aria-label={t("把第 {index} 張品書往前移", { index: index + 1 })}>←</button>
+            <button type="button" disabled={busy || index === images.length - 1} onClick={() => move(index, 1)} aria-label={t("把第 {index} 張品書往後移", { index: index + 1 })}>→</button>
           </span>
         </div>
-        {small.has(image.url) && <p className={styles.notice}>縮小後文字可能太小，建議分成多張上傳。</p>}
+        {small.has(image.url) && <p className={styles.notice}>{t("縮小後文字可能太小，建議分成多張上傳。")}</p>}
         <div className={styles.catalogPageActions}>
           <button type="button" disabled={busy} aria-disabled={!confirmed || undefined} onClick={() => {
             if (!confirmed) return askToConfirm();
             replaceTarget.current = image.url;
             replaceInput.current?.click();
-          }} aria-label={`替換第 ${index + 1} 張品書`}>替換</button>
-          <button type="button" disabled={busy} onClick={() => onUpdate((current) => current.filter((page) => page.url !== image.url))} aria-label={`移除第 ${index + 1} 張品書`}>移除</button>
+          }} aria-label={t("替換第 {index} 張品書", { index: index + 1 })}>{t("替換")}</button>
+          <button type="button" disabled={busy} onClick={() => onUpdate((current) => current.filter((page) => page.url !== image.url))} aria-label={t("移除第 {index} 張品書", { index: index + 1 })}>{t("移除")}</button>
         </div>
       </li>)}
       {!full && <li className={styles.catalogAdd}>
@@ -109,8 +114,8 @@ export function CatalogImagesField({ circleId, images, busy, onUpdate, onUploadi
             input; the name is its own span so the reason beside it describes
             the control rather than renaming it. */}
         <label htmlFor={`${id}-add`}>
-          <span id={`${id}-add-name`}>新增品書圖片</span>
-          {!confirmed && <small id={`${id}-add-gate`}>先勾選上方的確認</small>}
+          <span id={`${id}-add-name`}>{t("新增品書圖片")}</span>
+          {!confirmed && <small id={`${id}-add-gate`}>{t("先勾選上方的確認")}</small>}
         </label>
         <input
           id={`${id}-add`} type="file" accept="image/jpeg,image/png,image/webp" className={styles.visuallyHidden}
@@ -135,7 +140,7 @@ export function CatalogImagesField({ circleId, images, busy, onUpdate, onUploadi
         if (file && replacing) upload(file, replacing);
       }}
     />
-    {full && <p className={styles.editorHint}>已達 {OVERRIDE_LIMITS.catalogImages} 張上限，可替換或移除後再新增。</p>}
-    {notice.kind !== "idle" && <p className={notice.kind === "error" ? styles.error : styles.notice} role="status">{notice.message}</p>}
+    {full && <p className={styles.editorHint}>{t("已達 {max} 張上限，可替換或移除後再新增。", { max: OVERRIDE_LIMITS.catalogImages })}</p>}
+    {notice.kind !== "idle" && <p className={notice.kind === "error" ? styles.error : styles.notice} role="status">{portalNotice(notice.message, locale)}</p>}
   </div>;
 }

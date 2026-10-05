@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef } from "react";
+import { useLocale } from "../i18n/locale-context";
 import styles from "./portal.module.css";
 
 /**
@@ -30,6 +31,7 @@ type TurnstileApi = {
   render: (target: HTMLElement, options: {
     sitekey: string;
     size: TurnstileSize;
+    language: "zh-tw" | "en" | "ja";
     callback: (token: string) => void;
     "expired-callback": () => void;
     "error-callback": () => void;
@@ -79,6 +81,7 @@ export function TurnstileWidget({ sitekey, onToken, onUnavailable }: {
   onUnavailable: () => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
+  const { locale } = useLocale();
 
   // A layout effect, so the height reserved for the chosen size is in place
   // before the first paint rather than jumping once it is known.
@@ -87,6 +90,7 @@ export function TurnstileWidget({ sitekey, onToken, onUnavailable }: {
     let cancelled = false;
     const target = host.current;
     if (!target) return;
+    onToken(null);
     const size: TurnstileSize = target.clientWidth >= NORMAL_WIDTH ? "normal" : "compact";
     target.dataset.size = size;
 
@@ -95,9 +99,10 @@ export function TurnstileWidget({ sitekey, onToken, onUnavailable }: {
       widgetId = turnstile.render(target, {
         sitekey,
         size,
-        callback: (token) => onToken(token),
-        "expired-callback": () => onToken(null),
-        "error-callback": () => onToken(null),
+        language: locale === "zh-Hant" ? "zh-tw" : locale,
+        callback: (token) => { if (!cancelled) onToken(token); },
+        "expired-callback": () => { if (!cancelled) onToken(null); },
+        "error-callback": () => { if (!cancelled) onToken(null); },
       });
     }).catch(() => {
       if (!cancelled) onUnavailable();
@@ -107,7 +112,7 @@ export function TurnstileWidget({ sitekey, onToken, onUnavailable }: {
       cancelled = true;
       if (widgetId) window.turnstile?.remove(widgetId);
     };
-  }, [onToken, onUnavailable, sitekey]);
+  }, [locale, onToken, onUnavailable, sitekey]);
 
   return <div className={styles.turnstile} ref={host} />;
 }
