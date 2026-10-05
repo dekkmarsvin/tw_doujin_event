@@ -1,4 +1,6 @@
 import type { EventDefinition } from "./event-catalog";
+import type { Locale } from "./i18n/locale";
+import { defineMessages, translate } from "./i18n/messages";
 
 const taipeiCalendar = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" });
 export const taipeiDate = (now: number) => taipeiCalendar.format(now);
@@ -25,27 +27,37 @@ export function eventDayDate(label: string, end: string): string | null {
 const parts = (iso: string) => ({ year: Number(iso.slice(0, 4)), month: Number(iso.slice(5, 7)), day: Number(iso.slice(8, 10)) });
 
 /** 2026-11-07 → 11/7, the date a search title has room for. */
-export function shortDate(iso: string) {
+export function shortDate(iso: string, locale: Locale = "zh-Hant"): string {
   const { month, day } = parts(iso);
-  return `${month}/${day}`;
+  return new Intl.DateTimeFormat(locale === "zh-Hant" ? "en-US" : locale, { timeZone: "UTC", month: "numeric", day: "numeric" }).format(new Date(Date.UTC(2000, month - 1, day)));
 }
 
 /** 2026-11-07 → 11月7日（六）: one event day, whether it was published as an
  * ISO date or as an older month/day label. */
-export function dayDateLabel(iso: string) {
+export function dayDateLabel(iso: string, locale: Locale = "zh-Hant"): string {
   const { month, day } = parts(iso);
+  const date = new Date(`${iso}T00:00:00Z`);
+  if (locale === "en") return new Intl.DateTimeFormat(locale, { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" }).format(date);
+  // Japanese is written out by hand: ICU builds disagree on its long forms
+  // (Chrome's range comes out as 2026/09/01～2026/09/02).
+  if (locale === "ja") return `${month}月${day}日(${"日月火水木金土"[date.getUTCDay()]})`;
   return `${month}月${day}日（${"日一二三四五六"[new Date(`${iso}T00:00:00Z`).getUTCDay()]}）`;
 }
 
 /** Dates written out in full for a summary a reader meets without the site
  * around it: 2026年8月21日, 2026年8月21日至23日, 2026年8月30日至9月1日. */
-export function fullDateRange(start: string, end = start) {
+export function fullDateRange(start: string, end = start, locale: Locale = "zh-Hant"): string {
+  if (locale === "en") {
+    const formatter = new Intl.DateTimeFormat(locale, { timeZone: "UTC", year: "numeric", month: "short", day: "numeric" });
+    const from = new Date(`${start}T00:00:00Z`), to = new Date(`${end}T00:00:00Z`);
+    return start === end ? formatter.format(from) : formatter.formatRange(from, to);
+  }
   const from = parts(start);
   const to = parts(end);
   const first = `${from.year}年${from.month}月${from.day}日`;
   if (start === end) return first;
   const last = from.year !== to.year ? `${to.year}年${to.month}月${to.day}日` : from.month !== to.month ? `${to.month}月${to.day}日` : `${to.day}日`;
-  return `${first}至${last}`;
+  return `${first}${locale === "ja" ? "～" : "至"}${last}`;
 }
 
 /** An event day's calendar date, or null when its label is not a date. */
@@ -63,11 +75,12 @@ export function eventDateFields(dates: readonly string[]) {
   };
 }
 
-export function eventCalendar(event: EventDefinition) {
+export function eventCalendar(event: EventDefinition, locale: Locale = "zh-Hant") {
   const end = taipeiDate(Date.parse(event.eventEndsAt));
   const days = event.days.map((day) => eventDayDate(day.dateLabel, end));
   if (!days.length || days.some((day) => !day || day > end)) return { start: null, end, label: event.dateRangeLabel };
   const start = (days as string[]).sort()[0];
+  if (locale !== "zh-Hant") return { start, end, label: fullDateRange(start, end, locale) };
   const full = (date: string) => date.replaceAll("-", ".");
   const tail = start.slice(0, 7) === end.slice(0, 7) ? end.slice(8)
     : start.slice(0, 4) === end.slice(0, 4) ? end.slice(5).replace("-", ".") : full(end);
@@ -81,6 +94,16 @@ export const EVENT_GROUPS = [
   { id: "undated", label: "日期待確認" },
 ] as const;
 
+const groupMessages = defineMessages({
+  "zh-Hant": { upcoming: "即將到來", ongoing: "舉辦中", past: "過往活動", undated: "日期待確認" },
+  en: { upcoming: "Upcoming", ongoing: "Ongoing", past: "Past events", undated: "Dates to be confirmed" },
+  ja: { upcoming: "開催予定", ongoing: "開催中", past: "過去のイベント", undated: "日程未定" },
+});
+
+export function eventGroupLabel(id: (typeof EVENT_GROUPS)[number]["id"], locale: Locale = "zh-Hant"): string {
+  return translate(groupMessages, locale, id);
+}
+
 /**
  * Events in the order a control surface cares about them: the one being held,
  * then the next to start, and only after every current one, the ended ones
@@ -88,9 +111,9 @@ export const EVENT_GROUPS = [
  * work is, so only the id breaks ties. An event whose days cannot be read
  * ranks by its end date.
  */
-export function eventsByProximity<T extends EventDefinition>(events: readonly T[], today: string) {
+export function eventsByProximity<T extends EventDefinition>(events: readonly T[], today: string, locale: Locale = "zh-Hant") {
   const entries = events.map((event) => {
-    const calendar = eventCalendar(event);
+    const calendar = eventCalendar(event, locale);
     const group = today > calendar.end ? "past" : !calendar.start ? "undated" : today < calendar.start ? "upcoming" : "ongoing";
     return { event, ...calendar, group: group as (typeof EVENT_GROUPS)[number]["id"] };
   });
@@ -112,7 +135,7 @@ export function nearestEvent<T extends EventDefinition>(events: readonly T[], to
  * current event first, so the next one to attend is not left at the bottom of
  * its group, and the most recently ended first among the past ones.
  */
-export function groupCalendarEvents(events: readonly EventDefinition[], today: string) {
-  const entries = eventsByProximity(events, today);
-  return EVENT_GROUPS.map((group) => ({ ...group, entries: entries.filter((entry) => entry.group === group.id) })).filter((group) => group.entries.length > 0);
+export function groupCalendarEvents(events: readonly EventDefinition[], today: string, locale: Locale = "zh-Hant") {
+  const entries = eventsByProximity(events, today, locale);
+  return EVENT_GROUPS.map((group) => ({ ...group, label: eventGroupLabel(group.id, locale), entries: entries.filter((entry) => entry.group === group.id) })).filter((group) => group.entries.length > 0);
 }

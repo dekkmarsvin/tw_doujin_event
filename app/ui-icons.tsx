@@ -11,6 +11,7 @@ type UiIconName =
   | "close"
   | "drag"
   | "external"
+  | "globe"
   | "heart"
   | "locate"
   | "map-pin"
@@ -51,6 +52,7 @@ export function UiIcon({ name, ...props }: { name: UiIconName } & SVGProps<SVGSV
     {name === "chevron-left" && <path d="m15 18-6-6 6-6" />}
     {name === "chevron-right" && <path d="m9 18 6-6-6-6" />}
     {name === "external" && <><path d="M14 5h5v5" /><path d="m19 5-8 8" /><path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></>}
+    {name === "globe" && <><circle cx="12" cy="12" r="8.5" /><path d="M3.5 12h17" /><path d="M12 3.5c2.3 2.4 3.4 5.2 3.4 8.5s-1.1 6.1-3.4 8.5c-2.3-2.4-3.4-5.2-3.4-8.5s1.1-6.1 3.4-8.5Z" /></>}
     {name === "plus" && <><path d="M12 5v14" /><path d="M5 12h14" /></>}
     {name === "minus" && <path d="M5 12h14" />}
     {name === "locate" && <><circle cx="12" cy="12" r="6" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" /></>}

@@ -4,6 +4,10 @@
 * { box-sizing:border-box; }
 html,body { margin:0; min-height:100%; background:var(--paper); color:var(--ink); }
 body,button,input,select,textarea { font-family:var(--font-geist),system-ui,"Noto Sans TC",sans-serif; }
+/* Kanji shared with Chinese must take Japanese glyph shapes, and Japanese text
+   breaks by kinsoku rules. System fonts only: no CJK webfont is downloaded. */
+:is(body,button,input,select,textarea):lang(ja) { font-family:var(--font-geist),"Hiragino Sans","Hiragino Kaku Gothic ProN","BIZ UDPGothic","Yu Gothic UI",Meiryo,"Noto Sans JP",system-ui,sans-serif; }
+:lang(ja) { line-break:strict; }
 button,input { font-size:inherit; } button { color:inherit; }
 button>svg { display:block; }
 button:has(>svg:only-child) { display:grid; place-items:center; padding:0; line-height:1; }

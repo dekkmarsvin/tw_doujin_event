@@ -34,12 +34,14 @@ export async function start(name, { showScrollbars = false } = {}) {
 
   return {
     report,
-    /** `url` opens an exact address — a one-time login link; otherwise an event. */
-    async page({ event = "sample", params = "", url, viewport = { width: 1440, height: 900 }, routes } = {}) {
+    /** `url` opens an exact address — a one-time login link; otherwise an event.
+     * `locale` is the browser's language; it picks the interface language when
+     * the URL and an earlier choice do not, so journeys name the reader they are. */
+    async page({ event = "sample", params = "", url, viewport = { width: 1440, height: 900 }, routes, locale = "zh-TW" } = {}) {
       // A worker-controlled navigation can bypass page.route and read real
       // server data instead of this page's fixtures. Keep routed journeys on
       // their declared data; real portal pages still exercise the worker.
-      const page = await browser.newPage({ viewport, reducedMotion: "reduce", serviceWorkers: routes ? "block" : "allow" });
+      const page = await browser.newPage({ viewport, locale, reducedMotion: "reduce", serviceWorkers: routes ? "block" : "allow" });
       report.pagesOpened++;
       page.on("domcontentloaded", () => report.documentLoads++);
       observations.set(page, observeRequests(page));
