@@ -7,7 +7,9 @@
 .site-header .site-header-brand { display:flex; align-items:center; gap:11px; min-width:0; border-radius:9px; color:inherit; text-decoration:none; }
 .site-header .site-header-mark { flex:none; width:38px; height:38px; display:grid; place-items:center; border-radius:11px 11px 11px 3px; background:#202a35; color:#fff; font-weight:800; box-shadow:3px 3px 0 #f4c65c; }
 .site-header .site-header-name { min-width:0; }
-.site-header .site-header-name b,.site-header .site-header-name small { display:block; white-space:nowrap; }
+/* The brand gives way to the actions: an English or Japanese tagline is longer
+   than the Chinese one, so it ends in an ellipsis rather than run under them. */
+.site-header .site-header-name b,.site-header .site-header-name small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .site-header .site-header-name b { font-size:calc(16px * var(--ui-font-scale,1)); letter-spacing:.08em; }
 .site-header .site-header-name small { margin-top:2px; color:#59626c; font-size:calc(12px * var(--ui-font-scale,1)); letter-spacing:.12em; }
 /* Secondary, so it is found without outranking a page's own first action.

@@ -107,6 +107,16 @@ try {
     // place, keeps what the page was showing and is remembered.
     const page = await journey.page({ event: "unknown-event", params: "&lang=en", viewport: { width: 1440, height: 900 } });
     await page.getByRole("heading", { name: "Choose an event" }).waitFor();
+    // The English tagline is the longest: just above the phone layout it gives
+    // way to the actions instead of running underneath them.
+    await page.setViewportSize({ width: 421, height: 900 });
+    const tagline = await page.getByRole("banner").getByText("Doujin event booth map", { exact: true }).evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      return { right: Math.min(box.right, box.left + node.clientWidth), overflowing: node.scrollWidth > node.clientWidth };
+    });
+    const actions = await page.locator(".site-header-actions").boundingBox();
+    assert.ok(tagline.right <= actions.x, `the tagline stops before the actions at 421px: ${JSON.stringify({ tagline, actions })}`);
+    await page.setViewportSize({ width: 1440, height: 900 });
     const history = await page.evaluate(() => window.history.length);
     await page.getByRole("banner").getByRole("combobox", { name: "Language" }).selectOption("ja");
     await page.getByRole("heading", { name: "イベントを選択" }).waitFor();

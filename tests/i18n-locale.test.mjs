@@ -16,6 +16,8 @@ const categories = await environment.runner.import("/app/circle-categories.ts");
 const overrides = await environment.runner.import("/app/circle-overrides.ts");
 const records = await environment.runner.import("/app/circle-records.ts");
 const search = await environment.runner.import("/app/circle-search.ts");
+const discovery = await environment.runner.import("/app/static-discovery.ts");
+const seo = await environment.runner.import("/app/seo.ts");
 after(() => vite.close());
 
 test("canonical choices and browser tags have different acceptance rules", () => {
@@ -133,6 +135,17 @@ test("fixed circle labels translate without changing official category values", 
   assert.equal(records.placementStatusLabel("cancelled", "ja"), "参加取り消し");
   assert.equal(search.ageRatingFilterLabel("R18"), "只看 R18");
   assert.equal(search.ageRatingFilterLabel("R18", "en"), "R18 only");
+});
+
+test("page metadata names its language without changing the canonical address", () => {
+  const home = seo.pageMetadata();
+  assert.equal(home.locale, "zh-Hant");
+  assert.match(discovery.metadataHtml(home), /<meta property="og:locale" content="zh_TW">/);
+  const japanese = seo.pageMetadata(undefined, undefined, [], "ja");
+  assert.equal(japanese.canonical, home.canonical);
+  assert.match(discovery.metadataHtml(japanese), /<meta property="og:locale" content="ja_JP">/);
+  const { locale: _omitted, ...own } = home;
+  assert.match(discovery.metadataHtml(own), /content="zh_TW"/, "metadata built without a locale stays Traditional Chinese");
 });
 
 test("calendar labels do not depend on the host time zone", () => {

@@ -1,6 +1,7 @@
 import type { EventDefinition } from "./event-catalog";
 import { placementStatusLabel } from "./circle-records";
 import { eventCalendar, eventDayCalendarDate, fullDateRange, shortDate } from "./event-calendar";
+import { DEFAULT_LOCALE, type Locale } from "./i18n/locale";
 
 export const PUBLIC_ORIGIN = "https://map.kotoban.top";
 export const SITE_TITLE = "場刊 Map｜同人展逛攤地圖";
@@ -36,7 +37,7 @@ export type MetadataPlacement = { day: string | number; boothCode: string; statu
 /** Where a circle is, earliest day first, for a search result that must tell
  * two same-named circles apart. Only active placements say where a circle is
  * now; a moved or cancelled one always carries its status words (#361). */
-export function circleBooths(event: EventDefinition, placements: readonly MetadataPlacement[]) {
+export function circleBooths(event: EventDefinition, placements: readonly MetadataPlacement[], locale: Locale = DEFAULT_LOCALE) {
   const order = (day: string | number) => event.days.findIndex((candidate) => String(candidate.id) === String(day));
   // Earliest by calendar date: a corrected date can leave day 1 after day 2
   // (ADR-0068). Declaration order only decides between days with no date.
@@ -49,20 +50,30 @@ export function circleBooths(event: EventDefinition, placements: readonly Metada
   const active = rows.filter((row) => row.status === "active");
   const first = active[0] ?? rows[0];
   const headline = active.length
-    ? `${when(first, shortDate)} ${active.filter((row) => String(row.day) === String(first.day)).map((row) => row.boothCode).join("、")}`
-    : `${when(first, shortDate)} ${first.boothCode} ${placementStatusLabel(first.status)}`;
+    ? `${when(first, (iso) => shortDate(iso, locale))} ${active.filter((row) => String(row.day) === String(first.day)).map((row) => row.boothCode).join("、")}`
+    : `${when(first, (iso) => shortDate(iso, locale))} ${first.boothCode} ${placementStatusLabel(first.status, locale)}`;
   const summary = [...new Set(rows.map((row) => String(row.day)))].map((day) => {
     const onDay = rows.filter((row) => String(row.day) === day);
-    const codes = onDay.map((row) => row.status === "active" ? row.boothCode : `${row.boothCode}（${placementStatusLabel(row.status)}）`);
-    return `${when(onDay[0], (iso) => fullDateRange(iso))} ${codes.join("、")}`;
+    const codes = onDay.map((row) => row.status === "active" ? row.boothCode : `${row.boothCode}（${placementStatusLabel(row.status, locale)}）`);
+    return `${when(onDay[0], (iso) => fullDateRange(iso, iso, locale))} ${codes.join("、")}`;
   }).join("；");
   return { headline, summary };
 }
 
-export function pageMetadata(event?: EventDefinition, circle?: { id: string; name: string }, placements: readonly MetadataPlacement[] = []) {
-  if (!event) return { title: SITE_TITLE, description: SITE_DESCRIPTION, canonical: `${PUBLIC_ORIGIN}/`, image: SHARE_IMAGE };
-  const calendar = eventCalendar(event);
-  const dates = calendar.start ? fullDateRange(calendar.start, calendar.end) : calendar.label;
+/** The open-graph spelling of each interface language. */
+export const OG_LOCALE: Record<Locale, string> = { "zh-Hant": "zh_TW", en: "en_US", ja: "ja_JP" };
+
+/**
+ * A page's title, description, canonical address and card. `locale` is the
+ * interface language the page is written in; it reaches the dates, booth
+ * statuses, `og:locale` and the static page's `lang`. The sentences around
+ * them are still Traditional Chinese until the public pages are translated
+ * (#525), and canonical addresses never carry a language.
+ */
+export function pageMetadata(event?: EventDefinition, circle?: { id: string; name: string }, placements: readonly MetadataPlacement[] = [], locale: Locale = DEFAULT_LOCALE) {
+  if (!event) return { title: SITE_TITLE, description: SITE_DESCRIPTION, canonical: `${PUBLIC_ORIGIN}/`, image: SHARE_IMAGE, locale };
+  const calendar = eventCalendar(event, locale);
+  const dates = calendar.start ? fullDateRange(calendar.start, calendar.end, locale) : calendar.label;
   const venues = [...new Set(event.venueAssignments.map((venue) => venue.venueName))].join("、");
   const closing = "查看攤位位置、收藏社團並規劃逛攤路線。";
   // Aliases are what organizers and readers actually call the event (ADR-0068).
@@ -76,13 +87,15 @@ export function pageMetadata(event?: EventDefinition, circle?: { id: string; nam
     // An event page shares its own picture when it has one (#396); circle
     // pages and the homepage keep the brand card.
     image: event.image ?? SHARE_IMAGE,
+    locale,
   };
-  const booths = circleBooths(event, placements);
+  const booths = circleBooths(event, placements, locale);
   return {
     title: `${circle.name}｜${aliases[0] ?? event.name}${booths ? ` ${booths.headline}` : ""}｜場刊 Map`,
     description: `${circle.name}在${event.name}的${booths ? `攤位：${booths.summary}。${venues}` : `參展日期與攤位。${dates}，${venues}`}。${closing}`,
     canonical: PUBLIC_ORIGIN + circlePath(event.id, circle.id),
     image: SHARE_IMAGE,
+    locale,
   };
 }
 
