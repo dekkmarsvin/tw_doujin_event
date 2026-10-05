@@ -73,6 +73,8 @@ test("preference writes preserve omitted cadence and validate explicit fields an
     assert.deepEqual(contract.parseAccountNotificationPreferencesUpdate(body), { ok: true, value: body });
   }
   assert.deepEqual(contract.parseAccountNotificationPreferencesUpdate({ version: 1, cadence: "daily", locale: "en" }), { ok: true, value: { version: 1, cadence: "daily", locale: "en" } });
+  assert.deepEqual(contract.parseAccountNotificationPreferencesUpdate({ version: 0, cadence: "off", locale: null }), { ok: true, value: { version: 0, cadence: "off" } });
+  assert.deepEqual(contract.parseAccountNotificationPreferencesUpdate({ version: 0, locale: null }), { ok: false, code: "invalid_notification_preferences" });
   for (const body of [null, [], {}, { version: 0 }, { version: -1, locale: "en" }, { version: 0.5, locale: "en" }, { version: "0", locale: "en" }, { version: 0, cadence: "weekly" }, { version: 0, cadence: undefined, locale: "en" }, { version: 0, cadence: "off", extra: true }]) assert.deepEqual(contract.parseAccountNotificationPreferencesUpdate(body), { ok: false, code: "invalid_notification_preferences" });
-  for (const chosen of [null, undefined, "EN", "en-US", "zh-hant"]) assert.deepEqual(contract.parseAccountNotificationPreferencesUpdate({ version: 0, locale: chosen }), { ok: false, code: "invalid_locale" });
+  for (const chosen of [undefined, "EN", "en-US", "zh-hant", "", false, {}]) assert.deepEqual(contract.parseAccountNotificationPreferencesUpdate({ version: 0, locale: chosen }), { ok: false, code: "invalid_locale" });
 });

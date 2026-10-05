@@ -108,6 +108,32 @@ test("account preferences require session, validate input, reject stale writes a
   }
 });
 
+test("old clients can PUT the GET response with locale null and turn off pending digests", async () => {
+  await claim(); await tick(); await update();
+  const completed = await items("kind = 'claim.approved'");
+  now = nextNotificationSlot("daily", now);
+  const batch = await repo.claimAccountNotificationBatch(owner, "digest", now);
+  assert.ok(batch?.lease_token);
+  const get = await handlers.getAccountNotificationPreferences(request());
+  assert.equal(get.status, 200);
+  const preferences = await get.json();
+  assert.deepEqual(preferences, { cadence: "daily", version: 0, locale: null });
+  const response = await handlers.saveAccountNotificationPreferences(request("PUT", { ...preferences, cadence: "off" }));
+  assert.equal(response.status, 200, await response.clone().text());
+  assert.deepEqual(await response.json(), { cadence: "off", version: 1, locale: null });
+  assert.deepEqual(await (await handlers.getAccountNotificationPreferences(request())).json(), { cadence: "off", version: 1, locale: null });
+  const [digest] = await items("kind = 'circle.updated'");
+  assert.equal(digest.state, "cancelled"); assert.equal(digest.completed_at, now);
+  const cancelled = await db.prepare("SELECT * FROM account_notification_batches WHERE id = ?1").bind(batch.id).first();
+  assert.equal(cancelled.state, "cancelled"); assert.equal(cancelled.completed_at, now);
+  assert.equal(cancelled.lease_token, null); assert.equal(cancelled.lease_until, 0);
+  assert.equal(await repo.readAccountNotificationBatch(batch, now), null);
+  assert.deepEqual(await items("kind = 'claim.approved'"), completed);
+  await update({ pen: "disabled" }); await tick();
+  assert.equal((await items("kind = 'circle.updated'")).length, 1);
+  assert.equal(sent.length, 1, "off stops digest delivery while completed required mail remains");
+});
+
 test("locale-only inserts and updates preserve pending schedules, leases, off state and completed mail", async () => {
   await claim(); await tick(); await update();
   const digest = (await items("kind = 'circle.updated'"))[0];
@@ -156,7 +182,7 @@ test("locale-only inserts and updates preserve pending schedules, leases, off st
 });
 
 test("locale preference writes refuse invalid bodies, other-account sessions, revoked or inactive accounts", async () => {
-  for (const [body, code] of [[{ version: 0, locale: "en-US" }, "invalid_locale"], [{ version: 0 }, "invalid_notification_preferences"], [{ version: 0, locale: "en", accountId: "other" }, "invalid_notification_preferences"]]) {
+  for (const [body, code] of [[{ version: 0, locale: "en-US" }, "invalid_locale"], [{ version: 0 }, "invalid_notification_preferences"], [{ version: 0, locale: null }, "invalid_notification_preferences"], [{ version: 0, locale: "en", accountId: "other" }, "invalid_notification_preferences"]]) {
     const response = await handlers.saveAccountNotificationPreferences(request("PUT", body));
     assert.equal(response.status, 400); assert.equal((await response.json()).code, code);
   }
@@ -192,7 +218,8 @@ test("all five circle letters use the stored delivery locale, legacy tokens surv
     await claim(`${locale}-taken`); await update({ pen: "原文作者" }, `${locale}-taken`);
     await repo.takedownOverride({ eventId: "sample", circleId: `${locale}-taken`, reason: "人工原文", by: "admin", now });
     await update({ pen: "原文作者" }, `${locale}-approved`);
-    await db.prepare("UPDATE account_notification_items SET detail = '補充資料、品書、恢復公開、保存設定、代表圖片、未知原文' WHERE kind = 'circle.updated' AND state = 'pending'").run();
+    const queuedDetail = "補充資料、品書、恢復公開、保存設定、代表圖片、補充資料已刪除、活動結束後的公開設定、未知原文";
+    await db.prepare("UPDATE account_notification_items SET detail = ?1 WHERE kind = 'circle.updated' AND state = 'pending'").bind(queuedDetail).run();
     sent = []; await tick(deliver); now = nextNotificationSlot("daily", now); await tick(deliver);
     const expected = locale === "en" ? ["Circle claim approved", "Circle claim rejected", "Circle claim revoked", "Circle details taken down", "Circle details updated for"] : locale === "ja" ? ["管理申請が承認されました", "管理申請が承認されませんでした", "管理権限が取り消されました", "サークル補足情報の公開停止", "サークルの補足情報更新"] : ["認領通過", "認領未通過", "認領已撤銷", "補充資料撤下通知", "個社團的補充資料更新"];
     for (const title of expected) assert.ok(sent.some(mail => mail.subject.includes(title)), title);
@@ -207,9 +234,11 @@ test("all five circle letters use the stored delivery locale, legacy tokens surv
       }
     }
     const digest = sent.find(mail => mail.subject.includes(expected[4]));
-    for (const token of locale === "en" ? ["Circle details", "Item list", "Publication restored", "Retention settings", "Featured image"] : locale === "ja" ? ["サークル補足情報", "お品書き", "公開再開", "保存設定", "代表画像"] : ["補充資料", "品書", "恢復公開", "保存設定", "代表圖片"]) assert.ok(digest.text.includes(token));
+    for (const token of locale === "en" ? ["Circle details", "Item list", "Publication restored", "Retention settings", "Featured image", "Circle details deleted", "Post-event visibility"] : locale === "ja" ? ["サークル補足情報", "お品書き", "公開再開", "保存設定", "代表画像", "補足情報を削除", "イベント終了後の公開設定"] : ["補充資料", "品書", "恢復公開", "保存設定", "代表圖片", "補充資料已刪除", "活動結束後的公開設定"]) {
+      assert.ok(digest.text.includes(token), token); assert.ok(digest.html.includes(token), token);
+    }
     assert.ok(digest.text.includes("未知原文"));
-    assert.ok((await items("kind = 'circle.updated'")).every(item => item.detail.startsWith("補充資料、")), "queued detail remains Chinese");
+    assert.ok((await items("kind = 'circle.updated'")).every(item => item.detail === queuedDetail), "queued detail remains Chinese");
     const sink = (await db.prepare("SELECT subject, text FROM preview_mail_sink WHERE email = 'owner@example.test'").all()).results;
     assert.ok(sent.every(mail => sink.some(row => row.subject === mail.subject && row.text === mail.text)), "all three languages reach the real local D1 mail sink");
   }

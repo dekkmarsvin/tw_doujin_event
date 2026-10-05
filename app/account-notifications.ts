@@ -54,8 +54,8 @@ const circleDescriptions: Record<Exclude<Locale, "zh-Hant">, Record<CircleNotifi
   },
 };
 const detailTokens: Record<Exclude<Locale, "zh-Hant">, Record<string, string>> = {
-  en: { 補充資料: "Circle details", 品書: "Item list", 恢復公開: "Publication restored", 保存設定: "Retention settings", 代表圖片: "Featured image" },
-  ja: { 補充資料: "サークル補足情報", 品書: "お品書き", 恢復公開: "公開再開", 保存設定: "保存設定", 代表圖片: "代表画像" },
+  en: { 補充資料: "Circle details", 品書: "Item list", 恢復公開: "Publication restored", 保存設定: "Retention settings", 代表圖片: "Featured image", 補充資料已刪除: "Circle details deleted", 活動結束後的公開設定: "Post-event visibility" },
+  ja: { 補充資料: "サークル補足情報", 品書: "お品書き", 恢復公開: "公開再開", 保存設定: "保存設定", 代表圖片: "代表画像", 補充資料已刪除: "補足情報を削除", 活動結束後的公開設定: "イベント終了後の公開設定" },
 };
 
 export function notificationDestination(item: NotificationItem, origin: string, locale?: Locale) {
