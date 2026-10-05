@@ -11,7 +11,7 @@ type ReadResult = { kind: "ok"; snapshot: ShareSnapshot; expiresAt: number }
   | { kind: "missing" }
   | { kind: "error"; error: string; failure: ApiFailure };
 
-/** Share API codes (API_ERROR_CODES); zh-Hant repeats the server's own sentences. */
+/** Share API codes (API_ERROR_CODES in ./i18n/api-error-codes); zh-Hant repeats the server's own sentences. */
 export const SHARE_ERROR_MESSAGES = defineMessages({
   "zh-Hant": {
     share_invalid: "分享清單格式無效或超過大小限制。",
