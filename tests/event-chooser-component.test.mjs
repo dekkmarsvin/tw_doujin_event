@@ -103,6 +103,6 @@ test("the chooser draws the static pages' header, its sign-in naming no event", 
   assert.match(header, /<div class="site-header-actions"><label [^>]*>[\s\S]*?<select aria-label="介面語言"/);
   assert.equal(header.replace(/<label [\s\S]*?<\/label>/, ""), publicHeaderHtml(publicLoginHref()));
   assert.match(header, /<a class="site-header-brand" href="\/">/);
-  assert.match(header, /<a class="site-header-login" href="\/circle">登入<\/a>/);
+  assert.match(header, /<a class="site-header-login" href="\/circle"[^>]*>登入<\/a>/);
   assert.equal(publicLoginHref({ circleId: "c-900001" }), "/circle", "a circle is never named without its event");
 });

@@ -42,6 +42,55 @@ const authored = [{
 
 const journey = await start("circle-page");
 try {
+  // Language changes update static and React content without changing authored
+  // values or planning. Even words matching a fixed option stay raw in free text.
+  const localized = structuredClone(authored);
+  localized[0].fields.referencedWorks = ["全年齡"];
+  localized[0].fields.specialTags = ["繪師"];
+  for (const [locale, width, region, favorite, add, share, rating] of [
+    ["en", 390, "About this circle", "Favorite", /^Add to this day/, "Share", "All ages"],
+    ["ja", 1440, "サークル紹介", "お気に入りに追加", /^この日のプランに追加/, "共有", "全年齢"],
+  ]) {
+    const visit = await journey.page({ url: `${pageOf(TWO_DAYS)}?lang=${locale}`, viewport: { width, height: 900 }, routes: routes(overridesRoute("sample", localized), sheetRoutes) });
+    const content = visit.getByRole("region", { name: region });
+    await content.getByText("繪師", { exact: true }).waitFor();
+    await content.getByText("全年齡", { exact: true }).waitFor();
+    await content.getByText(rating, { exact: true }).waitFor();
+    assert.equal(await visit.locator("html").getAttribute("lang"), locale);
+    assert.match(await visit.title(), /北風畫室/);
+    assert.equal(await visit.locator("footer a[href^='/privacy/']").getAttribute("href"), `/privacy/${locale}/`);
+    const login = new URL(await visit.getByRole("banner").getByRole("link", { name: locale === "en" ? "Sign in" : "ログイン", exact: true }).getAttribute("href"), base);
+    assert.deepEqual([login.searchParams.get("lang"), login.searchParams.get("event"), login.searchParams.get("circle")], [locale, "sample", TWO_DAYS]);
+    await visit.getByRole("button", { name: favorite, exact: true }).click();
+    await visit.getByRole("button", { name: add }).first().click();
+    const plan = await visit.evaluate(() => localStorage.getItem("event-map-planning-v1"));
+    const next = locale === "en" ? "ja" : "en";
+    await visit.getByRole("combobox").selectOption(next);
+    await visit.getByRole("status").getByText(next === "ja" ? /プランに追加しました/ : /Added to the/).waitFor();
+    assert.equal(await visit.evaluate(() => localStorage.getItem("event-map-planning-v1")), plan);
+    await visit.getByRole("combobox").selectOption(locale);
+    await visit.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+    await visit.evaluate(() => { Object.defineProperty(navigator, "share", { value: undefined, configurable: true }); });
+    await visit.getByRole("button", { name: share, exact: true }).click();
+    await visit.getByRole("status").getByText(locale === "en" ? "Link copied." : "リンクをコピーしました。", { exact: true }).waitFor();
+    assert.equal(await visit.evaluate(() => navigator.clipboard.readText()), `${pageOf(TWO_DAYS)}?lang=${locale}`);
+    await journey.capture(visit, `circle-page-${locale}-${width}`);
+    await visit.locator("li.booth-card a[href*='selectedCircle=']").first().click();
+    await visit.locator("[data-slot-code]").first().waitFor();
+    const map = new URL(visit.url());
+    assert.deepEqual([map.searchParams.get("lang"), map.searchParams.get("event"), map.searchParams.get("selectedCircle")], [locale, "sample", TWO_DAYS]);
+    await visit.close();
+  }
+  const intro = await journey.page({ url: new URL("/portal/?lang=en", base).toString() });
+  await intro.getByRole("combobox", { name: "Language", exact: true }).waitFor();
+  await intro.locator("a[href='#circle']").click();
+  await intro.getByRole("combobox").selectOption("ja");
+  await intro.goBack();
+  await intro.getByRole("combobox", { name: "Language", exact: true }).waitFor();
+  assert.equal(await intro.locator("html").getAttribute("lang"), "en");
+  assert.equal(await intro.evaluate(() => localStorage.getItem("ui-locale")), "ja", "history does not overwrite the explicit preference");
+  await journey.capture(intro, "portal-intro-language-history");
+  await intro.close();
   // 1. What the circle wrote, without opening the map or signing in.
   const page = await journey.page({ url: pageOf(TWO_DAYS), routes: routes(overridesRoute("sample", authored), sheetRoutes) });
   const content = page.getByRole("region", { name: "社團介紹" });

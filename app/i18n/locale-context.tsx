@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { DEFAULT_LOCALE, type Locale } from "./locale";
-import { initialLocale, storeLocale, switchLocaleUrl } from "./locale-browser";
+import { DEFAULT_LOCALE, isLocale, type Locale } from "./locale";
+import { initialLocale, LOCALE_CHANGE_EVENT, storeLocale, switchLocaleUrl } from "./locale-browser";
 import { translate, type MessageCatalog, type MessageParams } from "./messages";
 
 type LocaleState = { locale: Locale; setLocale: (locale: Locale) => void };
@@ -28,14 +28,17 @@ export function LocaleProvider({ children, initial }: { children: ReactNode; ini
   useEffect(() => {
     // Back and forward can cross a `lang` the page itself wrote.
     const onPopState = () => setState(initialLocale(window.location.href));
+    const onChange = (event: Event) => { const next = (event as CustomEvent<unknown>).detail; if (isLocale(next)) setState(next); };
     window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
+    window.addEventListener(LOCALE_CHANGE_EVENT, onChange);
+    return () => { window.removeEventListener("popstate", onPopState); window.removeEventListener(LOCALE_CHANGE_EVENT, onChange); };
   }, []);
 
   const setLocale = useCallback((next: Locale) => {
     storeLocale(next);
     window.history.replaceState(window.history.state, "", switchLocaleUrl(window.location.href, next));
     setState(next);
+    window.dispatchEvent(new CustomEvent(LOCALE_CHANGE_EVENT, { detail: next }));
   }, []);
 
   const value = useMemo(() => ({ locale, setLocale }), [locale, setLocale]);

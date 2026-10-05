@@ -23,3 +23,15 @@
 @media (max-width:760px) { .site-header { min-height:64px; padding:8px 16px; } }
 /* The tagline goes before anything else does; "登入" never goes. */
 @media (max-width:420px) { .site-header .site-header-name small { display:none; } }
+/* The static pages' language control: the same face over a native select as the
+   React one (app/i18n/language-switcher), drawn by app/public-page-locale.ts. */
+.site-header .site-header-language { position:relative; flex:none; display:inline-flex; align-items:center; min-height:44px; padding:0 30px 0 12px; border:1px solid #d3d9d4; border-radius:7px; background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2359626c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 9px center/14px; color:#202a35; font-size:calc(14px * var(--ui-font-scale,1)); font-weight:700; white-space:nowrap; cursor:pointer; }
+.site-header .site-header-language:hover { border-color:#8a948e; }
+.site-header .site-header-language:focus-within { outline:3px solid #8fac9c; outline-offset:2px; }
+.site-header .site-header-language select { position:absolute; inset:0; width:100%; height:100%; margin:0; border:0; opacity:0; font:inherit; font-size:16px; cursor:pointer; appearance:none; }
+.site-header .site-header-language-short { display:none; }
+@media (max-width:560px) {
+  .site-header .site-header-language { padding:0 26px 0 10px; }
+  .site-header .site-header-language-full { display:none; }
+  .site-header .site-header-language-short { display:inline; }
+}

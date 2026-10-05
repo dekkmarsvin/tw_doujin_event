@@ -128,7 +128,7 @@ test("aliases name the event on its pages, the same in text and schema", () => {
   const eventPage = pages.get("/events/sample/");
   const line = nodes(parse(eventPage)).find((node) => node.tagName === "p" && text(node).startsWith("別稱："));
   assert.equal(text(line), "別稱：CH20 百合ONLY、百合 <Only>");
-  assert.match(eventPage, /別稱：CH20 百合ONLY、百合 &lt;Only&gt;/);
+  assert.match(eventPage, /別稱：<\/span>CH20 百合ONLY、百合 &lt;Only&gt;/);
   assert.deepEqual(ldJson(eventPage).alternateName, aliased.aliases);
   assert.equal(ldJson(eventPage).name, event.name);
   const circlePage = pages.get("/events/sample/circles/c-900001/");
@@ -186,6 +186,15 @@ test("a circle with every placement cancelled is titled by its earliest one with
   assert.match(page.description, /2026年9月1日 S01（已取消參展）；2026年9月2日 S01（已取消參展）。/);
   assert.equal(attr(nodes(parse(html)).find((node) => attr(node, "rel") === "canonical"), "href"), "https://map.kotoban.top/events/sample/circles/c-900001/");
   assert.deepEqual(readerHead(event, payload, "c-900001"), page);
+  const sameNames = { ...payload, circles: payload.circles.map(circle => ({ ...circle, name: "同名社團" })) };
+  const directory = nodes(parse(discoveryPages(event, sameNames).get("/events/sample/")));
+  const suffix = directory.find(node => attr(node, "data-i18n-booths"));
+  const labels = JSON.parse(attr(suffix, "data-i18n-booths"));
+  assert.match(labels["zh-Hant"], /已取消參展/);
+  for (const locale of ["en", "ja"]) {
+    assert.doesNotMatch(labels[locale], /已取消參展/);
+    assert.match(labels[locale], /S01/);
+  }
 });
 
 test("the earliest placement is the earliest date, even when a corrected day now comes after the next one", () => {
@@ -242,8 +251,8 @@ test("a multi-day event lists each circle under every day it exhibits, once per 
     { day: "9月1日（二）", links: [["/events/sample/circles/c-900001/", "北風畫室"], ["/events/sample/circles/c-900002/", "南星工房"]] },
     { day: "9月2日（三）", links: [["/events/sample/circles/c-900001/", "北風畫室"]] },
   ]);
-  assert.match(html, /<h3>9月1日（二）<\/h3><p>2 個社團<\/p>/);
-  assert.match(html, /<h2>參展社團<\/h2><p>2 個社團<\/p>/, "the event total still counts each circle once");
+  assert.match(html, /<h3[^>]*>9月1日（二）<\/h3><p[^>]*>2 個社團<\/p>/);
+  assert.match(html, /<h2[^>]*>參展社團<\/h2><p[^>]*>2 個社團<\/p>/, "the event total still counts each circle once");
 });
 
 test("a day a circle only moved away from lists it with the status words, never as present", () => {
@@ -272,7 +281,7 @@ test("a single-day event keeps one list", () => {
   const payload = withPlacements([placed("1-s01", "c-900001", 1, "S01"), placed("1-s02", "c-900002", 1, "S02")]);
   const html = discoveryPages(single, payload).get("/events/sample/");
   assert.doesNotMatch(html, /<h3>/);
-  assert.match(html, /<h2>參展社團<\/h2><p>2 個社團<\/p><ul class="circle-directory"><li><a href="\/events\/sample\/circles\/c-900001\/">北風畫室<\/a><\/li><li><a href="\/events\/sample\/circles\/c-900002\/">南星工房<\/a><\/li><\/ul><\/section>/);
+  assert.match(html, /<h2[^>]*>參展社團<\/h2><p[^>]*>2 個社團<\/p><ul class="circle-directory"><li><a href="\/events\/sample\/circles\/c-900001\/">北風畫室<\/a><\/li><li><a href="\/events\/sample\/circles\/c-900002\/">南星工房<\/a><\/li><\/ul><\/section>/);
 });
 
 // #365: an introduction page's own links answer directly, never with a redirect.

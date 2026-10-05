@@ -10,6 +10,7 @@ import { applyReaderMetadata, pageMetadata } from "./seo";
 import { PUBLISHED_EVENTS, type EventDefinition } from "./event-catalog";
 import { resolveUrlEvent, type ResolvedUrlEvent } from "./event-url-state";
 import { LOCALE_QUERY_PARAM } from "./i18n/locale";
+import { useLocale } from "./i18n/locale-context";
 
 const resolve = (): ResolvedUrlEvent => resolveUrlEvent(
   PUBLISHED_EVENTS,
@@ -27,11 +28,12 @@ const resolve = (): ResolvedUrlEvent => resolveUrlEvent(
 export default function EventEntry() {
   const [view, setView] = useState(() => readerView(new URL(typeof window === "undefined" ? "https://event.invalid/" : window.location.href)));
   const [resolved, setResolved] = useState<ResolvedUrlEvent>(resolve);
+  const { locale } = useLocale();
 
   useEffect(() => {
     // EventMapApp owns valid event/selection metadata after catalog resolution.
-    if (resolved.kind !== "event") applyReaderMetadata(pageMetadata(), resolved.kind === "unpublished");
-  }, [resolved]);
+    if (resolved.kind !== "event") applyReaderMetadata(pageMetadata(undefined, undefined, [], locale), resolved.kind === "unpublished");
+  }, [locale, resolved]);
 
   useEffect(() => {
     const onPopState = () => {
