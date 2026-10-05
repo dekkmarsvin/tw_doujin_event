@@ -13,11 +13,115 @@ import {
   type AdvancedCircleSearch,
   type WorkTopicSuggestion,
 } from "./circle-search";
+import { allCircleCategoriesLabel } from "./circle-categories";
+import { circleOptionLabel } from "./circle-overrides";
+import { formatCount } from "./i18n/format";
+import { useLocale, useMessages } from "./i18n/locale-context";
+import { defineMessages } from "./i18n/messages";
 import { useModalFocus } from "./use-modal-focus";
 import { UiIcon } from "./ui-icons";
 import styles from "./advanced-circle-search.module.css";
 
 type TopicList = "workTopics" | "excludedWorkTopics";
+
+const MESSAGES = defineMessages({
+  "zh-Hant": {
+    dialog: "詳細搜尋條件",
+    category: "社團分類",
+    creatorType: "創作內容",
+    all: "全部",
+    topic: "作品名稱／題材",
+    topicPlaceholder: "輸入作品或題材，例如：賽馬娘",
+    suggestions: "作品題材建議",
+    existingTopic: "現有作品題材",
+    suggestionCount: "{count} 社團",
+    noSuggestion: "沒有相符建議，仍可直接加入目前文字。",
+    include: "加入",
+    exclude: "排除",
+    included: "已加入的作品題材",
+    removeIncluded: "移除作品題材：{topic}",
+    excluded: "已排除的作品題材",
+    removeExcluded: "取消排除：{topic}",
+    topicHint: "多筆題材可用「符合任一」或「全部符合」組合；「排除」的題材一律不出現在結果中。",
+    combine: "多筆題材如何組合",
+    any: "符合任一",
+    allMatch: "全部符合",
+    workType: "作品取向",
+    anyWorkType: "不限",
+    ageRating: "年齡分級",
+    cancel: "取消",
+    apply: "套用搜尋",
+    section: "社團內容詳細搜尋",
+    trigger: "詳細搜尋",
+    applied: "已套用 {count} 項",
+    summary: "創作者、作品與分級",
+  },
+  en: {
+    dialog: "Advanced search filters",
+    category: "Circle category",
+    creatorType: "Creator type",
+    all: "All",
+    topic: "Work title / topic",
+    topicPlaceholder: "Enter a work or topic, e.g. Uma Musume",
+    suggestions: "Topic suggestions",
+    existingTopic: "Existing topic",
+    suggestionCount: ({ count }, locale) => Number(count) === 1 ? "1 circle" : `${formatCount(Number(count), locale)} circles`,
+    noSuggestion: "No matching suggestions. You can still add what you typed.",
+    include: "Add",
+    exclude: "Exclude",
+    included: "Included topics",
+    removeIncluded: "Remove topic: {topic}",
+    excluded: "Excluded topics",
+    removeExcluded: "Stop excluding: {topic}",
+    topicHint: "Combine several topics with “Match any” or “Match all”. Excluded topics never appear in results.",
+    combine: "How to combine topics",
+    any: "Match any",
+    allMatch: "Match all",
+    workType: "Audience",
+    anyWorkType: "Any",
+    ageRating: "Age rating",
+    cancel: "Cancel",
+    apply: "Apply search",
+    section: "Advanced circle search",
+    trigger: "Advanced search",
+    applied: ({ count }, locale) => `${formatCount(Number(count), locale)} applied`,
+    summary: "Creators, works and ratings",
+  },
+  ja: {
+    dialog: "詳細検索の条件",
+    category: "サークルカテゴリ",
+    creatorType: "創作ジャンル",
+    all: "すべて",
+    topic: "作品名・題材",
+    topicPlaceholder: "作品名や題材を入力（例：ウマ娘）",
+    suggestions: "作品・題材の候補",
+    existingTopic: "登録済みの題材",
+    suggestionCount: ({ count }, locale) => `${formatCount(Number(count), locale)}サークル`,
+    noSuggestion: "一致する候補はありません。入力した文字をそのまま追加できます。",
+    include: "追加",
+    exclude: "除外",
+    included: "追加した題材",
+    removeIncluded: "題材を削除：{topic}",
+    excluded: "除外した題材",
+    removeExcluded: "除外を解除：{topic}",
+    topicHint: "複数の題材は「いずれかに一致」または「すべてに一致」で組み合わせられます。「除外」した題材は結果に表示されません。",
+    combine: "複数題材の組み合わせ方",
+    any: "いずれかに一致",
+    allMatch: "すべてに一致",
+    workType: "作品の傾向",
+    anyWorkType: "指定なし",
+    ageRating: "年齢区分",
+    cancel: "キャンセル",
+    apply: "この条件で検索",
+    section: "サークルの詳細検索",
+    trigger: "詳細検索",
+    applied: ({ count }, locale) => `${formatCount(Number(count), locale)}件適用中`,
+    summary: "作者・作品・年齢区分",
+  },
+});
+
+/** The value that means every category; only its label follows the language. */
+const ALL_CATEGORIES = allCircleCategoriesLabel();
 
 export default function AdvancedCircleSearchControls({ value, workSuggestions, onApply, categories, category }: {
   value: AdvancedCircleSearch;
@@ -27,6 +131,8 @@ export default function AdvancedCircleSearchControls({ value, workSuggestions, o
   category?: string;
 }) {
   const [draftCategory, setDraftCategory] = useState(category);
+  const { locale } = useLocale();
+  const t = useMessages(MESSAGES);
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(value);
   // The half-typed topic is draft state twice over: it is not applied, and it is
@@ -127,17 +233,17 @@ export default function AdvancedCircleSearchControls({ value, workSuggestions, o
       </li>)}
     </ul>;
 
-  const panel = <div ref={panelRef} id={panelId} className={`${styles.panel} ${categories ? styles.browsePanel : ""}`} role="dialog" aria-modal="true" aria-label="詳細搜尋條件" tabIndex={-1}>
-      {categories && <label>社團分類<select value={draftCategory} onChange={(event) => setDraftCategory(event.target.value)}>{categories.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>}
+  const panel = <div ref={panelRef} id={panelId} className={`${styles.panel} ${categories ? styles.browsePanel : ""}`} role="dialog" aria-modal="true" aria-label={t("dialog")} tabIndex={-1}>
+      {categories && <label>{t("category")}<select value={draftCategory} onChange={(event) => setDraftCategory(event.target.value)}>{categories.map((value) => <option key={value} value={value}>{value === ALL_CATEGORIES ? allCircleCategoriesLabel(locale) : value}</option>)}</select></label>}
       <label>
-        創作內容
+        {t("creatorType")}
         <select value={draft.creatorType} onChange={(event) => setDraft({ ...draft, creatorType: event.target.value })}>
-          <option value="ALL">全部</option>
-          {CREATOR_TYPE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+          <option value="ALL">{t("all")}</option>
+          {CREATOR_TYPE_OPTIONS.map((option) => <option key={option} value={option}>{circleOptionLabel(option, locale)}</option>)}
         </select>
       </label>
       <div className={styles.field}>
-        <label htmlFor={`${suggestionListId}-input`}>作品名稱／題材</label>
+        <label htmlFor={`${suggestionListId}-input`}>{t("topic")}</label>
         <div className={styles.topicRow}>
           <span className={styles.workInput}>
             <input
@@ -158,9 +264,9 @@ export default function AdvancedCircleSearchControls({ value, workSuggestions, o
                 setActiveSuggestion(0);
                 setWorkInputFocused(true);
               }}
-              placeholder="輸入作品或題材，例如：賽馬娘"
+              placeholder={t("topicPlaceholder")}
             />
-            {showSuggestions && <div id={suggestionListId} className={styles.suggestions} role="listbox" aria-label="作品題材建議">
+            {showSuggestions && <div id={suggestionListId} className={styles.suggestions} role="listbox" aria-label={t("suggestions")}>
               {matchingSuggestions.length > 0 ? matchingSuggestions.map((suggestion, index) => <button
                 type="button"
                 role="option"
@@ -171,22 +277,22 @@ export default function AdvancedCircleSearchControls({ value, workSuggestions, o
                 onMouseEnter={() => setActiveSuggestion(index)}
                 onClick={() => addTopic("workTopics", suggestion.value)}
               >
-                <span><b>{suggestion.value}</b><small>{suggestion.aliases.length > 0 ? suggestion.aliases.join(" · ") : "現有作品題材"}</small></span>
-                <em>{suggestion.count} 社團</em>
-              </button>) : <p role="status">沒有相符建議，仍可直接加入目前文字。</p>}
+                <span><b>{suggestion.value}</b><small>{suggestion.aliases.length > 0 ? suggestion.aliases.join(" · ") : t("existingTopic")}</small></span>
+                <em>{t("suggestionCount", { count: suggestion.count })}</em>
+              </button>) : <p role="status">{t("noSuggestion")}</p>}
             </div>}
           </span>
-          <button type="button" disabled={!topicInput.trim()} onClick={() => addTopic("workTopics", topicInput)}>加入</button>
-          <button type="button" disabled={!topicInput.trim()} onClick={() => addTopic("excludedWorkTopics", topicInput)}>排除</button>
+          <button type="button" disabled={!topicInput.trim()} onClick={() => addTopic("workTopics", topicInput)}>{t("include")}</button>
+          <button type="button" disabled={!topicInput.trim()} onClick={() => addTopic("excludedWorkTopics", topicInput)}>{t("exclude")}</button>
         </div>
-        {chipList("workTopics", draft.workTopics, "已加入的作品題材", (topic) => `移除作品題材：${topic}`)}
-        {chipList("excludedWorkTopics", draft.excludedWorkTopics, "已排除的作品題材", (topic) => `取消排除：${topic}`)}
-        <small>多筆題材可用「符合任一」或「全部符合」組合；「排除」的題材一律不出現在結果中。</small>
+        {chipList("workTopics", draft.workTopics, t("included"), (topic) => t("removeIncluded", { topic }))}
+        {chipList("excludedWorkTopics", draft.excludedWorkTopics, t("excluded"), (topic) => t("removeExcluded", { topic }))}
+        <small>{t("topicHint")}</small>
       </div>
       {draft.workTopics.length > 1 && <fieldset>
-        <legend>多筆題材如何組合</legend>
+        <legend>{t("combine")}</legend>
         <div className={`${styles.segments} ${styles.modeSegments}`}>
-          {([["any", "符合任一"], ["all", "全部符合"]] as const).map(([option, label]) => <button
+          {([["any", t("any")], ["all", t("allMatch")]] as const).map(([option, label]) => <button
             type="button"
             key={option}
             aria-pressed={draft.workTopicMode === option}
@@ -196,26 +302,26 @@ export default function AdvancedCircleSearchControls({ value, workSuggestions, o
         </div>
       </fieldset>}
       <fieldset>
-        <legend>作品取向</legend>
+        <legend>{t("workType")}</legend>
         <div className={styles.segments}>
-          {(["ALL", ...WORK_TYPE_OPTIONS] as const).map((option) => <button type="button" key={option} aria-pressed={draft.workType === option} className={draft.workType === option ? styles.active : ""} onClick={() => setDraft({ ...draft, workType: option })}>{option === "ALL" ? "不限" : option}</button>)}
+          {(["ALL", ...WORK_TYPE_OPTIONS] as const).map((option) => <button type="button" key={option} aria-pressed={draft.workType === option} className={draft.workType === option ? styles.active : ""} onClick={() => setDraft({ ...draft, workType: option })}>{option === "ALL" ? t("anyWorkType") : circleOptionLabel(option, locale)}</button>)}
         </div>
       </fieldset>
       <fieldset>
-        <legend>年齡分級</legend>
+        <legend>{t("ageRating")}</legend>
         <div className={`${styles.segments} ${styles.ratingSegments}`}>
           {(["ALL", ...AGE_RATING_OPTIONS] as const).map((rating) => {
             const option = rating === "全年齡" ? "GENERAL" : rating;
-            return <button type="button" key={option} aria-pressed={draft.adultContent === option} className={draft.adultContent === option ? styles.active : ""} onClick={() => setDraft({ ...draft, adultContent: option })}>{ageRatingFilterLabel(option)}</button>;
+            return <button type="button" key={option} aria-pressed={draft.adultContent === option} className={draft.adultContent === option ? styles.active : ""} onClick={() => setDraft({ ...draft, adultContent: option })}>{ageRatingFilterLabel(option, locale)}</button>;
           })}
         </div>
       </fieldset>
       <footer>
-        <button type="button" onClick={closePanel}>取消</button>
-        <button type="button" className={styles.apply} onClick={applyDraft}>套用搜尋</button>
+        <button type="button" onClick={closePanel}>{t("cancel")}</button>
+        <button type="button" className={styles.apply} onClick={applyDraft}>{t("apply")}</button>
       </footer>
     </div>;
-  return <section className={styles.wrap} aria-label="社團內容詳細搜尋">
+  return <section className={styles.wrap} aria-label={t("section")}>
     <button
       type="button"
       ref={triggerRef}
@@ -234,8 +340,8 @@ export default function AdvancedCircleSearchControls({ value, workSuggestions, o
         }
       }}
     >
-      <span><UiIcon name="search" />詳細搜尋</span>
-      <small>{activeCount > 0 ? `已套用 ${activeCount} 項` : "創作者、作品與分級"}</small>
+      <span><UiIcon name="search" />{t("trigger")}</span>
+      <small>{activeCount > 0 ? t("applied", { count: activeCount }) : t("summary")}</small>
     </button>
     {open && (categories ? createPortal(<div className={styles.browseBackdrop}>{panel}</div>, document.body) : panel)}
   </section>;

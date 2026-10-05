@@ -124,17 +124,32 @@ try {
     assert.equal(await page.evaluate(() => window.history.length), history, "switching adds no history entry");
     assert.equal(await page.getByRole("status").count(), 1, "the dead-link notice is still shown");
     assert.equal(await page.getByRole("link", { name: "ログイン", exact: true }).getAttribute("href"), "/circle?lang=ja");
-    // The reader map is not translated yet, so it must not claim to be Japanese.
     await page.getByRole("link", { name: `配置マップを開く：${events[0].name}`, exact: true }).click();
     await page.locator("[data-slot-code]").first().waitFor();
     assert.match(page.url(), /[?&]lang=ja(&|$)/, "the language travels with the reader");
-    assert.equal(await page.evaluate(() => document.documentElement.lang), "zh-Hant");
+    assert.equal(await page.evaluate(() => document.documentElement.lang), "ja");
+    await page.getByRole("searchbox", { name: "サークル・スペース・作品を検索" }).or(page.getByRole("textbox", { name: "サークル・スペース・作品を検索" })).first().waitFor();
     await page.goto(new URL("/?event=unknown-event", page.url()).href);
     await page.getByRole("heading", { name: "イベントを選択" }).waitFor({ timeout: 5000 });
     await page.getByRole("banner").getByRole("combobox", { name: "表示言語" }).selectOption("zh-Hant");
     await page.getByRole("heading", { name: "選擇活動" }).waitFor();
     assert.doesNotMatch(page.url(), /lang=/, "Traditional Chinese needs no parameter");
     await journey.capture(page, "chooser-back-to-zh-1440");
+    await page.close();
+  }
+
+  {
+    // #524: typing in browse rewrites the URL; the language stays in it, even
+    // when the trimmed query (and so the browse key) does not change.
+    const page = await journey.page({ event: "sample", params: "&view=browse&lang=ja", viewport: { width: 390, height: 844 } });
+    const search = page.getByRole("textbox", { name: "作品・ジャンル・サークルを検索" });
+    await search.waitFor();
+    await search.fill(" ");
+    await search.press("End");
+    assert.match(page.url(), /[?&]lang=ja(&|$)/, "a blank query keeps the language");
+    await search.fill("S0");
+    assert.match(page.url(), /[?&]lang=ja(&|$)/, "a query keeps the language");
+    assert.match(await page.getByRole("link", { name: /^イベントを切り替え|範例創作市集/ }).first().getAttribute("href"), /lang=ja/, "the event link keeps the language for a new tab");
     await page.close();
   }
 

@@ -1,5 +1,7 @@
 import { getCircleCatalog, getCircleCatalogState, isKnownCircleId } from "./circle-records";
 import { ACTIVE_EVENT_ID } from "./event-catalog";
+import type { Locale } from "./i18n/locale";
+import { defineMessages, translate } from "./i18n/messages";
 import {
   EMPTY_PLANNING_DOCUMENT,
   PLANNING_SCHEMA_VERSION,
@@ -37,9 +39,54 @@ export type BackupGroupPreview = {
   idMap: Record<string, string>;
 };
 
-/** ok narrows the result: rejection has no writable document and at most five reasons; success is unfiltered. */
+type ItemCollection = "group" | "favorite" | "plan";
+type ItemReason = "groupIncomplete" | "groupId" | "groupName" | "groupColor" | "groupOrder" | "groupDuplicate"
+  | "itemIncomplete" | "eventId" | "circleId" | "updatedAt" | "memo" | "createdAt" | "groupRef" | "favoriteDuplicate"
+  | "day" | "status" | "routeOrder" | "purchaseMemo" | "budget" | "planDuplicate";
+/** One rejection reason, translated where it is shown so a language switch does not need the file again. */
+export type BackupIssue =
+  | { key: "tooLarge" | "unparseable" | "notObject" | "unknownKind" | "noPlanning" | "unknownVersion" | "missingLists" | "tooManyRows" }
+  | { key: "item"; collection: ItemCollection; index: number; reason: ItemReason };
+
+const BACKUP_MESSAGES = defineMessages({
+  "zh-Hant": {
+    tooLarge: "備份檔超過 10 MiB 上限。", unparseable: "JSON 格式無法解析。", notObject: "備份檔結構不完整。", unknownKind: "不支援的 JSON 備份格式。",
+    noPlanning: "規劃資料結構不完整。", unknownVersion: "不支援的內層規劃資料版本；未匯入任何資料。", missingLists: "備份檔須包含收藏、行程與群組清單。", tooManyRows: "備份檔超過 20,000 筆資料上限。",
+    item: "{collection}第 {position} 筆：{reason}。", group: "群組", favorite: "收藏", plan: "行程",
+    groupIncomplete: "須為完整的群組資料", groupId: "缺少有效的群組代碼", groupName: "名稱須為非空文字", groupColor: "顏色須為文字", groupOrder: "排序須為零或正整數", groupDuplicate: "群組代碼重複",
+    itemIncomplete: "須為完整的項目資料", eventId: "缺少有效的活動代碼", circleId: "缺少有效的社團代碼", updatedAt: "更新時間須為文字且收藏不可留空",
+    memo: "備註須為文字", createdAt: "建立時間須為非空文字", groupRef: "群組代碼無效或不存在於備份檔", favoriteDuplicate: "活動與社團重複",
+    day: "活動日須為非空文字或有限數值", status: "行程狀態無效", routeOrder: "行程排序須為零或正整數", purchaseMemo: "購買備註須為文字", budget: "預算須為零或正整數，或留空", planDuplicate: "同活動日的社團重複",
+  },
+  en: {
+    tooLarge: "The backup file is larger than 10 MiB.", unparseable: "The JSON could not be read.", notObject: "The backup file is incomplete.", unknownKind: "This JSON backup format is not supported.",
+    noPlanning: "The planning data in the file is incomplete.", unknownVersion: "This planning data version is not supported. Nothing was imported.", missingLists: "The backup file must contain favorite, plan and group lists.", tooManyRows: "The backup file has more than 20,000 records.",
+    item: "{collection} {position}: {reason}.", group: "Group", favorite: "Favorite", plan: "Plan item",
+    groupIncomplete: "group data is incomplete", groupId: "group ID is missing or invalid", groupName: "name must be non-empty text", groupColor: "color must be text", groupOrder: "order must be zero or a positive integer", groupDuplicate: "group ID is duplicated",
+    itemIncomplete: "item data is incomplete", eventId: "event ID is missing or invalid", circleId: "circle ID is missing or invalid", updatedAt: "update time must be text and cannot be empty for favorites",
+    memo: "note must be text", createdAt: "creation time must be non-empty text", groupRef: "group ID is invalid or not in the backup file", favoriteDuplicate: "event and circle are duplicated",
+    day: "event day must be non-empty text or a number", status: "plan status is invalid", routeOrder: "plan order must be zero or a positive integer", purchaseMemo: "items to buy must be text", budget: "budget must be zero, a positive integer or empty", planDuplicate: "circle is duplicated on the same event day",
+  },
+  ja: {
+    tooLarge: "バックアップファイルが上限の 10 MiB を超えています。", unparseable: "JSON を読み取れません。", notObject: "バックアップファイルの構造が不完全です。", unknownKind: "対応していない JSON バックアップ形式です。",
+    noPlanning: "保存データの構造が不完全です。", unknownVersion: "対応していない保存データのバージョンです。何も取り込んでいません。", missingLists: "バックアップファイルにはお気に入り、巡回プラン、グループの一覧が必要です。", tooManyRows: "バックアップファイルが上限の 20,000 件を超えています。",
+    item: "{collection}の {position} 件目：{reason}。", group: "グループ", favorite: "お気に入り", plan: "巡回プラン",
+    groupIncomplete: "グループのデータが不完全です", groupId: "有効なグループ ID がありません", groupName: "名前は空でないテキストにしてください", groupColor: "色はテキストにしてください", groupOrder: "並び順は 0 以上の整数にしてください", groupDuplicate: "グループ ID が重複しています",
+    itemIncomplete: "項目のデータが不完全です", eventId: "有効なイベント ID がありません", circleId: "有効なサークル ID がありません", updatedAt: "更新日時はテキストにし、お気に入りでは空にできません",
+    memo: "メモはテキストにしてください", createdAt: "作成日時は空でないテキストにしてください", groupRef: "グループ ID が無効か、バックアップファイルにありません", favoriteDuplicate: "イベントとサークルが重複しています",
+    day: "開催日は空でないテキストか数値にしてください", status: "巡回プランの状態が無効です", routeOrder: "巡回順は 0 以上の整数にしてください", purchaseMemo: "購入メモはテキストにしてください", budget: "予算は 0 以上の整数にするか、空にしてください", planDuplicate: "同じ開催日にサークルが重複しています",
+  },
+});
+
+export function backupIssueMessage(issue: BackupIssue, locale: Locale = "zh-Hant"): string {
+  if (issue.key !== "item") return translate(BACKUP_MESSAGES, locale, issue.key);
+  return translate(BACKUP_MESSAGES, locale, "item", { collection: translate(BACKUP_MESSAGES, locale, issue.collection), position: issue.index + 1, reason: translate(BACKUP_MESSAGES, locale, issue.reason) });
+}
+
+/** ok narrows the result: rejection has no writable document and at most five reasons; success is unfiltered.
+ * `errors` is the Traditional Chinese text of `issues`. */
 export type BackupPreview = { baseFingerprint: string } & (
-  | { ok: false; document: null; errors: string[] }
+  | { ok: false; document: null; errors: string[]; issues: BackupIssue[] }
   | { ok: true; document: PlanningDocument; errors: []; events: BackupEventPreview[]; groups: BackupGroupPreview }
 );
 
@@ -73,61 +120,62 @@ export function planningFingerprint(document: PlanningDocument): string {
   });
 }
 
-function readBackup(text: string): { document: PlanningDocument | null; errors: string[] } {
-  if (new TextEncoder().encode(text).byteLength > MAX_BACKUP_BYTES) return { document: null, errors: ["備份檔超過 10 MiB 上限。"] };
+function readBackup(text: string): { document: PlanningDocument | null; issues: BackupIssue[] } {
+  const reject = (key: Exclude<BackupIssue["key"], "item">) => ({ document: null, issues: [{ key }] });
+  if (new TextEncoder().encode(text).byteLength > MAX_BACKUP_BYTES) return reject("tooLarge");
   let value: unknown;
-  try { value = JSON.parse(text); } catch { return { document: null, errors: ["JSON 格式無法解析。"] }; }
-  if (!isObject(value)) return { document: null, errors: ["備份檔結構不完整。"] };
-  if (value.kind !== "circle-plan-json/1") return { document: null, errors: ["不支援的 JSON 備份格式。"] };
+  try { value = JSON.parse(text); } catch { return reject("unparseable"); }
+  if (!isObject(value)) return reject("notObject");
+  if (value.kind !== "circle-plan-json/1") return reject("unknownKind");
   const raw = value.planning;
-  if (!isObject(raw)) return { document: null, errors: ["規劃資料結構不完整。"] };
-  if (raw.schemaVersion !== PLANNING_SCHEMA_VERSION) return { document: null, errors: ["不支援的內層規劃資料版本；未匯入任何資料。"] };
-  if (!Array.isArray(raw.favoriteGroups) || !Array.isArray(raw.favorites) || !Array.isArray(raw.visitPlans)) return { document: null, errors: ["備份檔須包含收藏、行程與群組清單。"] };
-  if (raw.favoriteGroups.length + raw.favorites.length + raw.visitPlans.length > MAX_IMPORT_ROWS) return { document: null, errors: ["備份檔超過 20,000 筆資料上限。"] };
-  const errors: string[] = [];
-  const reject = (collection: string, index: number, reason: string) => {
-    if (errors.length < 5) errors.push(`${collection}第 ${index + 1} 筆：${reason}。`);
+  if (!isObject(raw)) return reject("noPlanning");
+  if (raw.schemaVersion !== PLANNING_SCHEMA_VERSION) return reject("unknownVersion");
+  if (!Array.isArray(raw.favoriteGroups) || !Array.isArray(raw.favorites) || !Array.isArray(raw.visitPlans)) return reject("missingLists");
+  if (raw.favoriteGroups.length + raw.favorites.length + raw.visitPlans.length > MAX_IMPORT_ROWS) return reject("tooManyRows");
+  const issues: BackupIssue[] = [];
+  const invalid = (collection: ItemCollection, index: number, reason: ItemReason) => {
+    if (issues.length < 5) issues.push({ key: "item", collection, index, reason });
   };
   const groupIds = new Set<string>();
   raw.favoriteGroups.forEach((item: unknown, index: number) => {
-    if (!isObject(item)) { reject("群組", index, "須為完整的群組資料"); return; }
-    if (!isId(item.id)) reject("群組", index, "缺少有效的群組代碼");
-    if (typeof item.name !== "string" || !item.name.trim()) reject("群組", index, "名稱須為非空文字");
-    if (typeof item.color !== "string") reject("群組", index, "顏色須為文字");
-    if (!isOrder(item.sortOrder)) reject("群組", index, "排序須為零或正整數");
+    if (!isObject(item)) { invalid("group", index, "groupIncomplete"); return; }
+    if (!isId(item.id)) invalid("group", index, "groupId");
+    if (typeof item.name !== "string" || !item.name.trim()) invalid("group", index, "groupName");
+    if (typeof item.color !== "string") invalid("group", index, "groupColor");
+    if (!isOrder(item.sortOrder)) invalid("group", index, "groupOrder");
     if (isId(item.id)) {
-      if (groupIds.has(item.id)) reject("群組", index, "群組代碼重複");
+      if (groupIds.has(item.id)) invalid("group", index, "groupDuplicate");
       groupIds.add(item.id);
     }
   });
   const favoriteIds = new Set<string>();
   const planIds = new Set<string>();
-  for (const [collection, items] of [["收藏", raw.favorites], ["行程", raw.visitPlans]] as const) {
+  for (const [collection, items] of [["favorite", raw.favorites], ["plan", raw.visitPlans]] as const) {
     items.forEach((item: unknown, index: number) => {
-      if (!isObject(item)) { reject(collection, index, "須為完整的項目資料"); return; }
-      if (!isId(item.eventId)) reject(collection, index, "缺少有效的活動代碼");
-      if (!isId(item.circleId)) reject(collection, index, "缺少有效的社團代碼");
-      if (typeof item.updatedAt !== "string" || (collection === "收藏" && !item.updatedAt)) reject(collection, index, "更新時間須為文字且收藏不可留空");
-      if (collection === "收藏") {
-        if (typeof item.memo !== "string") reject(collection, index, "備註須為文字");
-        if (typeof item.createdAt !== "string" || !item.createdAt) reject(collection, index, "建立時間須為非空文字");
-        if (item.groupId !== null && (!isId(item.groupId) || !groupIds.has(item.groupId))) reject(collection, index, "群組代碼無效或不存在於備份檔");
+      if (!isObject(item)) { invalid(collection, index, "itemIncomplete"); return; }
+      if (!isId(item.eventId)) invalid(collection, index, "eventId");
+      if (!isId(item.circleId)) invalid(collection, index, "circleId");
+      if (typeof item.updatedAt !== "string" || (collection === "favorite" && !item.updatedAt)) invalid(collection, index, "updatedAt");
+      if (collection === "favorite") {
+        if (typeof item.memo !== "string") invalid(collection, index, "memo");
+        if (typeof item.createdAt !== "string" || !item.createdAt) invalid(collection, index, "createdAt");
+        if (item.groupId !== null && (!isId(item.groupId) || !groupIds.has(item.groupId))) invalid(collection, index, "groupRef");
         const key = JSON.stringify([item.eventId, item.circleId]);
-        if (favoriteIds.has(key)) reject(collection, index, "活動與社團重複");
+        if (favoriteIds.has(key)) invalid(collection, index, "favoriteDuplicate");
         favoriteIds.add(key);
       } else {
-        if (!((typeof item.day === "string" && !!item.day.trim() && !item.day.includes("\u0000")) || (typeof item.day === "number" && Number.isFinite(item.day)))) reject(collection, index, "活動日須為非空文字或有限數值");
-        if (item.status !== "planned" && item.status !== "next" && item.status !== "visited") reject(collection, index, "行程狀態無效");
-        if (!isOrder(item.routeOrder)) reject(collection, index, "行程排序須為零或正整數");
-        if (typeof item.purchaseMemo !== "string") reject(collection, index, "購買備註須為文字");
-        if (item.budget !== null && !isOrder(item.budget)) reject(collection, index, "預算須為零或正整數，或留空");
+        if (!((typeof item.day === "string" && !!item.day.trim() && !item.day.includes("\u0000")) || (typeof item.day === "number" && Number.isFinite(item.day)))) invalid(collection, index, "day");
+        if (item.status !== "planned" && item.status !== "next" && item.status !== "visited") invalid(collection, index, "status");
+        if (!isOrder(item.routeOrder)) invalid(collection, index, "routeOrder");
+        if (typeof item.purchaseMemo !== "string") invalid(collection, index, "purchaseMemo");
+        if (item.budget !== null && !isOrder(item.budget)) invalid(collection, index, "budget");
         const key = JSON.stringify([item.eventId, String(item.day), item.circleId]);
-        if (planIds.has(key)) reject(collection, index, "同活動日的社團重複");
+        if (planIds.has(key)) invalid(collection, index, "planDuplicate");
         planIds.add(key);
       }
     });
   }
-  return errors.length ? { document: null, errors } : { document: parsePlanningDocument(raw), errors: [] };
+  return issues.length ? { document: null, issues } : { document: parsePlanningDocument(raw), issues: [] };
 }
 
 function remappedGroupId(group: FavoriteGroup) {
@@ -172,7 +220,7 @@ function mapBackupGroups(current: PlanningDocument, incoming: PlanningDocument) 
 export function previewPlanningBackup(text: string, current: PlanningDocument, catalogStatus: (eventId: string) => "ready" | "loading" | "error"): BackupPreview {
   const baseFingerprint = planningFingerprint(current);
   const parsed = readBackup(text);
-  if (!parsed.document) return { ok: false, document: null, errors: parsed.errors, baseFingerprint };
+  if (!parsed.document) return { ok: false, document: null, errors: parsed.issues.map((issue) => backupIssueMessage(issue)), issues: parsed.issues, baseFingerprint };
   const document = parsed.document;
   const groupMapping = mapBackupGroups(current, document);
   const localFavorites = new Map(current.favorites.map((item) => [favoriteKey(item), item]));

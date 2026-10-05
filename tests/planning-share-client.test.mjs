@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test, { after, afterEach, mock } from "node:test";
 import { createServer, isRunnableDevEnvironment } from "vite";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
-const { createShortLink, readShortLink } = await environment.runner.import("/app/planning-share-client.ts");
+const { createShortLink, readShortLink, shareFailureMessage } = await environment.runner.import("/app/planning-share-client.ts");
+const fixtures = JSON.parse(await readFile(new URL("./fixtures/i18n/api-errors.json", import.meta.url), "utf8"));
 after(() => vite.close());
 afterEach(() => mock.restoreAll());
 
@@ -33,7 +35,9 @@ test("create sends the snapshot as JSON and returns the backend's 201 fields", a
 for (const [status, error] of [[400, "分享清單格式無效。"], [429, "建立分享清單太頻繁，請稍後再試。"]]) {
   test(`create preserves the ${status} status and server message`, async () => {
     mock.method(globalThis, "fetch", async () => response({ error }, status));
-    assert.deepEqual(await createShortLink(snapshot), { ok: false, status, error });
+    const result = await createShortLink(snapshot);
+    assert.deepEqual({ ok: result.ok, status: result.status, error: result.error }, { ok: false, status, error });
+    assert.equal(shareFailureMessage(result.failure, "zh-Hant"), error);
   });
 }
 
@@ -112,9 +116,24 @@ test("read rejects malformed responses and snapshots with private fields, invali
 test("read preserves other server errors and returns a Chinese error on network failure", async () => {
   const error = "服務暫時無法使用。";
   const fetch = mock.method(globalThis, "fetch", async () => response({ error }, 503));
-  assert.deepEqual(await readShortLink(shareId), { kind: "error", error });
+  const failed = await readShortLink(shareId);
+  assert.deepEqual({ kind: failed.kind, error: failed.error }, { kind: "error", error });
   fetch.mock.mockImplementation(async () => { throw new TypeError("Network failed"); });
   const result = await readShortLink(shareId);
   assert.equal(result.kind, "error");
   chineseError(result);
+});
+
+test("coded share failures read in the reader's language while zh-Hant keeps the Chinese sentence", async () => {
+  const fixture = fixtures.find(item => item.name === "share-snapshot-invalid");
+  mock.method(globalThis, "fetch", async () => response(fixture.body, fixture.status));
+  const coded = await createShortLink(snapshot);
+  assert.equal(coded.failure.code, "share_snapshot_invalid");
+  assert.equal(shareFailureMessage(coded.failure, "zh-Hant"), fixture.body.error);
+  for (const locale of ["en", "ja"]) assert.doesNotMatch(shareFailureMessage(coded.failure, locale), /分享/u);
+
+  mock.method(globalThis, "fetch", async () => { throw new TypeError("Network failed"); });
+  const offline = await readShortLink(shareId);
+  assert.equal(shareFailureMessage(offline.failure, "zh-Hant"), offline.error);
+  assert.doesNotMatch(shareFailureMessage(offline.failure, "en"), /[㐀-鿿]/u);
 });

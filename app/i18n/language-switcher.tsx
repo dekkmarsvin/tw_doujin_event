@@ -16,11 +16,13 @@ const LABEL: Record<Locale, string> = { "zh-Hant": "介面語言", en: "Language
  * A native select under a visible face: the platform supplies the keyboard,
  * screen reader and phone picker, and the face can shorten to a code where a
  * header has no room for "繁體中文". Every option carries its own `lang` so a
- * screen reader pronounces "日本語" as Japanese wherever the page is.
+ * screen reader pronounces "日本語" as Japanese wherever the page is. `narrow`
+ * shortens the face up to 1050px too, for a header with no room at narrow
+ * desktop widths.
  */
-export function LanguageSwitcher({ className }: { className?: string }) {
+export function LanguageSwitcher({ className, narrow = false }: { className?: string; narrow?: boolean }) {
   const { locale, setLocale } = useLocale();
-  return <label className={[styles.switcher, className].filter(Boolean).join(" ")}>
+  return <label className={[styles.switcher, narrow && styles.narrow, className].filter(Boolean).join(" ")}>
     <UiIcon name="globe" className={styles.icon} />
     <span className={styles.face} aria-hidden="true">
       <span className={styles.full} lang={locale}>{ENDONYM[locale].name}</span>

@@ -3,7 +3,7 @@ import { defineMessages, translate } from "./i18n/messages";
 import type { CircleViewRecord } from "./circle-records";
 import { WORK_TOPIC_ALIAS_GROUPS, type WorkTopicAliasGroup } from "./work-topic-aliases";
 // 搜尋選項與社團可填的值是同一份清單，分成兩份就會漂移。
-import { AGE_RATING_OPTIONS, CREATOR_TYPE_OPTIONS, WORK_TYPE_OPTIONS } from "./circle-overrides";
+import { AGE_RATING_OPTIONS, CREATOR_TYPE_OPTIONS, WORK_TYPE_OPTIONS, circleOptionLabel } from "./circle-overrides";
 
 export { AGE_RATING_OPTIONS, CREATOR_TYPE_OPTIONS, WORK_TYPE_OPTIONS };
 
@@ -180,29 +180,39 @@ export type CircleMatchReason = { id: string; label: string };
 /** Which text the keyword actually hit. A circle that surfaced because its
  * blurb happens to mention a work reads very differently from one whose listed
  * work is that work, and the card alone cannot tell the two apart. */
-const KEYWORD_FIELDS: ReadonlyArray<{ label: string; values: (record: CircleViewRecord) => (string | undefined)[] }> = [
-  { label: "攤位代碼", values: (record) => [record.code] },
-  { label: "社團名", values: (record) => [record.name, record.circle.pen] },
-  { label: "作品", values: (record) => [record.circle.work, ...record.circle.referencedWorks] },
-  { label: "類別", values: (record) => [record.genre, ...record.circle.creatorTypes, ...record.circle.workTypes, ...record.circle.ageRatings] },
-  { label: "標籤", values: (record) => [...record.tags, ...record.circle.specialTags] },
-  { label: "介紹", values: (record) => [record.note, record.circle.saleInfo] },
-  { label: "連結", values: (record) => record.circle.externalLinks.flatMap((link) => [link.provider, link.url]) },
+const KEYWORD_FIELDS: ReadonlyArray<{ label: "code" | "name" | "work" | "category" | "tag" | "intro" | "link"; values: (record: CircleViewRecord) => (string | undefined)[] }> = [
+  { label: "code", values: (record) => [record.code] },
+  { label: "name", values: (record) => [record.name, record.circle.pen] },
+  { label: "work", values: (record) => [record.circle.work, ...record.circle.referencedWorks] },
+  { label: "category", values: (record) => [record.genre, ...record.circle.creatorTypes, ...record.circle.workTypes, ...record.circle.ageRatings] },
+  { label: "tag", values: (record) => [...record.tags, ...record.circle.specialTags] },
+  { label: "intro", values: (record) => [record.note, record.circle.saleInfo] },
+  { label: "link", values: (record) => record.circle.externalLinks.flatMap((link) => [link.provider, link.url]) },
 ];
 
-export function describeCircleMatch(record: CircleViewRecord, input: { query: string; search: AdvancedCircleSearch }) {
+const MATCH_MESSAGES = defineMessages({
+  "zh-Hant": { code: "攤位代碼", name: "社團名", work: "作品", category: "類別", tag: "標籤", intro: "介紹", link: "連結",
+    separator: "、", keyword: "關鍵字命中{fields}", topic: "作品：{topic}", creator: "創作者：{creator}" },
+  en: { code: "booth No.", name: "circle name", work: "work", category: "category", tag: "tag", intro: "intro", link: "link",
+    separator: ", ", keyword: "Keyword in {fields}", topic: "Work: {topic}", creator: "Creator: {creator}" },
+  ja: { code: "スペース番号", name: "サークル名", work: "作品", category: "カテゴリ", tag: "タグ", intro: "紹介", link: "リンク",
+    separator: "・", keyword: "キーワード一致：{fields}", topic: "作品：{topic}", creator: "創作者：{creator}" },
+});
+
+export function describeCircleMatch(record: CircleViewRecord, input: { query: string; search: AdvancedCircleSearch }, locale: Locale = "zh-Hant") {
+  const t = (key: keyof (typeof MATCH_MESSAGES)["zh-Hant"], params?: Record<string, string>) => translate(MATCH_MESSAGES, locale, key, params);
   const reasons: CircleMatchReason[] = [];
   const needle = normalize(input.query);
   if (needle) {
     const fields = KEYWORD_FIELDS
       .filter(({ values }) => values(record).some((value) => value && normalize(value).includes(needle)))
-      .map(({ label }) => label);
-    if (fields.length > 0) reasons.push({ id: "keyword", label: `關鍵字命中${fields.join("、")}` });
+      .map(({ label }) => t(label));
+    if (fields.length > 0) reasons.push({ id: "keyword", label: t("keyword", { fields: fields.join(t("separator")) }) });
   }
   const workHaystack = workTopicHaystack(record);
   normalizeWorkTopics(input.search.workTopics)
     .filter((topic) => workTopicHits(workHaystack, topic))
-    .forEach((topic) => reasons.push({ id: `topic:${topic}`, label: `作品：${topic}` }));
-  if (input.search.creatorType !== "ALL") reasons.push({ id: "creator", label: `創作者：${input.search.creatorType}` });
+    .forEach((topic) => reasons.push({ id: `topic:${topic}`, label: t("topic", { topic }) }));
+  if (input.search.creatorType !== "ALL") reasons.push({ id: "creator", label: t("creator", { creator: circleOptionLabel(input.search.creatorType, locale) }) });
   return reasons;
 }

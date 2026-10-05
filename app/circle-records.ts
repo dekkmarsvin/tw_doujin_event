@@ -162,6 +162,43 @@ function buildOfficialSource(event: EventDefinition, fetchedAt: string, day?: Bo
   };
 }
 
+const SOURCE_MESSAGES = defineMessages({
+  "zh-Hant": { official: "活動主辦單位", circle: "由社團填寫", boothList: "{event} {day} 日攤位清單", layout: "{event} 活動與攤位配置",
+    thumbnail: "{name} 社團縮圖", catalogPage: "{name} 品書第 {index} 張" },
+  en: { official: "Event organizer", circle: "Written by the circle", boothList: "{event} DAY {day} booth list", layout: "{event} event and booth layout",
+    thumbnail: "{name} featured image", catalogPage: "{name} item list page {index}" },
+  ja: { official: "主催者", circle: "サークル記入", boothList: "{event} DAY {day} スペース一覧", layout: "{event} イベント・配置情報",
+    thumbnail: "{name} の代表画像", catalogPage: "{name} お品書き {index} 枚目" },
+});
+
+/**
+ * Records are built once, in Chinese, for every surface; these give the
+ * provenance words and image descriptions back in the interface language at
+ * render time. Anything not written by the builders below is shown as stored.
+ */
+export function sourceProviderLabel(source: Pick<SourceLink, "provider" | "contentType">, locale: Locale = "zh-Hant") {
+  if (locale === "zh-Hant") return source.provider;
+  if (source.contentType === "official" && source.provider === "活動主辦單位") return translate(SOURCE_MESSAGES, locale, "official");
+  if (source.contentType === "circle" && source.provider === "由社團填寫") return translate(SOURCE_MESSAGES, locale, "circle");
+  return source.provider;
+}
+
+export function sourceTitleLabel(source: Pick<SourceLink, "label" | "contentType">, locale: Locale = "zh-Hant") {
+  if (locale === "zh-Hant" || source.contentType !== "official") return source.label;
+  const list = /^(.*) (\S+) 日攤位清單$/u.exec(source.label);
+  if (list) return translate(SOURCE_MESSAGES, locale, "boothList", { event: list[1], day: list[2] });
+  const layout = /^(.*) 活動與攤位配置$/u.exec(source.label);
+  return layout ? translate(SOURCE_MESSAGES, locale, "layout", { event: layout[1] }) : source.label;
+}
+
+export function mediaAltLabel(media: Pick<CircleMedia, "alt" | "kind">, locale: Locale = "zh-Hant") {
+  if (locale === "zh-Hant") return media.alt;
+  const thumbnail = media.kind === "thumbnail" ? /^(.*) 社團縮圖$/u.exec(media.alt) : null;
+  if (thumbnail) return translate(SOURCE_MESSAGES, locale, "thumbnail", { name: thumbnail[1] });
+  const page = media.kind === "catalog" ? /^(.*) 品書第 (\d+) 張$/u.exec(media.alt) : null;
+  return page ? translate(SOURCE_MESSAGES, locale, "catalogPage", { name: page[1], index: page[2] }) : media.alt;
+}
+
 /** The label says who typed it and nothing else; DESIGN.md forbids trust wording here. */
 function circleSelfSource(updatedAt: string): SourceLink {
   return {

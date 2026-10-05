@@ -232,6 +232,10 @@ test("a booth nobody is attending is projected as retired, and says which kind",
   assert.match(projected.slots.A03.ariaLabel, /已移動攤位/);
   assert.match(projected.slots.A04.label, /已取消參展/);
   assert.equal(projected.slots.A09.retired, undefined);
+  const english = projectRetired({ locale: "en" });
+  assert.equal(english.slots.A04.retired, "cancelled", "the language changes the words, not the state");
+  assert.match(english.slots.A04.ariaLabel, /Cancelled/);
+  assert.match(english.slots.A03.ariaLabel, /Booth moved, To visit/);
 });
 
 test("a booth someone else took over stays a destination", () => {

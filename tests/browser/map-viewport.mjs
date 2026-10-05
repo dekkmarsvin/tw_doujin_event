@@ -58,7 +58,7 @@ const state = (page) => page.evaluate(() => {
   };
 });
 async function open(width = 1440, height = 900, scale = "standard", setup) {
-  const page = await browser.newPage({ viewport: { width, height }, reducedMotion: "reduce" });
+  const page = await browser.newPage({ viewport: { width, height }, reducedMotion: "reduce", locale: "zh-TW" });
   observations.set(page, observeRequests(page));
   page.setDefaultTimeout(10000);
   page.on("pageerror", (error) => report.errors.push(error.message));
@@ -327,7 +327,7 @@ try {
   for (const manualGesture of [false, true]) {
     let release;
     const gate = new Promise((resolve) => { release = resolve; });
-    const delayed = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+    const delayed = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce", locale: "zh-TW" });
     delayed.setDefaultTimeout(10000);
     delayed.on("pageerror", (error) => report.errors.push(error.message));
     await delayed.route("**/circles.json", async (route) => { await gate; await route.continue(); });
@@ -357,7 +357,7 @@ try {
   // Selecting a result while map geometry is pending is also a deferred request.
   let releaseMap;
   const mapGate = new Promise((resolve) => { releaseMap = resolve; });
-  const loadingMap = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+  const loadingMap = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce", locale: "zh-TW" });
   loadingMap.setDefaultTimeout(10000);
   await loadingMap.route("**/map.json", async (route) => { await mapGate; await route.continue(); });
   await loadingMap.goto(`${base}/?event=ff47`);
@@ -467,7 +467,7 @@ try {
   await zero.close();
   report.cases.push({ name: "zero-geometry-last-selection", passed: true });
 
-  const failure = await browser.newPage({ viewport: { width: 1024, height: 768 }, reducedMotion: "reduce" });
+  const failure = await browser.newPage({ viewport: { width: 1024, height: 768 }, reducedMotion: "reduce", locale: "zh-TW" });
   failure.setDefaultTimeout(10000);
   let fail = true;
   await failure.route("**/map.json", (route) => fail ? route.fulfill({ status: 503, body: "unavailable" }) : route.continue());
