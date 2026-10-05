@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { File } from "node:buffer";
+import { readFile } from "node:fs/promises";
 import test, { after, before, beforeEach } from "node:test";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer, isRunnableDevEnvironment } from "vite";
@@ -11,6 +12,8 @@ const { createIdentityRepository } = await environment.runner.import("/db/identi
 const { createCirclePortalHandlers, emailAuditSubjectId, SESSION_COOKIE } = await environment.runner.import("/app/circle-portal-handlers.ts");
 const { OVERRIDE_RETENTION_PURGE_AFTER_MS } = await environment.runner.import("/app/circle-overrides.ts");
 const { purgeExpiredRecords } = await environment.runner.import("/db/retention-purge.ts");
+const { loginLinkLetter } = await environment.runner.import("/app/mail-letter.ts");
+const errorFixtures = JSON.parse(await readFile(new URL("./fixtures/i18n/api-errors.json", import.meta.url), "utf8"));
 
 const miniflare = new Miniflare(convertV4MiniflareOptions({
   modules: true,
@@ -47,6 +50,7 @@ const projectTestCircle = async (circleId, fields) => (CIRCLES[circleId]
   : null);
 
 const TABLES = [
+  "account_notification_preferences",
   "organizer_amendments",
   "organizer_event_reviews",
   "organizer_event_invitations",
@@ -210,6 +214,66 @@ test("the login mail carries the same link in its HTML and text parts", async ()
   assert.ok(mail.html.includes(`href="${link.replaceAll("&", "&#38;")}"`), "the button opens the link from the text part");
 });
 
+test("explicit invalid login locale is rejected before mailbox-dependent checks and leaves no records", async () => {
+  const untouched = createCirclePortalHandlers({ ...handlerOptions,
+    repository: new Proxy(repository, { get(target, key) {
+      if (key === "countLoginTokensSince" || key === "createLoginToken") return () => { throw new Error("mailbox database touched"); };
+      return target[key];
+    } }), mailRecipientAllowed: () => { throw new Error("mailbox allowlist touched"); },
+    sendMail: () => { throw new Error("mailer touched"); } });
+  for (const email of ["not-an-email", "known@example.com", "new@example.com"]) {
+    for (const locale of [null, "en-US", "", 42]) {
+      const response = await untouched.requestLink(post("/api/auth/request-link", { email, locale, turnstileToken: "solved" }));
+      assert.equal(response.status, 400); assert.equal((await response.json()).code, "invalid_locale");
+    }
+  }
+  assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM login_tokens").first()).n, 0);
+  assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM account_notification_preferences").first()).n, 0);
+});
+
+test("login letters and destination use validated locale without writing account preferences", async () => {
+  const id = await repository.upsertAccount("language@example.com", clock);
+  await database.prepare("INSERT INTO account_notification_preferences (account_id, cadence, version, enabled_since, write_token, locale) VALUES (?1, 'off', 2, 0, 'unchanged', 'ja')").bind(id).run();
+  const preference = await repository.getAccountNotificationPreferences(id);
+  for (const locale of [undefined, "en", "ja"]) {
+    const response = await handlers.requestLink(post("/api/auth/request-link", { email: "language@example.com", turnstileToken: "solved", ...(locale ? { locale } : {}), destination: { lang: "evil", redirect: "https://evil.test" } }));
+    assert.equal(response.status, 202);
+    const mail = sent.at(-1), href = mail.text.split("\n").find(line => line.startsWith("https://"));
+    const url = new URL(href);
+    assert.equal(url.origin, ORIGIN); assert.equal(url.pathname, "/circle");
+    assert.equal(url.searchParams.get("lang"), locale ?? "zh-Hant");
+    assert.match(mail.html, new RegExp(`<html lang="${locale ?? "zh-Hant"}">`));
+    if (locale) {
+      assert.match(mail.subject, locale === "en" ? /sign-in link/ : /ログインリンク/);
+      for (const part of [mail.text, mail.html]) assert.match(part, locale === "en" ? /Taiwan time/ : /台湾時間/);
+    } else {
+      const baseline = loginLinkLetter({ href, origin: ORIGIN, requestedAt: clock, expiresAt: clock + 15 * 60000 });
+      assert.equal(mail.subject, baseline.subject); assert.equal(mail.text, baseline.text); assert.equal(mail.html, baseline.html);
+    }
+    assert.deepEqual(await repository.getAccountNotificationPreferences(id), preference);
+  }
+});
+
+test("representative circle error envelopes keep fixture fields and registered codes", async () => {
+  const cookie = await signIn("codes@example.com");
+  const other = await signIn("other-codes@example.com");
+  const cases = [
+    [await handlers.listClaims(get("/api/claims")), "unauthenticated"],
+    [await handlers.getMyOverride(get("/api/circle/ff47-site/overrides", cookie), "ff47-site"), "claim-not-verified"],
+  ];
+  const created = await handlers.createClaim(post("/api/claims", { circleId: "ff47-domain" }, await signIn("owner@owner.example")));
+  assert.equal(created.status, 201);
+  cases.push([await handlers.createClaim(post("/api/claims", { circleId: "ff47-domain" }, other)), "circle-already-claimed"]);
+  for (let i = 0; i < 5; i++) await handlers.requestLink(post("/api/auth/request-link", { email: "limit-code@example.com", turnstileToken: "solved" }));
+  cases.push([await handlers.requestLink(post("/api/auth/request-link", { email: "limit-code@example.com", turnstileToken: "solved" })), "rate-limited"]);
+  for (const [response, name] of cases) {
+    const fixture = errorFixtures.find(item => item.name === name), body = await response.json();
+    assert.equal(response.status, fixture.status);
+    assert.equal(body.code, fixture.body.code);
+    for (const [key, value] of Object.entries(fixture.body)) assert.equal(typeof body[key], typeof value);
+  }
+});
+
 test("a login request without a solved challenge reaches neither the mailer nor the database", async () => {
   const missing = await handlers.requestLink(post("/api/auth/request-link", { email: "unverified@example.com" }));
   assert.equal(missing.status, 403);
@@ -289,10 +353,11 @@ test("an organizer login link returns to the organizer entry and accepts its eve
     audience: "organizer",
   }));
   assert.equal(requested.status, 202);
-  const link = sent.at(-1).text.match(/\/organizer\?login=([^\s]+)/);
-  assert.ok(link, "the emailed link must return to the organizer entry");
+  const href = new URL(sent.at(-1).text.split("\n").find(line => line.startsWith("https://")));
+  assert.equal(href.pathname, "/organizer", "the emailed link must return to the organizer entry");
+  assert.equal(href.searchParams.get("lang"), "zh-Hant");
 
-  const verified = await handlers.verify(post("/api/auth/verify", { token: decodeURIComponent(link[1]) }));
+  const verified = await handlers.verify(post("/api/auth/verify", { token: href.searchParams.get("login") }));
   assert.equal(verified.status, 200);
   const session = await verified.json();
   assert.equal(session.hasOrganizerAccess, true);

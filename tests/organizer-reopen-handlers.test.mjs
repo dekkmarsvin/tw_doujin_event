@@ -93,9 +93,9 @@ async function signIn(email, audience = "organizer") {
   ));
   assert.equal(link.status, 202, `request-link must accept ${email}`);
   const path = audience === "organizer" ? "organizer" : "circle";
-  const token = sent.at(-1).text.match(new RegExp(`/${path}\\?login=([^\\s]+)`))[1];
+  const token = new URL(sent.at(-1).text.split("\n").find(line => line.startsWith(`${ORIGIN}/${path}?`))).searchParams.get("login");
   const verified = await handlers.verify(request(
-    "/api/auth/verify", "POST", { token: decodeURIComponent(token) },
+    "/api/auth/verify", "POST", { token },
   ));
   assert.equal(verified.status, 200, `verify must accept ${email}`);
   return cookieFrom(verified);

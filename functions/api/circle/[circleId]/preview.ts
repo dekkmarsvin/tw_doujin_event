@@ -6,4 +6,4 @@ import { firstParam, guard, portalHandlers } from "../../../_portal";
  * immediately.
  */
 export const onRequestPost: PagesFunction<PortalEnv, "circleId"> = (context) =>
-  guard(() => portalHandlers(context).previewOverride(context.request, firstParam(context.params.circleId)));
+  guard(() => portalHandlers(context).previewOverride(context.request, firstParam(context.params.circleId)), true);

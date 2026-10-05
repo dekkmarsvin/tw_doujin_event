@@ -53,6 +53,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 - **驗證器不可達時視為未通過。** siteverify 逾時、非 2xx 或回應無法解析一律拒絕。登入連結可以一分鐘後再要一次；一個任何人都能驅動的寄信端點不行。
 - **sitekey 由 `GET /api/auth/config` 供給，不編進 bundle。** 因此 preview 與 production 可以持有不同金鑰而共用同一份 build。
 - 請求可帶 `audience`（`circle` 或 `organizer`，預設 `circle`）。它只決定信件內容與連結指向哪個入口，不改變驗證、額度或回應；`audience` 記在 `login_tokens` 上。
+- 請求可帶 `locale`（`zh-Hant`／`en`／`ja`），省略為繁中；明確無效值在真人驗證後、信箱檢查前回 `400 invalid_locale`。登入信與 HTML `lang` 使用該語言，連結三語都明確帶 `lang`，由伺服器設定，不採用 destination 的語言選擇值；匿名請求不寫帳號偏好。英日信件標明台灣時間，token／audience 與邀請接受規則不變。
 - **登入信同時寄出 HTML 與純文字兩份內容**，由 `app/mail-letter.ts` 產生。純文字版必須能單獨使用：登入連結自成一行，preview 收信槽只存這一份，E2E 從這裡取連結。有效時間以台灣時間寫出。
 - Pages 登入／邀請及排程摘要共用 `sendPortalMail` 收件路由：啟用 D1 preview 時，測試收信槽優先於人工白名單，其餘地址拒絕且不回退 production。只有此模式的人工白名單路徑可記錄最多 300 字的 Mailgun 拒絕本文；production 不記地址或本文，即使殘留白名單設定也不能開啟。
 - Pages 每次呼叫寄信 adapter 後輸出一筆 `portal.mail` 即時診斷，包含呼叫端指定的 `login_link`／`organizer_invitation` 用途，以及 `accepted`／`preview_sink`／`failed`／`unknown` 結果；只附真實 provider ID（缺失或收信槽為 null）或安全錯誤碼，不附地址、主旨、信件內容、登入連結、權杖或原始錯誤。這不是匿名 API 回傳值，也不是送達證明；不新增 webhook 或 D1 寄送歷史。Pages 串流不保存，追查方法見部署 runbook。
@@ -387,5 +388,11 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 本人補充資料、品書、保存／公開設定實質變更納入摘要；相同內容儲存不入列，摘要只保存變更項目、不保存完整內容。每日台北 09:00 為新帳號預設，亦可每小時或關閉。關閉取消摘要及重試，重開只收新事件；改頻率保留項目、改排下個時段。
 
 `GET/PUT /api/account/notification-preferences` 僅依本人 session 操作，PUT 有同源 JSON 防護及 version CAS（首次讀取 version 0）；其他帳號及收件地址不可指定。`/circle`、`/organizer` 共用「通知設定」Modal，桌機浮動／手機全螢幕，關閉保留原編輯內容。唯一的頻率選單選定即儲存，不設儲存鍵或關閉確認；儲存失敗時選單回到已儲存的值並說明原因。載入失敗不假裝有預設已儲存；管理者待審設定維持獨立。
+
+GET 回 `{ cadence, version, locale }`，未選語言時 `locale: null`，讀取不建立偏好列。PUT 的 cadence／locale 可省略其一；省略 locale 保留原值，省略 cadence 僅更新語言、version 與 write_token，不改 enabled_since、待寄時間、重試、lease 或取消狀態。首次只改語言插入 daily／enabled_since 0，與無偏好列相同。明確帶 cadence 仍依原規則重排，即使頻率未變；版本衝突回 `409 version_conflict`，不覆寫。
+
+五類社團通知（claim.approved／claim.rejected／claim.revoked／circle.updated／circle.takendown）在寄送時讀取帳號語言，null 沿用繁中；目的地與通知設定連結都明確帶 lang。摘要的五個固定中文明細詞在呈現時翻譯，保留「、」合併與未知詞，既有佇列不改寫；名稱、活動代碼與人工內容保持原文。主辦／管理通知與邀請維持繁中。
+
+社團可達與共用帳號 API 的錯誤在原 error、HTTP status 與結構化欄位上增補 code／必要 params，依 `app/i18n/api-error.ts` 的 registry；主辦／管理專用錯誤不變。挑戰驗證找不到驗證碼仍回 HTTP 200 與 `verified: false`。
 
 信件只有本站的 event／circle 或通知設定目的地，不帶登入憑證、不授權；重新登入信攜帶白名單選擇參數，GET 不執行業務異動。不存在的活動不回退另一場活動。

@@ -146,7 +146,7 @@ test("expired API/page returns 410 and event link; cache never outlives expiry",
     clock = time;
     const api = await handlers.get(created.shareId);
     assert.equal(api.status, 410);
-    assert.deepEqual(await api.json(), { error: "這份清單已過期。", eventId: event.id });
+    assert.deepEqual(await api.json(), { error: "這份清單已過期。", code: "share_expired", eventId: event.id });
     const page = await handlers.page(new Request(created.url), created.shareId);
     assert.equal(page.status, 410);
     const text = await page.text();
@@ -155,6 +155,41 @@ test("expired API/page returns 410 and event link; cache never outlives expiry",
     assert.doesNotMatch(text, /http-equiv="refresh"/);
   }
   assert.equal((await handlers.create(request())).status, 400, "do not create already expired shares");
+});
+
+test("share page language follows only URL lang through valid, expired, missing and event-missing states", async () => {
+  const created = await create();
+  const originalRows = await rows();
+  for (const [locale, og, open, expired, missing, eventMissing] of [
+    ["en", "en_US", "Open plan", "This plan has expired.", "This share link does not exist or has expired.", "Event not found."],
+    ["ja", "ja_JP", "巡回プランを開く", "この巡回プランは有効期限が切れています。", "この共有リンクは存在しないか、有効期限が切れています。", "イベントが見つかりません。"],
+  ]) {
+    const req = new Request(`${created.url}?lang=${locale.toUpperCase()}`, { headers: { "accept-language": "zh-TW" } });
+    const page = await handlers.page(req, created.shareId);
+    assert.equal(page.status, 200); assert.equal(page.headers.get("cache-control"), "private, no-store");
+    assert.equal(page.headers.get("x-robots-tag"), "noindex");
+    const body = await page.text();
+    assert.ok(body.includes(`<html lang="${locale}">`));
+    assert.ok(body.includes(`<meta property="og:locale" content="${og}">`));
+    assert.ok(body.includes(`0;url=/?event=sample&amp;share=${created.shareId}&amp;lang=${locale}`));
+    assert.ok(body.includes(open)); assert.ok(body.includes(event.name));
+    clock = created.expiresAt;
+    const old = await handlers.page(req, created.shareId); assert.equal(old.status, 410);
+    const oldBody = await old.text(); assert.ok(oldBody.includes(expired)); assert.ok(oldBody.includes(`event=sample&amp;lang=${locale}`));
+    assert.ok(oldBody.includes(`content="${og}"`)); assert.ok(!oldBody.includes('http-equiv="refresh"'));
+    clock = NOW;
+    const absent = await handlers.page(new Request(`${ORIGIN}/s/missing?lang=${locale}`), "missing"); assert.equal(absent.status, 404);
+    assert.ok((await absent.text()).includes(missing));
+    const missingEvent = createPlanningShareHandlers({ repository, publishedEvent: async () => null, hashPepper: () => "unused", now: () => clock });
+    const response = await missingEvent.page(req, created.shareId); assert.equal(response.status, 404);
+    const eventBody = await response.text(); assert.ok(eventBody.includes(eventMissing)); assert.ok(eventBody.includes(`<html lang="${locale}">`));
+    assert.deepEqual((await (await handlers.get(created.shareId)).json()).snapshot, snapshot);
+  }
+  for (const query of ["", "?lang=invalid"]) {
+    const page = await handlers.page(new Request(created.url + query, { headers: { "accept-language": "ja" } }), created.shareId);
+    const body = await page.text(); assert.ok(body.includes('<html lang="zh-Hant">')); assert.ok(!body.includes("&amp;lang="));
+  }
+  assert.deepEqual(await rows(), originalRows, "language never changes the stored snapshot");
 });
 
 test("invalid IDs never touch D1; unknown valid IDs give 404 for API/page", async () => {

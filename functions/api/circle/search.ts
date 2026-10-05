@@ -6,4 +6,4 @@ import { guard, portalHandlers } from "../../_portal";
  * find themselves to claim.
  */
 export const onRequestGet: PagesFunction<PortalEnv> = (context) =>
-  guard(() => portalHandlers(context).searchCatalog(context.request));
+  guard(() => portalHandlers(context).searchCatalog(context.request), true);
