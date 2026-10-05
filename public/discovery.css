@@ -1,4 +1,6 @@
 .discovery { margin:0; background:#f8f7f2; color:#202a35; font-family:Geist,system-ui,"Noto Sans TC",sans-serif; line-height:1.65; }
+/* Japanese text takes Japanese glyph shapes and kinsoku breaks; system fonts only. */
+.discovery:lang(ja) { font-family:Geist,"Hiragino Sans","Hiragino Kaku Gothic ProN","BIZ UDPGothic","Yu Gothic UI",Meiryo,"Noto Sans JP",system-ui,sans-serif; line-break:strict; }
 /* The header is the shared public one (site-header.css), full width; only
    the content keeps to the 960px column. */
 .discovery main,.discovery footer { max-width:960px; margin:auto; padding:24px; }

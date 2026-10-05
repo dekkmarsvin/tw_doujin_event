@@ -1,10 +1,18 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { buildPrivacyPage, lastUpdatedFrom, renderInline, renderMarkdown } from "../scripts/build-privacy-page.mjs";
+import { parse } from "parse5";
+import { PAGES, buildPrivacyPage, lastUpdatedFrom, renderInline, renderMarkdown } from "../scripts/build-privacy-page.mjs";
 
-const markdown = await readFile(new URL("../docs/policy/privacy-notice.md", import.meta.url), "utf8");
-const page = buildPrivacyPage(markdown);
+/** The original and each translation, built exactly as the published pages are. */
+const notices = await Promise.all(Object.entries(PAGES).map(async ([locale, { source }]) => {
+  const markdown = await readFile(new URL(`../docs/policy/${source}`, import.meta.url), "utf8");
+  return { locale, markdown, page: buildPrivacyPage(markdown, locale) };
+}));
+const { markdown, page } = notices.find(({ locale }) => locale === "zh-Hant");
+
+const nodes = (node) => [node, ...(node.childNodes ?? []).flatMap(nodes)];
+const attr = (node, name) => node.attrs?.find((entry) => entry.name === name)?.value;
 
 function textOf(html) {
   return html
@@ -25,39 +33,74 @@ function plainText(line) {
     .trim();
 }
 
-test("publishes every line of the notice, so nothing can be dropped in translation", () => {
-  const rendered = textOf(page);
+test("publishes every line of each notice, so nothing can be dropped in translation", () => {
   const skipped = /^(\s*)$|^---+$|^\|[\s|:-]+\|$/;
 
-  for (const line of markdown.split("\n")) {
-    if (skipped.test(line.trim())) continue;
+  for (const { locale, markdown: source, page: built } of notices) {
+    const rendered = textOf(built);
+    for (const line of source.replace(/\r\n/g, "\n").split("\n")) {
+      if (skipped.test(line.trim())) continue;
 
-    // Table rows are checked cell by cell: a row rendered into the wrong number
-    // of cells still contains the same characters end to end.
-    const fragments = line.startsWith("|")
-      ? line.replace(/^\||\|$/g, "").split("|").map((cell) => plainText(cell))
-      : [plainText(line)];
+      // Table rows are checked cell by cell: a row rendered into the wrong number
+      // of cells still contains the same characters end to end.
+      const fragments = line.startsWith("|")
+        ? line.replace(/^\||\|$/g, "").split("|").map((cell) => plainText(cell))
+        : [plainText(line)];
 
-    for (const fragment of fragments) {
-      if (!fragment) continue;
-      assert.ok(
-        rendered.includes(fragment),
-        `the published page is missing text from the notice: ${JSON.stringify(fragment)}`,
-      );
+      for (const fragment of fragments) {
+        if (!fragment) continue;
+        assert.ok(
+          rendered.includes(fragment),
+          `the ${locale} page is missing text from its notice: ${JSON.stringify(fragment)}`,
+        );
+      }
     }
   }
 });
 
-test("states the date the notice itself states", () => {
+test("states the date the notice itself states, and every translation states the original's", () => {
   assert.match(page, new RegExp(`最後更新日期：${lastUpdatedFrom(markdown)}`));
   assert.doesNotMatch(page, /最後更新：/);
+  // A translation left behind by an edit to the original would publish an older
+  // notice under a language link; the shared date is what exposes it.
+  for (const { locale, markdown: source } of notices) {
+    assert.equal(lastUpdatedFrom(source, locale), lastUpdatedFrom(markdown), `${locale} translates the current notice`);
+  }
+});
+
+test("each translation keeps the original's sections and items", () => {
+  // Structure, not wording: a dropped section or list item changes these counts.
+  const shape = (html) => {
+    const main = nodes(parse(html)).find((node) => node.tagName === "main");
+    const count = (tag) => nodes(main).filter((node) => node.tagName === tag).length;
+    return { h1: count("h1"), h2: count("h2"), h3: count("h3"), li: count("li"), a: count("a"), code: count("code") };
+  };
+  for (const { locale, page: built } of notices) assert.deepEqual(shape(built), shape(page), locale);
+});
+
+test("each language is its own page, and every page links to all three without script", () => {
+  for (const { locale, page: built } of notices) {
+    const elements = nodes(parse(built));
+    assert.equal(attr(elements.find((node) => node.tagName === "html"), "lang"), locale);
+    const links = elements
+      .filter((node) => node.tagName === "a" && attr(node, "hreflang"))
+      .map((node) => ({ href: attr(node, "href"), lang: attr(node, "lang"), current: attr(node, "aria-current") }));
+    assert.deepEqual(
+      links.map(({ href, lang }) => [href, lang]),
+      [["/privacy/", "zh-Hant"], ["/privacy/en/", "en"], ["/privacy/ja/", "ja"]],
+      `${locale} links to every language under its own name`,
+    );
+    assert.deepEqual(links.filter(({ current }) => current === "page").map(({ lang }) => lang), [locale]);
+  }
 });
 
 test("carries both contact mailboxes, since the notice is where they reach a person", () => {
   // ADR-0019 splits the two windows and requires the addresses to be somewhere
   // a user can see, not only in the repo.
-  assert.ok(page.includes("maintain@kotoban.top"));
-  assert.ok(page.includes("circle@kotoban.top"));
+  for (const { page: built } of notices) {
+    assert.ok(built.includes("maintain@kotoban.top"));
+    assert.ok(built.includes("circle@kotoban.top"));
+  }
 });
 
 test("uses minimum-necessary disclosure without defensive disclaimers or build provenance", () => {
@@ -83,14 +126,18 @@ test("claims no research-use exception, because no terms grant one", () => {
 test("is a static document: no script, no bundle, nothing to execute", () => {
   // The public reading path is static (ADR-0008) and the overlay owns the free
   // plan's Function budget (#48), so this page must cost neither.
-  assert.doesNotMatch(page, /<script/i);
-  assert.doesNotMatch(page, /\/assets\//);
+  for (const { page: built } of notices) {
+    assert.doesNotMatch(built, /<script/i);
+    assert.doesNotMatch(built, /\/assets\//);
+  }
 });
 
 test("rewrites repo-relative links to somewhere that resolves on the web", () => {
   const rendered = renderInline("見 [ADR-0015](../adr/0015-access-lifts-when-no-third-party-bytes-remain.md)。");
   assert.match(rendered, /href="https:\/\/github\.com\/dekkmarsvin\/tw_doujin_event\/blob\/main\/docs\/adr\/0015-/);
-  assert.doesNotMatch(page, /href="\.\.\//, "a relative repo path is a broken link once published");
+  for (const { page: built } of notices) {
+    assert.doesNotMatch(built, /href="\.\.\//, "a relative repo path is a broken link once published");
+  }
 });
 
 test("renders the constructs the notice uses, and marks up rather than swallows them", () => {

@@ -1,6 +1,8 @@
 /**
  * Emit `dist/privacy/index.html` from `docs/policy/privacy-notice.md`, served at
- * `/privacy`.
+ * `/privacy`, with the English and Japanese translations beside it at
+ * `/privacy/en/` and `/privacy/ja/` (#522). The Traditional Chinese notice is the
+ * original; each translation is its own Markdown file, rendered the same way.
  *
  * The notice has to be reachable by someone who will never read this repo — a
  * notice that exists only as a Markdown file does not exist for the person
@@ -8,9 +10,8 @@
  * from that file rather than transcribed into a page, because a second copy is
  * a copy that drifts, and the one that drifts is always the published one.
  *
- * Plain HTML with no script and no bundle: the public reading path is static
- * and must never be served by a Pages Function (ADR-0008), and the overlay
- * already has the free plan's daily Function budget to itself (#48).
+ * Plain HTML with no script or bundle. The existing HTML middleware adds a
+ * per-request CSP nonce (ADR-0074); reading the notice needs no database call.
  *
  * The renderer covers exactly the Markdown the notice uses. It is deliberately
  * not a general one — `tests/privacy-page.test.mjs` fails the build if the
@@ -22,15 +23,53 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const SOURCE = resolve(root, "docs", "policy", "privacy-notice.md");
+const POLICY_DIR = resolve(root, "docs", "policy");
+
 /**
- * A directory index, not `privacy.html`. `/privacy` then resolves the way every
- * static host resolves a directory, instead of relying on Pages stripping the
- * extension — the link is printed under a sign-in form, and a policy link that
- * 404s is worse than no link.
+ * One fixed page per interface language, in the order the language links list
+ * them; each language names itself (copy.md). Only the page chrome is written
+ * here — everything inside `<main>` comes from the locale's own source file.
+ *
+ * Each `path` is a directory index, not `privacy.html`. `/privacy` then resolves
+ * the way every static host resolves a directory, instead of relying on Pages
+ * stripping the extension — the link is printed under a sign-in form, and a
+ * policy link that 404s is worse than no link.
  */
-const OUTPUT_DIR = resolve(root, "dist", "privacy");
-const OUTPUT = resolve(OUTPUT_DIR, "index.html");
+export const PAGES = {
+  "zh-Hant": {
+    source: "privacy-notice.md",
+    path: "/privacy/",
+    name: "繁體中文",
+    updated: /最後更新日期：(\d{4}-\d{2}-\d{2})/,
+    title: "隱私權與資料使用告知｜場刊 Map",
+    description: "場刊 Map 如何蒐集、使用與保存資料，以及聯絡窗口。",
+    home: "/",
+    back: "← 回到場刊 Map",
+    languages: "語言",
+  },
+  en: {
+    source: "privacy-notice.en.md",
+    path: "/privacy/en/",
+    name: "English",
+    updated: /Last updated: (\d{4}-\d{2}-\d{2})/,
+    title: "Privacy and data use notice | 場刊 Map",
+    description: "How 場刊 Map collects, uses and keeps data, and who to contact.",
+    home: "/?lang=en",
+    back: "← Back to 場刊 Map",
+    languages: "Language",
+  },
+  ja: {
+    source: "privacy-notice.ja.md",
+    path: "/privacy/ja/",
+    name: "日本語",
+    updated: /最終更新日：(\d{4}-\d{2}-\d{2})/,
+    title: "プライバシーとデータの利用について｜場刊 Map",
+    description: "場刊 Map におけるデータの収集・利用・保存と、お問い合わせ先。",
+    home: "/?lang=ja",
+    back: "← 場刊 Map に戻る",
+    languages: "言語",
+  },
+};
 
 /** Repo-relative links have no meaning on the site; they resolve to GitHub. */
 const REPO_BLOB = "https://github.com/dekkmarsvin/tw_doujin_event/blob/main/docs/policy/";
@@ -146,26 +185,40 @@ export function renderMarkdown(markdown) {
 }
 
 /** The date the notice states, which is the one the page has to show. */
-export function lastUpdatedFrom(markdown) {
-  const match = /最後更新日期：(\d{4}-\d{2}-\d{2})/.exec(markdown);
-  if (!match) throw new Error("The notice has no 最後更新日期; the published page must state one.");
+export function lastUpdatedFrom(markdown, locale = "zh-Hant") {
+  const match = PAGES[locale].updated.exec(markdown);
+  if (!match) throw new Error(`The ${locale} notice states no last-updated date; the published page must state one.`);
   return match[1];
 }
 
-export function buildPrivacyPage(markdown) {
-  lastUpdatedFrom(markdown);
+/** Plain links rather than a picker, so switching language needs no script. */
+function languageLinks(locale) {
+  const items = Object.entries(PAGES).map(([code, page]) => {
+    const current = code === locale ? ' aria-current="page"' : "";
+    return `        <li><a href="${page.path}" lang="${code}" hreflang="${code}"${current}>${page.name}</a></li>`;
+  });
+  return `      <ul aria-label="${PAGES[locale].languages}">\n${items.join("\n")}\n      </ul>`;
+}
+
+/** Kanji in Japanese glyphs and strict line breaking (copy.md), on the Japanese page only. */
+const JAPANESE_TYPE = `
+      body { font-family: Geist, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "BIZ UDPGothic", "Yu Gothic UI", Meiryo, "Noto Sans JP", system-ui, sans-serif; line-break: strict; }`;
+
+export function buildPrivacyPage(markdown, locale = "zh-Hant") {
+  const page = PAGES[locale];
+  lastUpdatedFrom(markdown, locale);
   const body = renderMarkdown(markdown).split("\n").map((line) => `      ${line}`).join("\n");
   return `<!doctype html>
-<html lang="zh-Hant">
+<html lang="${locale}">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#f6f1e7" />
-    <meta name="description" content="場刊 Map 如何蒐集、使用與保存資料，以及聯絡窗口。" />
+    <meta name="description" content="${escapeHtml(page.description)}" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/fonts/geist.css" />
-    <title>隱私權與資料使用告知｜場刊 Map</title>
+    <title>${escapeHtml(page.title)}</title>
     <style>
       :root { --ink: #202a35; --muted: #707a82; --line: #dfe3df; --paper: #f8f7f2; --accent: #a4563e; }
       * { box-sizing: border-box; }
@@ -179,8 +232,11 @@ export function buildPrivacyPage(markdown) {
         line-height: 1.85;
       }
       main { max-width: 46rem; margin: 0 auto; padding: 28px 26px 34px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
-      nav { max-width: 46rem; margin: 0 auto 14px; font-size: 13px; }
+      nav { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; max-width: 46rem; margin: 0 auto 14px; font-size: 13px; }
       nav a, main a { color: var(--accent); }
+      nav ul { display: flex; gap: 14px; margin: 0; padding: 0; list-style: none; }
+      nav li { margin: 0; }
+      nav [aria-current] { color: var(--ink); font-weight: 600; text-decoration: none; }
       h1 { margin: 0 0 4px; font-size: 24px; line-height: 1.4; }
       h2 { margin: 34px 0 10px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 18px; }
       h3 { margin: 22px 0 8px; font-size: 15px; }
@@ -195,11 +251,14 @@ export function buildPrivacyPage(markdown) {
       table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
       th, td { padding: 8px 10px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
       th { background: var(--paper); }
-      @media (max-width: 480px) { body { padding: 20px 12px 56px; } main { padding: 20px 16px 26px; } }
+      @media (max-width: 480px) { body { padding: 20px 12px 56px; } main { padding: 20px 16px 26px; } }${locale === "ja" ? JAPANESE_TYPE : ""}
     </style>
   </head>
   <body>
-    <nav><a href="/">← 回到場刊 Map</a></nav>
+    <nav>
+      <a href="${page.home}">${page.back}</a>
+${languageLinks(locale)}
+    </nav>
     <main>
 ${body}
     </main>
@@ -210,8 +269,11 @@ ${body}
 
 const modulePath = fileURLToPath(import.meta.url);
 if (process.argv[1] && resolve(process.argv[1]) === resolve(modulePath)) {
-  const markdown = await readFile(SOURCE, "utf8");
-  await mkdir(OUTPUT_DIR, { recursive: true });
-  await writeFile(OUTPUT, buildPrivacyPage(markdown), "utf8");
-  console.log(`Generated dist/privacy/index.html from docs/policy/privacy-notice.md (updated ${lastUpdatedFrom(markdown)}).`);
+  for (const [locale, page] of Object.entries(PAGES)) {
+    const markdown = await readFile(resolve(POLICY_DIR, page.source), "utf8");
+    const directory = resolve(root, "dist", ...page.path.split("/").filter(Boolean));
+    await mkdir(directory, { recursive: true });
+    await writeFile(resolve(directory, "index.html"), buildPrivacyPage(markdown, locale), "utf8");
+    console.log(`Generated dist${page.path}index.html from docs/policy/${page.source} (updated ${lastUpdatedFrom(markdown, locale)}).`);
+  }
 }

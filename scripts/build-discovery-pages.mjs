@@ -28,9 +28,13 @@ try {
   // template is for. Every circle page carries them, and the template itself is
   // removed so it is never served as a page of its own.
   const templatePath = resolve(dist, "circle-page.html");
-  const template = await readFile(templatePath, "utf8");
-  const circlePageAssets = [...template.matchAll(/<(?:script|link)\b[^>]*\b(?:src|href)="\/assets\/[^"]+"[^>]*>(?:<\/script>)?/g)].map(([tag]) => tag).join("");
+  const assetTags = (html) => [...html.matchAll(/<(?:script|link)\b[^>]*\b(?:src|href)="\/assets\/[^"]+"[^>]*>(?:<\/script>)?/g)].map(([tag]) => tag).join("");
+  const circlePageAssets = assetTags(await readFile(templatePath, "utf8"));
   if (!/<script\b[^>]*type="module"/.test(circlePageAssets)) throw new Error("circle-page.html references no module script.");
+  // Event introductions and /portal/ load only the interface-language script (#525).
+  const publicTemplatePath = resolve(dist, "public-page.html");
+  const pageAssets = assetTags(await readFile(publicTemplatePath, "utf8"));
+  if (!/<script\b[^>]*type="module"/.test(pageAssets)) throw new Error("public-page.html references no module script.");
   const paths = ["/"];
   const events = [];
   for (const { eventId } of entries) {
@@ -41,7 +45,7 @@ try {
     const catalog = await read("circles.json");
     if (event.id !== eventId || !isCircleCatalogPayload(catalog)) throw new Error(`Invalid discovery input: ${eventId}`);
     events.push(event);
-    for (const [path, html] of discoveryPages(event, catalog, { circlePageAssets })) {
+    for (const [path, html] of discoveryPages(event, catalog, { circlePageAssets, pageAssets })) {
       const file = resolve(dist, `.${path}`, "index.html");
       if (!file.startsWith(dist + "/") && !file.startsWith(dist + "\\")) throw new Error("Discovery output escapes dist.");
       await mkdir(dirname(file), { recursive: true });
@@ -54,7 +58,7 @@ try {
   const demoSizes = await Promise.all(PORTAL_DEMO_FILES.map(async (file) => webpSize(await readFile(resolve(dist, "portal", "media", file)), file)));
   if (new Set(demoSizes.map(({ width, height }) => `${width}x${height}`)).size !== 1) throw new Error("Portal demos must share one size.");
   await mkdir(resolve(dist, "portal"), { recursive: true });
-  await writeFile(resolve(dist, "portal", "index.html"), portalIntroPage(demoSizes[0]));
+  await writeFile(resolve(dist, "portal", "index.html"), portalIntroPage(demoSizes[0], { pageAssets }));
   paths.push(PORTAL_INTRO_PATH);
   const indexPath = resolve(dist, "index.html");
   const index = await readFile(indexPath, "utf8");
@@ -65,5 +69,6 @@ try {
   await writeFile(indexPath, html);
   await writeFile(resolve(dist, "sitemap.xml"), sitemapHtml(paths));
   await rm(templatePath);
+  await rm(publicTemplatePath);
   console.log(`Generated ${paths.length - 1} static discovery pages and sitemap.`);
 } finally { await vite.close(); }

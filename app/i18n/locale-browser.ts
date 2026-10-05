@@ -2,6 +2,10 @@ import { isLocale, localeFromUrl, localizedHref, resolveLocale, type Locale } fr
 
 export const LOCALE_STORAGE_KEY = "ui-locale";
 
+/** Fired on window after an explicit switch, so a page drawn by more than one
+ * renderer (a static page and its React island) follows the one choice. */
+export const LOCALE_CHANGE_EVENT = "ui-locale-change";
+
 export function readStoredLocale(storage?: Pick<Storage, "getItem"> | null): Locale | null {
   try {
     const value = (storage === undefined ? globalThis.localStorage : storage)?.getItem(LOCALE_STORAGE_KEY);

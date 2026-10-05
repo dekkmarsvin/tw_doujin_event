@@ -54,6 +54,9 @@ export default defineConfig({
         // and the planning actions. A template, not a page — the discovery
         // build copies its asset tags into the static pages and removes it.
         circlePage: resolve(import.meta.dirname, "circle-page.html"),
+        // Event introductions and /portal/: only the interface language (#525).
+        // Also a template; the discovery build copies its tags and removes it.
+        publicPage: resolve(import.meta.dirname, "public-page.html"),
       },
     },
   },

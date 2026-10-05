@@ -34,7 +34,8 @@ test("built sitemap covers exactly the staged introductions and grouped circles"
     assert.doesNotMatch(html, /overrides\.json/);
     const modules = elements.filter((node) => node.tagName === "script" && attr(node, "type") === "module").map((node) => attr(node, "src"));
     if (url.includes("/circles/")) assert.deepEqual(modules.map((src) => /^\/assets\/circlePage-[\w-]+\.js$/.test(src)), [true], `${url} loads only the circle page script`);
-    else assert.deepEqual(modules, [], `${url} loads no script`);
+    // An event introduction loads only the script that follows the reader's language (#525).
+    else assert.deepEqual(modules.map((src) => /^\/assets\/publicPage-[\w-]+\.js$/.test(src)), [true], `${url} loads only the language script`);
   }
   // The template Vite built that script from is not a page of its own.
   await assert.rejects(read("circle-page.html"), { code: "ENOENT" });

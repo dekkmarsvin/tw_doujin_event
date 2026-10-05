@@ -3,6 +3,7 @@
 公開閱讀端如何取得場刊與地圖資料、載入時的介面行為，以及離線可用範圍。
 
 **實作**：[`app/catalog-publication.ts`](../../app/catalog-publication.ts)、[`app/static-circle-catalog-client.ts`](../../app/static-circle-catalog-client.ts)、[`app/static-event-map-client.ts`](../../app/static-event-map-client.ts)、[`app/static-circle-overrides-client.ts`](../../app/static-circle-overrides-client.ts)、[`app/use-circle-catalog.ts`](../../app/use-circle-catalog.ts)、[`app/service-worker-source.js`](../../app/service-worker-source.js)、[`app/offline-readiness.ts`](../../app/offline-readiness.ts)、[`app/offline-prep-dialog.tsx`](../../app/offline-prep-dialog.tsx)、[`scripts/build-service-worker.mjs`](../../scripts/build-service-worker.mjs)、[`app/static-discovery.ts`](../../app/static-discovery.ts)、[`scripts/build-discovery-pages.mjs`](../../scripts/build-discovery-pages.mjs)、[`app/circle-page-data.ts`](../../app/circle-page-data.ts)、[`app/circle-page/`](../../app/circle-page)
+**實作**：`app/public-page-locale.ts`、`app/public-page-messages.ts`、`public-page-main.ts`、`public-page.html`、`scripts/build-privacy-page.mjs`
 **測試**：`tests/catalog-publication.test.mjs`、`tests/service-worker.test.mjs`、`tests/public-artifact.test.mjs`、`tests/seo.test.mjs`、`tests/discovery-artifact.test.mjs`、`tests/circle-page.test.mjs`、`tests/offline-readiness.test.mjs`、`tests/multi-space-event-map.test.mjs`、`tests/browser/circle-page.mjs`、`tests/browser/reader-offline-prep.mjs`
 **設定**：[`public/_headers`](../../public/_headers)、[`public/_routes.json`](../../public/_routes.json)、[`functions/_html-security.ts`](../../functions/_html-security.ts)
 
@@ -20,7 +21,11 @@ FF47 的舊資料沒有 Organizer 候選及身分分組檔。除原始固定 pin
 
 首頁原始 HTML 另帶一份 `WebSite` JSON-LD（`name`「場刊 Map」、`url` 正式網域首頁），供搜尋結果顯示網站名稱；Reader 啟動後不另外插入。介紹頁的站內連結都是最終網址（例如頁尾連到 `/privacy/`），不經轉址。
 
-`/portal/` 是給社團與主辦的功能介紹頁，同一次 build 由 `portalIntroPage()` 產生並列入 sitemap，沒有頁面腳本，HTML 同樣經 Function 加 CSP nonce；`_routes.json` 只包含頁面本身，`/portal/media/` 的示範動圖是靜態資產，不呼叫 Function。示範動圖為循環播放的 WebP，各附一張靜態畫格，`prefers-reduced-motion: reduce` 時改用靜態畫格；所有示範檔案須存在且尺寸一致，否則 build 失敗。這些檔案由維護者以 `scripts/capture-portal-demos.mjs` 對本機隔離環境與虛構 sample 資料重新錄製，不含真實社團或帳號資料。所有介紹頁頁尾連到 `/portal/` 與 `/privacy/`。
+`/portal/` 是給社團與主辦的功能介紹頁，同一次 build 由 `portalIntroPage()` 產生並列入 sitemap，以 `publicPage` 頁面腳本提供語言切換，HTML 同樣經 Function 加 CSP nonce；`_routes.json` 只包含頁面本身，`/portal/media/` 的示範動圖是靜態資產，不呼叫 Function。示範動圖為循環播放的 WebP，各附一張靜態畫格，`prefers-reduced-motion: reduce` 時改用靜態畫格；所有示範檔案須存在且尺寸一致，否則 build 失敗。這些檔案由維護者以 `scripts/capture-portal-demos.mjs` 對本機隔離環境與虛構 sample 資料重新錄製，不含真實社團或帳號資料。所有介紹頁頁尾連到 `/portal/` 與對應語言的隱私告知。
+
+活動、社團與入口介紹頁的無 JS 內容維持繁中與官方原文；頁面腳本依共用語言優先序翻譯系統標籤、日期及瀏覽器標題，並同步靜態外層與 React 社團內容。明確切換只更新 URL 與瀏覽器偏好；收藏、行程及原始內容不變，分享與站內導覽延續語言。社團名稱、官方分類、作品／題材及自填標籤保持原文；站方固定選項只翻譯呈現 label。canonical／sitemap 維持單一網址，不新增三份活動／社團 SEO 頁面。
+
+隱私告知由同一 build 產生 `/privacy/`、`/privacy/en/`、`/privacy/ja/`，各自無 JS 可讀並互相連結；譯文對應同一份政策，不新增承諾。404 以三語靜態內容提供返回入口。
 
 介紹頁不加入地圖離線 precache，導覽仍 network-only；它們不得寫入 Reader 的離線 shell。社團介紹頁腳本自己的資產同樣不進 precache（`scripts/build-service-worker.mjs` 與 `tests/public-artifact.test.mjs` 把關），與 Reader 共用的 chunk 除外。原 query 地圖仍使用既有離線行為。介紹頁 HTML 為 `private, no-store`；sitemap 的公開 HTTP 快取最多 5 分鐘後重新驗證；這不新增輪詢。
 

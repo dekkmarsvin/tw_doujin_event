@@ -55,5 +55,5 @@ const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => (
  */
 export function publicHeaderHtml(loginHref: string) {
   const { home, mark, name, tagline, login } = PUBLIC_HEADER;
-  return `<header class="site-header"><a class="site-header-brand" href="${home}"><span class="site-header-mark" aria-hidden="true">${mark}</span><span class="site-header-name"><b>${name}</b><small>${tagline}</small></span></a><div class="site-header-actions"><a class="site-header-login" href="${escapeHtml(loginHref)}">${login}</a></div></header>`;
+  return `<header class="site-header"><a class="site-header-brand" href="${home}"><span class="site-header-mark" aria-hidden="true">${mark}</span><span class="site-header-name"><b>${name}</b><small data-i18n="header.tagline">${tagline}</small></span></a><div class="site-header-actions"><a class="site-header-login" href="${escapeHtml(loginHref)}" data-i18n="header.login">${login}</a></div></header>`;
 }

@@ -143,7 +143,7 @@ test("every public entry page opens with one header whose 登入 keeps the page'
     const headers = [...html.matchAll(/<header class="site-header">([\s\S]*?)<\/header>/g)].map(([, inner]) => inner);
     assert.equal(headers.length, 1, `${path} has one public header`);
     assert.match(headers[0], /<a class="site-header-brand" href="\/">/, `${path}: the brand leads home`);
-    assert.match(headers[0], new RegExp(`<a class="site-header-login" href="${attribute(login)}">登入</a>`), `${path}: 登入 keeps the page's context`);
+    assert.match(headers[0], new RegExp(`<a class="site-header-login" href="${attribute(login)}"[^>]*>登入</a>`), `${path}: 登入 keeps the page's context`);
     assert.match(html, /<link rel="stylesheet" href="\/site-header\.css"/, `${path} loads the header's stylesheet`);
   }
 });
