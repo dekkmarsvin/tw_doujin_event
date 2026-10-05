@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import styles from "./portal.module.css";
+import { usePortalText } from "./portal-i18n";
 
 /**
  * The account's own actions behind one "帳號" button, so the header keeps only
@@ -11,6 +12,7 @@ import styles from "./portal.module.css";
  * and closing the dialog hands focus back to the item that opened it.
  */
 export function AccountMenu({ children }: { children: ReactNode }) {
+  const t = usePortalText();
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -45,7 +47,7 @@ export function AccountMenu({ children }: { children: ReactNode }) {
   }, [open]);
 
   return <div ref={root} className={styles.accountMenu}>
-    <button ref={trigger} type="button" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen(!open)}>帳號</button>
+    <button ref={trigger} type="button" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen(!open)}>{t("帳號")}</button>
     <div id={panelId} className={styles.accountMenuPanel} hidden={!open}>{children}</div>
   </div>;
 }

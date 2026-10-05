@@ -15,6 +15,7 @@
   line-height: 1.6;
 }
 .screen *, .screen *::before, .screen *::after { box-sizing: border-box; }
+.screen:lang(ja) { font-family: Geist, system-ui, "Noto Sans JP", sans-serif; line-break: strict; }
 .screen :is(h1, h2, p, form) { margin: 0; }
 
 /* Full width like the public header the "登入" came from: the workspace's

@@ -21,6 +21,7 @@ export async function openSurface(journey, surface, initialLayout = source, opti
       const reply = (body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
       if (path === "/api/auth/session") return reply({ email: "map@example.test", isAdmin: false, isMapContributor: true, hasOrganizerAccess: true, expiresAt: now + 86400000 });
       if (path === "/api/auth/config") return reply({ turnstileSitekey: "" });
+      if (path === "/api/account/notification-preferences" && method === "GET") return reply({ cadence: "daily", version: 1, locale: "zh-Hant" });
       if (path.endsWith("/claims")) return reply({ claims: [], eventId: "sample" });
       if (path === "/api/organizer/events") return reply({ events: [summary] });
       if (path.endsWith("/workspace")) return reply({ ok: true });

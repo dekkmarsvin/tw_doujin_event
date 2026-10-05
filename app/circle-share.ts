@@ -1,6 +1,7 @@
 import type { EventDefinition } from "./event-catalog";
 import { dayDateLabel, eventDayCalendarDate } from "./event-calendar";
 import { circlePath } from "./seo";
+import { localizedHref, type Locale } from "./i18n/locale";
 
 type SharedPlacement = { day: string | number; area: string; boothCode: string; status: "active" | "cancelled" | "moved" };
 
@@ -13,7 +14,7 @@ type SharedPlacement = { day: string | number; area: string; boothCode: string; 
  * Ordered by calendar date, then by declaration, for the same reason as
  * `circleBooths`: a corrected date can put day 2 before day 1 (ADR-0068).
  */
-export function visitableDays<T extends SharedPlacement>(event: EventDefinition, placements: readonly T[]) {
+export function visitableDays<T extends SharedPlacement>(event: EventDefinition, placements: readonly T[], locale: Locale = "zh-Hant") {
   const days = new Map<string, { day: T["day"]; label: string; date: string | null; order: number; placements: T[] }>();
   for (const placement of placements) {
     if (placement.status !== "active") continue;
@@ -27,7 +28,7 @@ export function visitableDays<T extends SharedPlacement>(event: EventDefinition,
     const date = eventDayCalendarDate(event, placement.day);
     days.set(key, {
       day: placement.day,
-      label: date ? dayDateLabel(date) : event.days[order]?.dateLabel ?? key,
+      label: date ? dayDateLabel(date, locale) : event.days[order]?.dateLabel ?? key,
       date,
       order,
       placements: [placement],
@@ -46,9 +47,9 @@ export function visitableDays<T extends SharedPlacement>(event: EventDefinition,
  * names its own, grouping that day's booths under it: a list of venues after a
  * list of dates would not say which venue a reader goes to on which day.
  */
-export function circlePromotion(event: EventDefinition, circle: { id: string; name: string }, placements: readonly SharedPlacement[], origin: string) {
-  const url = `${origin}${circlePath(event.id, circle.id)}`;
-  const days = visitableDays(event, placements);
+export function circlePromotion(event: EventDefinition, circle: { id: string; name: string }, placements: readonly SharedPlacement[], origin: string, locale: Locale = "zh-Hant") {
+  const url = localizedHref(`${origin}${circlePath(event.id, circle.id)}`, locale);
+  const days = visitableDays(event, placements, locale);
   const venueOf = (placement: SharedPlacement) => event.venueAssignments.find((venue) => venue.areaIds.includes(placement.area))?.venueName ?? "";
   const codes = (onVenue: readonly SharedPlacement[]) => onVenue.map((placement) => placement.boothCode).join("、");
   const venues = [...new Set(days.flatMap(({ placements: onDay }) => onDay.map(venueOf)))];

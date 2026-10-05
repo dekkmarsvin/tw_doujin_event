@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { PortalError, readTurnstileSitekey, requestLoginLink } from "./circle-editor-client";
+import { readTurnstileSitekey, requestLoginLink } from "./circle-editor-client";
+import { LanguageSwitcher } from "./i18n/language-switcher";
+import { useLocale } from "./i18n/locale-context";
+import { localizedHref } from "./i18n/locale";
+import { noticeError, portalNotice, usePortalText, type PortalNotice } from "./circle-portal/portal-i18n";
 import { TurnstileWidget } from "./circle-portal/turnstile-widget";
 import { WorkspaceEntries, type Workspace } from "./workspace-nav";
 import styles from "./portal-sign-in.module.css";
@@ -21,25 +25,24 @@ export function SignInScreen({ title, current, notice, circleId, children }: {
   /** Further fine print under the form. */
   children?: ReactNode;
 }) {
+  const t = usePortalText();
+  const { locale } = useLocale();
   return <div className={styles.screen}>
     <header className={styles.head}>
       <h1>{title}</h1>
-      <a href="/">返回活動列表</a>
+      {current === "circle" && <LanguageSwitcher />}
+      <a href={localizedHref("/", locale)}>{t("返回活動列表")}</a>
     </header>
     <main className={styles.column}>
       {notice && <p role="status" className={notice.kind === "error" ? styles.error : styles.notice}>{notice.message}</p>}
       <WorkspaceEntries current={current} />
       <section className={styles.card} aria-labelledby="sign-in-title">
-        <h2 id="sign-in-title">登入</h2>
+        <h2 id="sign-in-title">{t("登入")}</h2>
         <LoginLinkForm audience={current} circleId={circleId} />
         {children}
       </section>
     </main>
   </div>;
-}
-
-function errorMessage(error: unknown) {
-  return error instanceof PortalError || error instanceof Error ? error.message : "操作失敗，請稍後再試。";
 }
 
 /**
@@ -48,8 +51,10 @@ function errorMessage(error: unknown) {
  * signing in through an organizer link is what accepts an invitation.
  */
 export function LoginLinkForm({ audience, circleId, email: fixedEmail }: { audience: Workspace; circleId?: string; email?: string }) {
+  const t = usePortalText();
+  const { locale } = useLocale();
   const [email, setEmail] = useState(fixedEmail ?? "");
-  const [status, setStatus] = useState<{ kind: "idle" | "busy" | "ok" | "error"; message: string }>({ kind: "idle", message: "" });
+  const [status, setStatus] = useState<{ kind: "idle" | "busy" | "ok" | "error"; message: PortalNotice }>({ kind: "idle", message: "" });
   const [sitekey, setSitekey] = useState<string | null>(null);
   const [humanToken, setHumanToken] = useState<string | null>(null);
   // A Turnstile token is single-use and short-lived. Remounting the widget is
@@ -59,7 +64,7 @@ export function LoginLinkForm({ audience, circleId, email: fixedEmail }: { audie
   // Only the sign-in view asks for the sitekey; a signed-in workspace never
   // pays for the round trip.
   useEffect(() => {
-    void readTurnstileSitekey().then(setSitekey).catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
+    void readTurnstileSitekey().then(setSitekey).catch((error: unknown) => setStatus({ kind: "error", message: noticeError(error) }));
   }, []);
   const onUnavailable = useCallback(() => setStatus({ kind: "error", message: "真人驗證元件載入失敗，請檢查網路或內容封鎖設定後重新整理。" }), []);
 
@@ -69,9 +74,9 @@ export function LoginLinkForm({ audience, circleId, email: fixedEmail }: { audie
       event.preventDefault();
       if (!humanToken) return;
       setStatus({ kind: "busy", message: "寄送中…" });
-      void requestLoginLink(email, humanToken, audience, circleId || undefined)
+      void requestLoginLink(email, humanToken, audience, circleId || undefined, locale)
         .then(() => setStatus({ kind: "ok", message: "若這個 email 可以使用，登入連結已寄出。請一併檢查垃圾郵件匣。" }))
-        .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }))
+        .catch((error: unknown) => setStatus({ kind: "error", message: noticeError(error) }))
         .finally(() => {
           // Spent either way: the server verifies the token before it decides
           // anything else, so it is never reusable for a second attempt.
@@ -79,17 +84,17 @@ export function LoginLinkForm({ audience, circleId, email: fixedEmail }: { audie
           setGeneration((value) => value + 1);
         });
     }}>
-      {fixedEmail ? <p className={styles.fixedEmail}>寄到 {fixedEmail}</p> : <>
+      {fixedEmail ? <p className={styles.fixedEmail}>{t("寄到 {email}", { email: fixedEmail })}</p> : <>
         <label htmlFor={fieldId} className={styles.label}>Email</label>
         <input id={fieldId} className={styles.input} type="email" required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" />
       </>}
       {sitekey && <TurnstileWidget key={generation} sitekey={sitekey} onToken={setHumanToken} onUnavailable={onUnavailable} />}
-      <button type="submit" className={styles.submit} disabled={!humanToken || status.kind === "busy"}>{status.kind === "busy" ? "寄送中…" : "寄出登入連結"}</button>
+      <button type="submit" className={styles.submit} disabled={!humanToken || status.kind === "busy"}>{t(status.kind === "busy" ? "寄送中…" : "寄出登入連結")}</button>
     </form>
     {/* Before the address is handed over, not after (ADR-0011, #30). Plain
         anchor: the notice is a static page outside this bundle. */}
-    <p className={styles.fine}>送出即表示你已閱讀<a href="/privacy">隱私權與資料使用告知</a>。</p>
-    {(status.kind === "ok" || status.kind === "error") && <p role="status" className={status.kind === "error" ? styles.error : styles.notice}>{status.message}</p>}
+    <p className={styles.fine}>{t("送出即表示你已閱讀")}<a href={locale === "zh-Hant" ? "/privacy/" : `/privacy/${locale}/`}>{t("隱私權與資料使用告知")}</a>{locale === "en" ? "." : "。"}</p>
+    {(status.kind === "ok" || status.kind === "error") && <p role="status" className={status.kind === "error" ? styles.error : styles.notice}>{portalNotice(status.message, locale)}</p>}
   </div>;
 }
 

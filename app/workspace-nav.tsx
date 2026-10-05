@@ -1,4 +1,7 @@
 import styles from "./workspace-nav.module.css";
+import { useLocale } from "./i18n/locale-context";
+import { localizedHref } from "./i18n/locale";
+import { usePortalText } from "./circle-portal/portal-i18n";
 
 /**
  * The two places someone signs in to work (#439): circle data at `/circle` and
@@ -20,26 +23,31 @@ const WORKSPACES = [
 
 /** Before sign-in: both workspaces side by side, each saying what it is for. */
 export function WorkspaceEntries({ current, className }: { current: Workspace; className?: string }) {
+  const t = usePortalText();
+  const { locale } = useLocale();
   return <div className={className ? `${styles.entries} ${className}` : styles.entries}>
-    <nav aria-label="工作區">
+    <nav aria-label={t("工作區")}>
       <ul>{WORKSPACES.map((workspace) => <li key={workspace.id}>
-        <a href={workspace.href} aria-current={workspace.id === current ? "page" : undefined}><b>{workspace.label}</b><small>{workspace.description}</small></a>
+        <a href={localizedHref(workspace.href, locale)} aria-current={workspace.id === current ? "page" : undefined}><b>{t(workspace.label)}</b><small>{t(workspace.description)}</small></a>
       </li>)}</ul>
     </nav>
     {/* What each workspace opens lives on its own public page, so signing in
         stays one short step for people who already know. */}
-    <p><a href="/portal/" className={styles.introLink}>第一次使用？看看社團和主辦能做什麼</a></p>
+    <p><a href={localizedHref("/portal/", locale)} className={styles.introLink}>{t("第一次使用？看看社團和主辦能做什麼")}</a></p>
   </div>;
 }
 
 /** Signed in: the same two by name only, beside the account they belong to. */
 export function WorkspaceSwitch({ current }: { current: Workspace }) {
-  return <nav aria-label="工作區" className={styles.switch}>
-    {WORKSPACES.map((workspace) => <a key={workspace.id} href={workspace.href} aria-current={workspace.id === current ? "page" : undefined}>{workspace.label}</a>)}
+  const t = usePortalText();
+  const { locale } = useLocale();
+  return <nav aria-label={t("工作區")} className={styles.switch}>
+    {WORKSPACES.map((workspace) => <a key={workspace.id} href={localizedHref(workspace.href, locale)} aria-current={workspace.id === current ? "page" : undefined}>{t(workspace.label)}</a>)}
   </nav>;
 }
 
 /** Both workspaces tell people to contact the maintainers; this is where. Set in Admin. */
 export function ContactLink({ url, className }: { url?: string; className?: string }) {
-  return url ? <a href={url} className={className} target="_blank" rel="noopener noreferrer">聯絡管理者</a> : null;
+  const t = usePortalText();
+  return url ? <a href={url} className={className} target="_blank" rel="noopener noreferrer">{t("聯絡管理者")}</a> : null;
 }

@@ -72,21 +72,6 @@ test("the post-event question is two outcomes, and staying public is the default
   assert.match(app, /writeStoredDraft\(claim\.circleId, \{ fields, listInputs, stagedThumbnailKey, savedAt:/);
 });
 
-test("field state is described by what shows, not by inherit/replace/clear", async () => {
-  const app = await source("portal-app.tsx");
-
-  // inherit/replace/clear stay in the contract, the code and D1; the editor
-  // says what a reader would see instead (#197). The state text carries its own
-  // 「目前」, so the row no longer prefixes one.
-  assert.match(app, /const FIELD_MODE_LABEL = \{ inherit: "目前顯示場刊資料", replace: "目前顯示你填寫的內容", clear: "目前不顯示" \}/);
-  assert.match(app, /onClick=\{mode === "inherit" \? onRestore : onInherit\}>使用場刊資料<\/button>/);
-  assert.match(app, /onClick=\{mode === "clear" \? onRestore : onClear\}>不顯示<\/button>/);
-  assert.doesNotMatch(app, /目前：<b>/);
-  for (const modelWord of [/沿用場刊/, /社團自填/, /清除此欄/, /補充資料/]) {
-    assert.doesNotMatch(app, modelWord);
-  }
-});
-
 test("the two ways back are offered only where they differ, and each one can be undone", async () => {
   const app = await source("portal-app.tsx");
 
@@ -106,16 +91,6 @@ test("the two ways back are offered only where they differ, and each one can be 
   // Only the author's own content is put aside, so moving between the two
   // does not overwrite it with an empty value.
   assert.match(app, /const putOwnAside = \(key: CircleOverrideFieldKey\) => \{\s*\r?\n\s*if \(modeFor\(key\) !== "replace"\) return;/);
-});
-
-test("deleting is collapsed, and its button says the same words as the summary", async () => {
-  const app = await source("portal-app.tsx");
-
-  // One irreversible action, reached on purpose: `<details>` keeps it closed
-  // until asked for, while staying findable by the browser's own page search.
-  assert.match(app, /\{saved && <details className=\{styles\.danger\}>/);
-  assert.match(app, /<summary>刪除資料<\/summary>/);
-  assert.doesNotMatch(app, /<details className=\{styles\.danger\} open>/);
 });
 
 test("the rating field is a checkbox group, because a circle can sell both", async () => {

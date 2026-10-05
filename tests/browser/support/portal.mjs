@@ -34,12 +34,17 @@ async function api(path, { method = "GET", body, preview = false } = {}) {
 }
 
 /** The one-time link the mailer just produced for this address. */
-export async function loginLink(email, audience, { event, circleId, destination } = {}) {
+export async function loginLink(email, audience, { event, circleId, destination, locale } = {}) {
   const requested = await api(`/api/auth/request-link${event ? `?event=${encodeURIComponent(event)}` : ""}`, {
     method: "POST",
-    body: { email, turnstileToken: "local-dummy-token", audience, circleId, destination },
+    body: { email, turnstileToken: "local-dummy-token", audience, circleId, destination, ...(locale ? { locale } : {}) },
   });
   if (requested.status !== 202) throw new Error(`request-link answered ${requested.status}: ${await requested.text()}`);
+  return capturedLoginLink(email);
+}
+
+/** Also used after the real form submitted the request in a browser journey. */
+export async function capturedLoginLink(email) {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const captured = await api(`/api/preview/mail?email=${encodeURIComponent(email)}`, { preview: true });
     if (captured.ok) {

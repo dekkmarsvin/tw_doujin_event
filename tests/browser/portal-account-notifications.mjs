@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { CIRCLE, clearMail, loginLink, signIn } from "./support/portal.mjs";
 import { base, output, start } from "./support/journey.mjs";
+import { verifyLocalePreferences } from "./support/portal-locale-preferences.mjs";
 const journey = await start("portal-account-notifications");
 const event = { id: "invitation-fixture", tentativeName: "邀請恢復測試", eventId: null, status: "draft",
   version: 1, updatedAt: 1, updatedByRole: "admin", role: "owner", workspaceMode: "binder" };
@@ -94,5 +95,7 @@ try {
   await target.getByText("找不到信件指定的工作區，或此帳號已無權限。請從活動列表選擇可使用的活動。", { exact: true }).waitFor();
   assert.equal(await target.getByRole("heading", { name: "檢查與發布", exact: true }).count(), 0);
   await journey.capture(target, "notification-target-unavailable");
+  await target.close();
+  await verifyLocalePreferences(journey);
   await journey.finish();
 } catch (error) { await journey.abort(error); }

@@ -20,6 +20,7 @@ import assert from "node:assert/strict";
 import { ADMIN, CIRCLE, clearMail, loginLink, signIn } from "./support/portal.mjs";
 import { base, PICTURE, start } from "./support/journey.mjs";
 import { png } from "./support/png.mjs";
+import { verifyCircleLocales } from "./support/portal-circle-locales.mjs";
 
 const CIRCLE_NAME = "北風畫室";
 const CIRCLE_ID = "c-900001";
@@ -456,6 +457,7 @@ try {
   await journey.capture(admin, "admin-account-real-detail");
   await mapQualification.getByRole("button", { name: "撤銷", exact: true }).click();
   await mapQualification.getByText("已撤銷", { exact: true }).waitFor();
+  await verifyCircleLocales(journey, admin);
   await admin.close();
 
   await journey.finish();

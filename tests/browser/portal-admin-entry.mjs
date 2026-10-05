@@ -93,6 +93,7 @@ async function open(role, entry = "/admin", implicitMapDraft = false, pendingSer
       if (path === "/api/auth/session") return role === "anonymous" ? reply({ error: "尚未登入。" }, 401)
         : reply({ email: `${role}@example.test`, isAdmin: role === "admin", isMapContributor: false, expiresAt: now + 86400000 });
       if (path === "/api/auth/config") return reply({ turnstileSitekey: "" });
+      if (path === "/api/account/notification-preferences" && method === "GET") return reply({ cadence: "daily", version: 1, locale: "zh-Hant" });
       if (path === "/api/claims") return reply({ claims: [], eventId: url.searchParams.get("event") });
       if (path === "/api/admin/claims" && method === "POST") {
         if (failure) return reply({ error: "登入已失效。" }, failure);

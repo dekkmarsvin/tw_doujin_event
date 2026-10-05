@@ -33,6 +33,8 @@
 }
 
 .page :is(h1, h2, p, ul, form) { margin: 0; }
+.page:lang(ja) { font-family: Geist, system-ui, "Noto Sans JP", sans-serif; line-break: strict; }
+.page :is(label, button, p, h1, h2, h3) { overflow-wrap: anywhere; }
 .page *, .page *::before, .page *::after { box-sizing: border-box; }
 :where(.page) small { font-size: 12px; } /* The browser default `smaller` falls under the 12px floor (#484). */
 
