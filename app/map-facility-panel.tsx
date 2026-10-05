@@ -1,10 +1,18 @@
 "use client";
 
 import { useEffect, useRef, type RefObject } from "react";
-import type { MapFacilityEntry, MapLegendEntry } from "./map-facility-directory";
+import { useLocale, useMessages } from "./i18n/locale-context";
+import { defineMessages } from "./i18n/messages";
+import { mapFacilityEntryText, mapLegendLabel, type MapFacilityEntry, type MapLegendEntry } from "./map-facility-directory";
 import { MapAccessBadge, MapServiceBadge } from "./map-marker-icons";
 import { MAP_SERVICE_POINT_KINDS, type MapServicePointKind } from "./event-map";
 import styles from "./event-map-app.module.css";
+
+const MESSAGES = defineMessages({
+  "zh-Hant": { title: "場內設施", access: "出入口", service: "服務設施", area: "場內區域", legend: "圖例" },
+  en: { title: "Facilities", access: "Entrances & exits", service: "Services", area: "Areas", legend: "Legend" },
+  ja: { title: "会場内の施設", access: "出入口", service: "サービス施設", area: "会場内エリア", legend: "凡例" },
+});
 
 const isService = (kind: string): kind is MapServicePointKind => (MAP_SERVICE_POINT_KINDS as readonly string[]).includes(kind);
 
@@ -32,6 +40,8 @@ export default function MapFacilityPanel({ id, entries, legend, triggerRef, onCl
   onLocate: (entry: MapFacilityEntry) => void;
 }) {
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const { locale } = useLocale();
+  const t = useMessages(MESSAGES);
   useEffect(() => {
     const frame = requestAnimationFrame(() => panelRef.current?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true }));
     return () => cancelAnimationFrame(frame);
@@ -82,18 +92,21 @@ export default function MapFacilityPanel({ id, entries, legend, triggerRef, onCl
     const items = entries.filter((entry) => entry.group === group);
     return items.length > 0 && <div role="group" aria-labelledby={`${id}-${group}`}>
       <h3 id={`${id}-${group}`}>{title}</h3>
-      <ul>{items.map((entry) => <li key={entry.key}><button type="button" aria-label={entry.ariaLabel} onClick={() => onLocate(entry)}><FacilitySymbol kind={entry.kind} /><span>{entry.label}</span></button></li>)}</ul>
+      <ul>{items.map((entry) => {
+        const text = mapFacilityEntryText(entry, locale);
+        return <li key={entry.key}><button type="button" aria-label={text.ariaLabel} onClick={() => onLocate(entry)}><FacilitySymbol kind={entry.kind} /><span>{text.label}</span></button></li>;
+      })}</ul>
     </div>;
   };
 
   return <div id={id} ref={panelRef} className={styles.facilityPanel} data-map-overlay role="group" aria-labelledby={`${id}-title`}>
-    <h2 id={`${id}-title`}>場內設施</h2>
-    {section("出入口", "access")}
-    {section("服務設施", "service")}
-    {section("場內區域", "area")}
+    <h2 id={`${id}-title`}>{t("title")}</h2>
+    {section(t("access"), "access")}
+    {section(t("service"), "service")}
+    {section(t("area"), "area")}
     {legend.length > 0 && <div role="group" aria-labelledby={`${id}-legend`}>
-      <h3 id={`${id}-legend`}>圖例</h3>
-      <ul className={styles.facilityLegend}>{legend.map((item) => <li key={`${item.kind}:${item.label}`}><FacilitySymbol kind={item.kind} /><span>{item.label}</span></li>)}</ul>
+      <h3 id={`${id}-legend`}>{t("legend")}</h3>
+      <ul className={styles.facilityLegend}>{legend.map((item) => <li key={`${item.kind}:${item.label}`}><FacilitySymbol kind={item.kind} /><span>{mapLegendLabel(item, locale)}</span></li>)}</ul>
     </div>}
   </div>;
 }

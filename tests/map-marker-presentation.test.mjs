@@ -6,7 +6,7 @@ const vite = await createServer({ configFile: false, root: process.cwd(), server
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { layoutMapMarkerLabels, accessLabelSide, mapLabelEms } = await environment.runner.import("/app/map-marker-presentation.ts");
-const { mapFacilityDirectory } = await environment.runner.import("/app/map-facility-directory.ts");
+const { mapFacilityDirectory, mapFacilityEntryText, mapLegendLabel } = await environment.runner.import("/app/map-facility-directory.ts");
 const { rowLabelAnchor, rowLabelPlacement } = await environment.runner.import("/app/event-map.ts");
 after(() => vite.close());
 
@@ -274,6 +274,13 @@ test("service points name themselves by type and are grouped so the toilets sit 
     ["service:changing", "service", "更衣與寄物區", "更衣與寄物區，更衣室"],
   ]);
   assert.deepEqual(directory.legend.map((item) => item.label), ["出入兩用", "廁所", "服務台", "寄物處", "售票處", "更衣室"]);
+  // Another interface language renames only the site's types; the organizer's names stay as written.
+  assert.deepEqual(directory.entries.slice(0, 3).map((entry) => Object.values(mapFacilityEntryText(entry, "en"))), [
+    ["側門", "側門, Entrance & exit"],
+    ["Restroom", "Restroom"],
+    ["女廁", "女廁, Restroom"],
+  ]);
+  assert.deepEqual([{ kind: "pillar", label: "柱子" }, { kind: "area", label: "企業攤" }].map((item) => mapLegendLabel(item, "ja")), ["柱", "企業攤"]);
 });
 
 test("a service point badge is an obstacle, and only a name of its own is drawn", () => {

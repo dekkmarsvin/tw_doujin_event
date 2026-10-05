@@ -48,8 +48,13 @@ import PlanningTools from "./planning-tools";
 import { OfflinePrepDialog } from "./offline-prep-dialog";
 import { ShareItineraryDialog } from "./planning-share-panel";
 import ReaderHelp from "./reader-help";
-import { eventCalendar } from "./event-calendar";
-import { publicLoginHref } from "./public-header";
+import { dayDateLabel, eventCalendar, eventDayCalendarDate } from "./event-calendar";
+import { PUBLIC_HEADER_MESSAGES, publicLoginHref } from "./public-header";
+import { LanguageSwitcher } from "./i18n/language-switcher";
+import { localizedHref, type Locale } from "./i18n/locale";
+import { useDocumentLanguage, useLocale, useMessages } from "./i18n/locale-context";
+import { EVENT_MAP_MESSAGES } from "./event-map-app.messages";
+import { allCircleCategoriesLabel } from "./circle-categories";
 import { mapFacilityDirectory, type MapFacilityEntry } from "./map-facility-directory";
 import MapFacilityPanel from "./map-facility-panel";
 import styles from "./event-map-app.module.css";
@@ -87,12 +92,23 @@ const MAP_DOUBLE_TAP_DISTANCE = 24;
  * this event's defaults, and a stale day or area from the previous event would
  * be indistinguishable from a deliberate choice.
  */
+/** A day's date as the interface language writes it; Chinese keeps the published label. */
+function dayDate(event: EventDefinition, eventDay: EventDefinition["days"][number], locale: Locale) {
+  if (locale === "zh-Hant") return eventDay.dateLabel;
+  const iso = eventDayCalendarDate(event, eventDay.id);
+  return iso ? dayDateLabel(iso, locale) : eventDay.dateLabel;
+}
+
 export default function EventMapApp(props: { event: EventDefinition; onChooseEvent?: () => void }) {
   const catalog = useCircleCatalog(props.event.id);
   return <ReaderPlanningBoundary eventId={props.event.id} settled={catalog.status !== "loading"}><EventMapWorkspace {...props} /></ReaderPlanningBoundary>;
 }
 function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; onChooseEvent?: () => void }) {
   const eventId = event.id;
+  const { locale } = useLocale();
+  const t = useMessages(EVENT_MAP_MESSAGES);
+  const header = useMessages(PUBLIC_HEADER_MESSAGES);
+  useDocumentLanguage();
   const genres: readonly string[] = event.genres;
   const urlDefaults = defaultEventUrlState(event);
   const { catalog, status: catalogStatus, error: catalogError } = useCircleCatalog(eventId);
@@ -316,7 +332,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
       .then((resource) => { if (!cancelled) setLoadedMap({ scopeKey, ...resource }); })
       // Loader errors are internal English ("Failed to fetch", manifest checks);
       // the reader's only action is to retry, so say that and keep the cause in the console.
-      .catch((error) => { if (!cancelled) { console.error(error); setLoadedMap(null); setMapError("請確認網路連線後重新讀取。"); } })
+      .catch((error) => { if (!cancelled) { console.error(error); setLoadedMap(null); setMapError("retry"); } })
       .finally(() => { if (!cancelled) setMapLoading(false); });
     return () => { cancelled = true; };
   }, [day, event, eventId, venueAssignment, mapScopeKey, mapRetry]);
@@ -432,7 +448,8 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     planningDisplay,
     navigationMode,
     selectedRecordId,
-  }), [advancedSearch, circleRecords, circleRecordsByCircleId, circleRecordsById, day, event, favoriteOnly, genre, navigationMode, planning, planningDisplay, query, selectedRecordId, venueAssignment]);
+    locale,
+  }), [advancedSearch, circleRecords, circleRecordsByCircleId, circleRecordsById, day, event, favoriteOnly, genre, locale, navigationMode, planning, planningDisplay, query, selectedRecordId, venueAssignment]);
   const {
     favorites, favoriteIds, favoriteGroupLabels, dayPlan, plansById, dayRecordsByCircleId,
     selected, selectedFavorite, selectedPlan, selectedMovedDestination, nextRecord, navigationTargetRecord,
@@ -443,7 +460,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   // built from the circle's reviewed placements.
   const selectedPlacements = selected ? circleRecordsByCircleId.get(selected.circle.id) : undefined;
   useEffect(() => {
-    applyReaderMetadata(pageMetadata(event, selected?.circle, selectedPlacements?.map((record) => record.placement)));
+    applyReaderMetadata(pageMetadata(event, selected?.circle, selectedPlacements?.map((record) => record.placement), locale));
   }, [event, selected?.circle, selectedPlacements]);
   // A circle on two adjacent booths resolves to its first active record. When the
   // reader already has one of them open, navigating keeps that booth rather than
@@ -760,17 +777,17 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   const detailsPanel = <CircleDetails record={selected} sharedRecords={sharedRecords} movedDestination={selectedMovedDestination} favorite={selectedFavorite} plan={selectedPlan} groups={planning.favoriteGroups} compact floating={desktop} onClose={closeDetails} onOpenFull={() => setShowFullDetail(true)} {...detailActions} />;
   const fullDetailsPanel = <CircleDetails record={selected} sharedRecords={sharedRecords} movedDestination={selectedMovedDestination} favorite={selectedFavorite} plan={selectedPlan} groups={planning.favoriteGroups} onClose={() => setShowFullDetail(false)} {...detailActions} />;
   const clearFiltersClassName = `${styles.clearFilters} ${genre !== event.genres[0] ? styles.clearFiltersActive : ""}`;
-  const mobileFiltersPanel = <section className={styles.mobileFilters} aria-label="攤位篩選">
-    <header><div><b>篩選攤位</b></div><button className={clearFiltersClassName} onClick={clearFilters}>全部清除</button></header>
-    <fieldset><legend>社團主題</legend><div className="genres">{genres.map((value) => <button key={value} className={genre === value ? "active" : ""} onClick={() => { historyIntent.current = "push"; setGenre(value); }}><i className="dot" style={categoryDotStyle(genres, value)} />{value}<small>{genreCounts.get(value) ?? 0}</small></button>)}</div></fieldset>
-    <label className="favorite-only"><input type="checkbox" checked={favoriteOnly} onChange={(event) => { historyIntent.current = "push"; setFavoriteOnly(event.target.checked); }} /><i><UiIcon name="heart" /></i><span><b>只看收藏</b><small>已收藏 {favorites.length} 個社團</small></span></label>
+  const mobileFiltersPanel = <section className={styles.mobileFilters} aria-label={t("filtersRegion")}>
+    <header><div><b>{t("filtersTitle")}</b></div><button className={clearFiltersClassName} onClick={clearFilters}>{t("clearAll")}</button></header>
+    <fieldset><legend>{t("genreLegend")}</legend><div className="genres">{genres.map((value) => <button key={value} className={genre === value ? "active" : ""} onClick={() => { historyIntent.current = "push"; setGenre(value); }}><i className="dot" style={categoryDotStyle(genres, value)} />{value === genres[0] ? allCircleCategoriesLabel(locale) : value}<small>{genreCounts.get(value) ?? 0}</small></button>)}</div></fieldset>
+    <label className="favorite-only"><input type="checkbox" checked={favoriteOnly} onChange={(event) => { historyIntent.current = "push"; setFavoriteOnly(event.target.checked); }} /><i><UiIcon name="heart" /></i><span><b>{t("favoriteOnly")}</b><small>{t("favoriteCount", { count: favorites.length })}</small></span></label>
     <AdvancedCircleSearchControls value={advancedSearch} workSuggestions={workTopicSuggestions} onApply={(next) => { historyIntent.current = "push"; setAdvancedSearch(next); }} />
   </section>;
   const mobileShellStyle = {
     "--mobile-peek-summary": `${MOBILE_SUMMARY_PEEK_HEIGHT}px`,
     ...(mobileSheetDragHeight === null ? {} : { "--mobile-sheet-height": `${mobileSheetDragHeight}px` }),
   } as CSSProperties;
-  const mobileSheetActionLabel = mobileSheetLevel === "peek" ? "展開工作面板" : mobileSheetLevel === "half" ? "完整展開工作面板" : "縮小工作面板";
+  const mobileSheetActionLabel = mobileSheetLevel === "peek" ? t("sheetExpand") : mobileSheetLevel === "half" ? t("sheetExpandFull") : t("sheetCollapse");
   const mobileSummary = mobilePanel === "details" && Boolean(selected);
   const backToResults = () => {
     setMobileWorkspace("explore"); setDesktopPanel("explore"); setMobilePanel("results"); setMobileSheetLevel("half");
@@ -801,7 +818,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     setDesktopDetailsOpen(false);
     setShowFullDetail(false);
   };
-  const navigationButton = <button className={styles.navigationToggle} aria-pressed={navigationMode} onClick={toggleNavigationMode}><UiIcon name="locate" />{navigationMode ? "退出導航模式" : "開始導航"}</button>;
+  const navigationButton = <button className={styles.navigationToggle} aria-pressed={navigationMode} onClick={toggleNavigationMode}><UiIcon name="locate" />{navigationMode ? t("navigationExit") : t("navigationStart")}</button>;
   const hintedCode = focusedCode ?? selected?.code ?? null;
   const selectedSlot = !desktop && selected && publishedMap?.layout.rows.flatMap((row) => row.slots).find((slot) => slot.code === selected.code);
   // At the whole-venue zoom a booth is a couple of pixels across, so the marker
@@ -814,24 +831,24 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   const selectedMapPointStyle = selectedMapPoint ? { "--map-selection-left": `${selectedMapPoint.left}px`, top: `${selectedMapPoint.top}px` } as CSSProperties : undefined;
   const renderMapTools = (measurement = false) => <>
     <div className={styles.locationControls}>
-      <div className={styles.dateTabs} role="tablist" aria-label="活動日期">{event.days.map((eventDay, index) => <button key={eventDay.id} role="tab" tabIndex={day === eventDay.id ? 0 : -1} aria-selected={day === eventDay.id} onClick={() => changeDay(eventDay.id)} onKeyDown={(keyEvent) => {
+      <div className={styles.dateTabs} role="tablist" aria-label={t("eventDays")}>{event.days.map((eventDay, index) => <button key={eventDay.id} role="tab" tabIndex={day === eventDay.id ? 0 : -1} aria-selected={day === eventDay.id} onClick={() => changeDay(eventDay.id)} onKeyDown={(keyEvent) => {
         const target = keyEvent.key === "ArrowRight" ? (index + 1) % event.days.length : keyEvent.key === "ArrowLeft" ? (index + event.days.length - 1) % event.days.length : keyEvent.key === "Home" ? 0 : keyEvent.key === "End" ? event.days.length - 1 : -1;
         if (target < 0) return;
         keyEvent.preventDefault(); changeDay(event.days[target].id);
         (keyEvent.currentTarget.parentElement?.children[target] as HTMLButtonElement)?.focus();
-      }}><b>{eventDay.label}</b><span>{eventDay.dateLabel}</span></button>)}</div>
-      <label className={styles.dateSelect}>日期<span className={styles.mobileDateLabel} aria-hidden="true">{event.days.find((item) => item.id === day)?.label}{event.days.length > 1 && <UiIcon name="chevron-down" className={styles.mobileDateChevron} />}<small>{event.days.find((item) => item.id === day)?.dateLabel}</small></span><select aria-label="活動日期" value={day} onChange={(change) => changeDay(event.days.find((item) => String(item.id) === change.target.value)!.id)}>{event.days.map((item) => <option key={item.id} value={item.id}>{item.label} · {item.dateLabel}</option>)}</select></label>
-      {event.venueAssignments.length > 1 ? <label>場地<select value={venueAssignment.venueSpaceId} onChange={(change) => changeVenueSpace(change.target.value)}>{event.venueAssignments.map((item) => <option key={item.venueSpaceId} value={item.venueSpaceId}>{item.venueName} · {item.venueSpaceName}</option>)}</select></label> : <span className={styles.venueName}>{event.venue}</span>}
+      }}><b>{eventDay.label}</b><span>{dayDate(event, eventDay, locale)}</span></button>)}</div>
+      <label className={styles.dateSelect}>{t("date")}<span className={styles.mobileDateLabel} aria-hidden="true">{event.days.find((item) => item.id === day)?.label}{event.days.length > 1 && <UiIcon name="chevron-down" className={styles.mobileDateChevron} />}<small>{(() => { const current = event.days.find((item) => item.id === day); return current ? dayDate(event, current, locale) : null; })()}</small></span><select aria-label={t("eventDays")} value={day} onChange={(change) => changeDay(event.days.find((item) => String(item.id) === change.target.value)!.id)}>{event.days.map((item) => <option key={item.id} value={item.id}>{item.label} · {dayDate(event, item, locale)}</option>)}</select></label>
+      {event.venueAssignments.length > 1 ? <label>{t("venue")}<select value={venueAssignment.venueSpaceId} onChange={(change) => changeVenueSpace(change.target.value)}>{event.venueAssignments.map((item) => <option key={item.venueSpaceId} value={item.venueSpaceId}>{item.venueName} · {item.venueSpaceName}</option>)}</select></label> : <span className={styles.venueName}>{event.venue}</span>}
 
     </div>
-    {navigationMode && <div className={styles.navigationBanner} role="status"><span><UiIcon name="locate" /></span><div><b>導航模式 · 地圖只顯示 DAY {day} 行程</b><small>已走訪 {visitedCount} 站 · 剩餘 {Math.max(0, dayPlan.length - visitedCount)} 站{navigationTarget ? ` · 目前目標 ${navigationTarget.code}` : ""}</small></div>{!desktop && <button onClick={toggleNavigationMode}>退出</button>}</div>}
-        {nextRecord && !navigationMode && <div className="route"><span><UiIcon name="external" /></span><button className={styles.routeMain} onClick={() => selectRecord(nextRecord)}><small>下一站</small><b>{nextRecord.code} · {nextRecord.name}</b></button><button onClick={() => updatePlanning((current) => removeFromVisitPlan(current, eventId, day, nextRecord.circle.id))} aria-label="從行程移除下一站">從行程移除</button></div>}
-    <div className={styles.codeHint} aria-live={measurement ? undefined : "polite"}>{hintedCode ? "已選取 " + hintedCode : "選取攤位查看社團"}</div>
+    {navigationMode && <div className={styles.navigationBanner} role="status"><span><UiIcon name="locate" /></span><div><b>{t("navigationTitle", { day: String(day) })}</b><small>{t("navigationProgress", { visited: visitedCount, left: Math.max(0, dayPlan.length - visitedCount) })}{navigationTarget ? t("navigationTarget", { code: navigationTarget.code }) : ""}</small></div>{!desktop && <button onClick={toggleNavigationMode}>{t("exit")}</button>}</div>}
+        {nextRecord && !navigationMode && <div className="route"><span><UiIcon name="external" /></span><button className={styles.routeMain} onClick={() => selectRecord(nextRecord)}><small>{t("nextStop")}</small><b>{nextRecord.code} · {nextRecord.name}</b></button><button onClick={() => updatePlanning((current) => removeFromVisitPlan(current, eventId, day, nextRecord.circle.id))} aria-label={t("removeNextStop")}>{t("removeFromPlan")}</button></div>}
+    <div className={styles.codeHint} aria-live={measurement ? undefined : "polite"}>{hintedCode ? t("selectedCode", { code: hintedCode }) : t("selectHint")}</div>
   </>;
 
   // Every public page ends its header with the same "登入" (#439, #488).
-  const readerLogin = <a className={`site-header-login reader-login ${styles.readerLogin}`} href={publicLoginHref({ eventId })}>登入</a>;
-  const readerTools = <><div className={styles.textScale} role="group" aria-label="網頁字體大小"><span>字級</span>{(["standard", "large", "extra"] as const).map((value, index) => <button key={value} aria-pressed={textScale === value} aria-label={index === 0 ? "標準字級" : index === 1 ? "較大字級" : "最大字級"} onClick={() => changeTextScale(value)}>{index === 0 ? "小" : index === 1 ? "中" : "大"}</button>)}</div><PlanningTools eventId={eventId} />{planningStorageError && <span className={styles.storageError} role="status">儲存異常，請開啟資料管理</span>}<ReaderHelp eventId={eventId} dataLastUpdatedLabel={event.dataLastUpdatedLabel} onCheckOffline={() => setOfflinePrepOpen(true)} /></>;
+  const readerLogin = <a className={`site-header-login reader-login ${styles.readerLogin}`} href={localizedHref(publicLoginHref({ eventId }), locale)}>{header("login")}</a>;
+  const readerTools = <><div className={styles.textScale} role="group" aria-label={t("textScaleGroup")}><span>{t("textScale")}</span>{(["standard", "large", "extra"] as const).map((value, index) => <button key={value} aria-pressed={textScale === value} aria-label={index === 0 ? t("textScaleStandard") : index === 1 ? t("textScaleLarge") : t("textScaleExtra")} onClick={() => changeTextScale(value)}>{index === 0 ? t("textScaleStandardShort") : index === 1 ? t("textScaleLargeShort") : t("textScaleExtraShort")}</button>)}</div><LanguageSwitcher /><PlanningTools eventId={eventId} />{planningStorageError && <span className={styles.storageError} role="status">{t("storageError")}</span>}<ReaderHelp eventId={eventId} dataLastUpdatedLabel={event.dataLastUpdatedLabel} onCheckOffline={() => setOfflinePrepOpen(true)} /></>;
 
   // The map as the reader sees it, without a selection: what the switch and the
   // phone's 逛品書 tab carry over into the browse view.
@@ -840,41 +857,41 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     selection: { day, circleId: null, boothCode: null },
   }, typeof window === "undefined" ? "https://event.invalid/" : window.location.href);
   const browseUrl = switchReaderViewUrl(event, readerUrl);
-  const eventInfo = <div className={styles.eventInfo}><h1>{event.name}</h1>{desktop && <div className={styles.eventMeta}><span>{eventCalendar(event).label}</span><span>{event.venue}</span></div>}</div>;
+  const eventInfo = <div className={styles.eventInfo}><h1>{event.name}</h1>{desktop && <div className={styles.eventMeta}><span>{eventCalendar(event, locale).label}</span><span>{event.venue}</span></div>}</div>;
   const eventIdentity = onChooseEvent ? <a className={styles.eventLink} href="/" onClick={(click) => {
     if (click.button !== 0 || click.metaKey || click.ctrlKey || click.shiftKey || click.altKey) return;
     click.preventDefault();
     onChooseEvent();
-  }}>{eventInfo}<span className={styles.eventSwitch}>切換活動<UiIcon name="chevron-right" /></span></a> : eventInfo;
+  }}>{eventInfo}<span className={styles.eventSwitch}>{t("switchEvent")}<UiIcon name="chevron-right" /></span></a> : eventInfo;
 
   return <main className={`app-shell ${styles.shell}`} style={mobileShellStyle} data-mobile-summary={mobileSummary || undefined} data-text-scale={textScale} data-mobile-sheet-level={mobileSheetLevel} data-mobile-sheet-dragging={mobileSheetDragging || undefined}>
     <header className="topbar">
-      <div className="brand"><span aria-hidden="true">場</span><div><b>場刊 Map</b>{desktop && <small>同人展逛攤地圖</small>}</div></div>
+      <div className="brand"><span aria-hidden="true">場</span><div><b>場刊 Map</b>{desktop && <small>{header("tagline")}</small>}</div></div>
       <div className="event">{eventIdentity}</div>
-      <label className="search"><span aria-hidden="true"><UiIcon name="search" /></span><input ref={searchRef} value={query} onChange={(event) => { autoSelectSearch.current = true; if (desktop && !leftRailRef.current?.getClientRects().length) setDesktopDetailsOpen(false); setQuery(event.target.value); setDesktopPanel("explore"); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); }} placeholder="搜尋社團、攤位或作品" aria-label="搜尋社團、攤位或作品" />{!desktop && query && <button className={styles.searchClear} onClick={() => { setQuery(""); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); searchRef.current?.focus(); }} aria-label="清除搜尋"><UiIcon name="close" /></button>}<kbd>⌘ K</kbd></label>
+      <label className="search"><span aria-hidden="true"><UiIcon name="search" /></span><input ref={searchRef} value={query} onChange={(event) => { autoSelectSearch.current = true; if (desktop && !leftRailRef.current?.getClientRects().length) setDesktopDetailsOpen(false); setQuery(event.target.value); setDesktopPanel("explore"); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); }} placeholder={t("search")} aria-label={t("search")} />{!desktop && query && <button className={styles.searchClear} onClick={() => { setQuery(""); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); searchRef.current?.focus(); }} aria-label={t("clearSearch")}><UiIcon name="close" /></button>}<kbd>⌘ K</kbd></label>
       <ReaderViewTabs className={styles.viewSwitch} event={event} view="map" url={readerUrl} />
-      {desktop ? <div className={styles.topbarActions}>{readerTools}{readerLogin}</div> : <><details ref={toolsMenuRef} className={styles.mobileToolsMenu}><summary>工具</summary><div>{readerTools}</div></details>{readerLogin}</>}
+      {desktop ? <div className={styles.topbarActions}>{readerTools}{readerLogin}</div> : <><details ref={toolsMenuRef} className={styles.mobileToolsMenu}><summary>{t("tools")}</summary><div>{readerTools}</div></details>{readerLogin}</>}
     </header>
     <div className={`workspace ${styles.workspace}`} data-details-open={desktop && desktopDetailsOpen && Boolean(selected) || undefined}>
       <aside ref={leftRailRef} className={`filters ${styles.leftRail}`}>
-        <div className={styles.desktopTabs} role="tablist" aria-label="工作區">{(["explore", "plan"] as const).map((panel, index) => <button key={panel} ref={desktopPanel === panel ? desktopTabRef : undefined} id={"desktop-tab-" + panel} role="tab" aria-controls={"desktop-panel-" + panel} aria-selected={desktopPanel === panel} tabIndex={desktopPanel === panel ? 0 : -1} onClick={() => setDesktopPanel(panel)} onKeyDown={(keyEvent) => {
+        <div className={styles.desktopTabs} role="tablist" aria-label={t("workspaceTabs")}>{(["explore", "plan"] as const).map((panel, index) => <button key={panel} ref={desktopPanel === panel ? desktopTabRef : undefined} id={"desktop-tab-" + panel} role="tab" aria-controls={"desktop-panel-" + panel} aria-selected={desktopPanel === panel} tabIndex={desktopPanel === panel ? 0 : -1} onClick={() => setDesktopPanel(panel)} onKeyDown={(keyEvent) => {
           const next = keyEvent.key === "Home" ? "explore" : keyEvent.key === "End" ? "plan" : ["ArrowLeft", "ArrowRight"].includes(keyEvent.key) ? index === 0 ? "plan" : "explore" : null;
           if (!next) return;
           keyEvent.preventDefault(); setDesktopPanel(next); document.getElementById("desktop-tab-" + next)?.focus();
-        }}>{panel === "explore" ? "探索" : "行程 " + dayPlan.length}</button>)}</div>
-        <div id="desktop-panel-explore" className={styles.explorePanel} role="tabpanel" aria-labelledby="desktop-tab-explore" hidden={desktopPanel !== "explore"}><div className={styles.filterStack}><div className="filter-title"><b>篩選攤位</b><button className={clearFiltersClassName} onClick={clearFilters}>全部清除</button></div><fieldset><legend>社團主題</legend><div className="genres">{genres.map((value) => <button key={value} className={genre === value ? "active" : ""} onClick={() => { historyIntent.current = "push"; setGenre(value); }}><i className="dot" style={categoryDotStyle(genres, value)} />{value}<small>{genreCounts.get(value) ?? 0}</small></button>)}</div></fieldset><label className="favorite-only"><input type="checkbox" checked={favoriteOnly} onChange={(event) => { historyIntent.current = "push"; setFavoriteOnly(event.target.checked); }} /><i><UiIcon name="heart" /></i><span><b>只看收藏</b><small>已收藏 {favorites.length} 個社團</small></span></label><AdvancedCircleSearchControls value={advancedSearch} workSuggestions={workTopicSuggestions} onApply={(next) => { historyIntent.current = "push"; setAdvancedSearch(next); }} /></div>{resultsPanel}</div>
+        }}>{panel === "explore" ? t("explore") : t("planTab", { count: dayPlan.length })}</button>)}</div>
+        <div id="desktop-panel-explore" className={styles.explorePanel} role="tabpanel" aria-labelledby="desktop-tab-explore" hidden={desktopPanel !== "explore"}><div className={styles.filterStack}><div className="filter-title"><b>{t("filtersTitle")}</b><button className={clearFiltersClassName} onClick={clearFilters}>{t("clearAll")}</button></div><fieldset><legend>{t("genreLegend")}</legend><div className="genres">{genres.map((value) => <button key={value} className={genre === value ? "active" : ""} onClick={() => { historyIntent.current = "push"; setGenre(value); }}><i className="dot" style={categoryDotStyle(genres, value)} />{value === genres[0] ? allCircleCategoriesLabel(locale) : value}<small>{genreCounts.get(value) ?? 0}</small></button>)}</div></fieldset><label className="favorite-only"><input type="checkbox" checked={favoriteOnly} onChange={(event) => { historyIntent.current = "push"; setFavoriteOnly(event.target.checked); }} /><i><UiIcon name="heart" /></i><span><b>{t("favoriteOnly")}</b><small>{t("favoriteCount", { count: favorites.length })}</small></span></label><AdvancedCircleSearchControls value={advancedSearch} workSuggestions={workTopicSuggestions} onApply={(next) => { historyIntent.current = "push"; setAdvancedSearch(next); }} /></div>{resultsPanel}</div>
         <div ref={planPanelRef} id="desktop-panel-plan" className={styles.planPanel} role="tabpanel" aria-labelledby="desktop-tab-plan" hidden={desktopPanel !== "plan"}>{navigationButton}{planningPanel}</div>
       </aside>
-      <section className="map-region" aria-label="攤位地圖">
+      <section className="map-region" aria-label={t("mapRegion")}>
         <div ref={mapRef} className={`map ${styles.mapCanvas}`} data-details-open={desktop && desktopDetailsOpen && Boolean(selected) || undefined} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerEnd} onPointerCancel={handlePointerEnd} onLostPointerCapture={handlePointerEnd}>
           <div ref={toolsRef} className={styles.mapTools} data-map-tools>{renderMapTools()}</div>{desktop && <div ref={fitToolsRef} className={`${styles.mapTools} ${styles.fitTools}`} inert aria-hidden="true" data-map-tools>{renderMapTools(true)}</div>}
-          {publishedMap ? <div ref={floorRef} className={`floor ${styles.vectorFloor} ${mapGestureActive ? styles.mapGestureActive : ""}`} style={{ width: `${floorWidth}px`, height: `${floorHeight}px`, transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }}><AccessibleEventMapRenderer eventName={event.name} layout={publishedMap.layout} slots={slots} showMedia={shouldShowMapMedia(zoom)} showAreaRegions={!shouldShowMapMedia(zoom)} areaLabels={Object.fromEntries(event.areas.map((area) => [area.id, area.label]))} labelPresentation={desktop ? { screenScale: floorHeight / publishedMap.layout.height * zoom, targetPx: 12 * fontScale, paddingPx: 2 } : undefined} markerPresentation={{ screenScale: floorHeight / publishedMap.layout.height * zoom, fontScale }} locatedMarker={locatedFacility?.scope === mapScopeKey ? locatedFacility.key : null} onFocusCode={setFocusedCode} onSelect={(code) => { const marker = markersByCode.get(code); if (marker) selectRecord(marker.records[0]); }} /></div> : <div className={styles.mapState}><b>{mapLoading ? "正在讀取活動地圖…" : "活動地圖讀取失敗"}</b><span className={mapError ? styles.mapError : ""}>{mapError || "請稍候"}</span>{!mapLoading && <button onClick={() => setMapRetry((value) => value + 1)}>重新讀取地圖</button>}</div>}
+          {publishedMap ? <div ref={floorRef} className={`floor ${styles.vectorFloor} ${mapGestureActive ? styles.mapGestureActive : ""}`} style={{ width: `${floorWidth}px`, height: `${floorHeight}px`, transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }}><AccessibleEventMapRenderer eventName={event.name} layout={publishedMap.layout} slots={slots} showMedia={shouldShowMapMedia(zoom)} showAreaRegions={!shouldShowMapMedia(zoom)} areaLabels={Object.fromEntries(event.areas.map((area) => [area.id, area.label]))} labelPresentation={desktop ? { screenScale: floorHeight / publishedMap.layout.height * zoom, targetPx: 12 * fontScale, paddingPx: 2 } : undefined} markerPresentation={{ screenScale: floorHeight / publishedMap.layout.height * zoom, fontScale }} locatedMarker={locatedFacility?.scope === mapScopeKey ? locatedFacility.key : null} onFocusCode={setFocusedCode} onSelect={(code) => { const marker = markersByCode.get(code); if (marker) selectRecord(marker.records[0]); }} /></div> : <div className={styles.mapState}><b>{mapLoading ? t("mapLoading") : t("mapFailed")}</b><span className={mapError ? styles.mapError : ""}>{mapError ? t("mapRetryHint") : t("mapWait")}</span>{!mapLoading && <button onClick={() => setMapRetry((value) => value + 1)}>{t("mapRetry")}</button>}</div>}
           {selectedMapPoint && selected && <><span className={styles.mobileMapMarker} style={selectedMapPoint} aria-hidden="true" /><div className={styles.mobileMapSelection} style={selectedMapPointStyle}><b>{selected.code}</b><span>{selected.name}</span></div></>}
-          <div ref={controlsRef} className="controls" data-navigation={desktop && navigationMode || undefined} aria-label="地圖縮放控制"><button type="button" onClick={() => stepZoom(.1)} aria-label="放大地圖"><UiIcon name="plus" /></button><span>{Math.round(zoom * 100)}%</span><button type="button" onClick={() => stepZoom(-.1)} aria-label="縮小地圖"><UiIcon name="minus" /></button><button type="button" className={styles.fitButton} onClick={resetMap} aria-label="查看全場"><UiIcon name="locate" />{!desktop && <span className={styles.fitLabel}>查看全場</span>}</button>{facilityDirectory?.entries.length ? <button ref={facilityTriggerRef} type="button" className={styles.facilityTrigger} aria-expanded={facilityListOpen} aria-controls={facilityListOpen ? facilityPanelId : undefined} onClick={toggleFacilityList}>{desktop && <UiIcon name="map-pin" />}設施</button> : null}{desktop && navigationMode && <button className={styles.exitNavigation} onClick={toggleNavigationMode}>退出導航模式</button>}</div>{facilityListOpen && facilityDirectory?.entries.length ? <MapFacilityPanel id={facilityPanelId} entries={facilityDirectory.entries} legend={facilityDirectory.legend} triggerRef={facilityTriggerRef} onClose={closeFacilityList} onLocate={locateFacility} /> : null}<div className="compass"><small>N</small><UiIcon name="north" /></div>
-          {desktop && selected && desktopDetailsOpen && <aside ref={detailsRef} className={styles.rightRail} aria-label="已選社團詳情" onKeyDownCapture={(keyEvent) => { if (keyEvent.key === "Escape" && !showFullDetail) { keyEvent.stopPropagation(); closeDetails(); } }}><span className={styles.selectionAnnouncement} role="status">{selected.code} · {selected.name} 詳情已更新</span><button type="button" className={styles.returnToSearch} onClick={closeDetails}>{desktopPanel === "plan" ? "回行程" : "回搜尋"}</button><div className={styles.detailSlot}>{detailsPanel}</div></aside>}
+          <div ref={controlsRef} className="controls" data-navigation={desktop && navigationMode || undefined} aria-label={t("zoomControls")}><button type="button" onClick={() => stepZoom(.1)} aria-label={t("zoomIn")}><UiIcon name="plus" /></button><span>{Math.round(zoom * 100)}%</span><button type="button" onClick={() => stepZoom(-.1)} aria-label={t("zoomOut")}><UiIcon name="minus" /></button><button type="button" className={styles.fitButton} onClick={resetMap} aria-label={t("fitAll")}><UiIcon name="locate" />{!desktop && <span className={styles.fitLabel}>{t("fitAll")}</span>}</button>{facilityDirectory?.entries.length ? <button ref={facilityTriggerRef} type="button" className={styles.facilityTrigger} aria-expanded={facilityListOpen} aria-controls={facilityListOpen ? facilityPanelId : undefined} onClick={toggleFacilityList}>{desktop && <UiIcon name="map-pin" />}{t("facilities")}</button> : null}{desktop && navigationMode && <button className={styles.exitNavigation} onClick={toggleNavigationMode}>{t("navigationExit")}</button>}</div>{facilityListOpen && facilityDirectory?.entries.length ? <MapFacilityPanel id={facilityPanelId} entries={facilityDirectory.entries} legend={facilityDirectory.legend} triggerRef={facilityTriggerRef} onClose={closeFacilityList} onLocate={locateFacility} /> : null}<div className="compass"><small>N</small><UiIcon name="north" /></div>
+          {desktop && selected && desktopDetailsOpen && <aside ref={detailsRef} className={styles.rightRail} aria-label={t("detailsRail")} onKeyDownCapture={(keyEvent) => { if (keyEvent.key === "Escape" && !showFullDetail) { keyEvent.stopPropagation(); closeDetails(); } }}><span className={styles.selectionAnnouncement} role="status">{t("detailsUpdated", { code: selected.code, name: selected.name })}</span><button type="button" className={styles.returnToSearch} onClick={closeDetails}>{desktopPanel === "plan" ? t("backToPlan") : t("backToSearch")}</button><div className={styles.detailSlot}>{detailsPanel}</div></aside>}
         </div>
       </section>
-      <aside ref={mobileDockRef} className={styles.mobileDock} data-summary={mobileSummary || undefined} data-mobile-sheet-level={mobileSheetLevel} data-dragging={mobileSheetDragging || undefined} aria-label="行動版工作面板" onKeyDownCapture={(keyEvent) => { if (keyEvent.key === "Escape" && !showFullDetail) { keyEvent.stopPropagation(); if (mobileSummary) closeDetails(); else collapseMobilePanel(); } }}>
+      <aside ref={mobileDockRef} className={styles.mobileDock} data-summary={mobileSummary || undefined} data-mobile-sheet-level={mobileSheetLevel} data-dragging={mobileSheetDragging || undefined} aria-label={t("mobileDock")} onKeyDownCapture={(keyEvent) => { if (keyEvent.key === "Escape" && !showFullDetail) { keyEvent.stopPropagation(); if (mobileSummary) closeDetails(); else collapseMobilePanel(); } }}>
         <div className={styles.mobileHalfMeasure} data-half-measure aria-hidden="true" />
           <button type="button" className={styles.mobileSheetHandle} aria-label={mobileSheetActionLabel} aria-expanded={mobileSheetLevel !== "peek"} onKeyDown={(event) => {
             if (event.key === "ArrowUp" || event.key === "ArrowDown") {
@@ -885,39 +902,39 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
         {mobileSummary && selected && <button ref={mobileSummaryRef} className={styles.mobilePeekSummary} hidden={mobileSheetLevel !== "peek"} onClick={() => setMobileSheetLevel("half")}><span>{selected.code} · {selected.name}</span></button>}
         <div className={styles.mobileSheetBody} hidden={mobileSheetLevel === "peek"}>
           <div className={styles.mobilePanelHeader}>
-            {mobileSummary || mobilePanel === "filters" ? <button onClick={backToResults}><UiIcon name="chevron-left" />回結果</button> : <b>{mobilePanel === "plan" ? "今日行程" : `探索 · ${filtered.length} 個結果`}</b>}
-            {mobileSummary ? <button onClick={closeDetails}>取消選取<UiIcon name="close" /></button> : <button onClick={collapseMobilePanel}>收起<UiIcon name="arrow-down" /></button>}
+            {mobileSummary || mobilePanel === "filters" ? <button onClick={backToResults}><UiIcon name="chevron-left" />{t("backToResults")}</button> : <b>{mobilePanel === "plan" ? t("todayPlan") : t("exploreCount", { count: filtered.length })}</b>}
+            {mobileSummary ? <button onClick={closeDetails}>{t("deselect")}<UiIcon name="close" /></button> : <button onClick={collapseMobilePanel}>{t("collapse")}<UiIcon name="arrow-down" /></button>}
           </div>
-          {mobileSummary && selected && mobileSheetLevel !== "full" && <section className={styles.mobileSummary} aria-label="已選社團摘要">
+          {mobileSummary && selected && mobileSheetLevel !== "full" && <section className={styles.mobileSummary} aria-label={t("summaryRegion")}>
             <div className={styles.mobileSummaryTitle}><strong>{selected.code}</strong><h2>{selected.name}</h2></div>
             <p className={styles.mobileSummaryNotice} role="status">{mobileSummaryNotice}</p>
-            <p hidden={Boolean(mobileSummaryNotice)}>{selected.placement.status !== "active" ? "此攤位已異動" : mobileSummaryIntro ? <>{selected.sources.some((source) => source.contentType === "circle") && "由社團填寫 · "}{mobileSummaryIntro}</> : "尚未提供作品與販售介紹"}</p>
+            <p hidden={Boolean(mobileSummaryNotice)}>{selected.placement.status !== "active" ? t("boothChanged") : mobileSummaryIntro ? <>{selected.sources.some((source) => source.contentType === "circle") && t("writtenByCircle")}{mobileSummaryIntro}</> : t("noIntro")}</p>
             <div className={styles.mobileSummaryActions}>
-              <button aria-pressed={Boolean(selectedPlan)} onClick={() => { detailActions.onTogglePlan(); setPlanNotice({ recordId: selected.recordId, text: selectedPlan ? "已移出行程" : "已加入行程" }); }}>{selectedPlan ? "移出行程" : "加入行程"}</button>
-              <button aria-pressed={Boolean(selectedFavorite)} onClick={detailActions.onToggleFavorite}>{selectedFavorite ? "已收藏" : "收藏"}</button>
-              <button onClick={() => { setMobileSheetLevel("full"); requestAnimationFrame(() => mobileDockRef.current?.querySelector<HTMLButtonElement>(`button.${styles.mobileSheetHandle}`)?.focus({ preventScroll: true })); }}>{selected.placement.status === "active" ? "查看完整資訊" : `${placementStatusLabel(selected.placement.status)} · 完整資訊`}</button>
+              <button aria-pressed={Boolean(selectedPlan)} onClick={() => { detailActions.onTogglePlan(); setPlanNotice({ recordId: selected.recordId, text: selectedPlan ? t("planRemoved") : t("planAdded") }); }}>{selectedPlan ? t("removePlan") : t("addPlan")}</button>
+              <button aria-pressed={Boolean(selectedFavorite)} onClick={detailActions.onToggleFavorite}>{selectedFavorite ? t("favorited") : t("favorite")}</button>
+              <button onClick={() => { setMobileSheetLevel("full"); requestAnimationFrame(() => mobileDockRef.current?.querySelector<HTMLButtonElement>(`button.${styles.mobileSheetHandle}`)?.focus({ preventScroll: true })); }}>{selected.placement.status === "active" ? t("fullInfo") : t("statusFullInfo", { status: placementStatusLabel(selected.placement.status, locale) })}</button>
             </div>
           </section>}
           {mobileSummary && mobileSheetLevel === "full" && <div className={styles.mobilePanel} onFocusCapture={handleMobilePanelFocus}><CircleDetails record={selected} sharedRecords={sharedRecords} movedDestination={selectedMovedDestination} favorite={selectedFavorite} plan={selectedPlan} groups={planning.favoriteGroups} embedded onClose={closeDetails} {...detailActions} /></div>}
-          <div ref={mobileResultsRef} className={styles.mobilePanel} hidden={mobilePanel !== "results" && !(mobilePanel === "details" && !selected)} tabIndex={-1} aria-label="探索結果" onFocusCapture={handleMobilePanelFocus}><button className={styles.mobileFilterButton} onClick={() => { rememberMobileResultScroll(); setMobilePanel("filters"); }}>篩選攤位{activeResultFilters.length > 0 ? ` · ${activeResultFilters.length}` : ""}</button>{resultsPanel}</div>
+          <div ref={mobileResultsRef} className={styles.mobilePanel} hidden={mobilePanel !== "results" && !(mobilePanel === "details" && !selected)} tabIndex={-1} aria-label={t("exploreResults")} onFocusCapture={handleMobilePanelFocus}><button className={styles.mobileFilterButton} onClick={() => { rememberMobileResultScroll(); setMobilePanel("filters"); }}>{activeResultFilters.length > 0 ? t("filterCount", { count: activeResultFilters.length }) : t("filtersTitle")}</button>{resultsPanel}</div>
           <div className={styles.mobilePanel} hidden={mobilePanel !== "filters"} onFocusCapture={handleMobilePanelFocus}>{mobileFiltersPanel}</div>
           <div key={day} className={styles.mobilePanel} hidden={mobilePanel !== "plan"} onFocusCapture={handleMobilePanelFocus}>{navigationButton}{planningPanel}</div>
         </div>
-        <div ref={mobileNavRef} className={styles.mobileTabs} role="group" aria-label="行動版工作區">
-          <button className={tabStyles.tab} aria-pressed={mobileWorkspace === "explore"} aria-expanded={!mobileSummary && mobilePanel !== "plan" && mobileSheetLevel !== "peek"} onClick={() => selectMobilePanel("results")}><UiIcon name="search" /><span>探索</span></button>
-          <button className={tabStyles.tab} aria-pressed={mobileWorkspace === "plan"} aria-expanded={mobilePanel === "plan" && mobileSheetLevel !== "peek"} onClick={() => selectMobilePanel("plan")}><UiIcon name="check-square" /><span>行程{dayPlan.length > 0 && <small>{dayPlan.length}</small>}</span></button>
+        <div ref={mobileNavRef} className={styles.mobileTabs} role="group" aria-label={t("mobileWorkspace")}>
+          <button className={tabStyles.tab} aria-pressed={mobileWorkspace === "explore"} aria-expanded={!mobileSummary && mobilePanel !== "plan" && mobileSheetLevel !== "peek"} onClick={() => selectMobilePanel("results")}><UiIcon name="search" /><span>{t("explore")}</span></button>
+          <button className={tabStyles.tab} aria-pressed={mobileWorkspace === "plan"} aria-expanded={mobilePanel === "plan" && mobileSheetLevel !== "peek"} onClick={() => selectMobilePanel("plan")}><UiIcon name="check-square" /><span>{t("plan")}{dayPlan.length > 0 && <small>{dayPlan.length}</small>}</span></button>
           <a className={tabStyles.tab} href={browseUrl.toString()} onClick={(pressed) => {
             if (!ordinaryLinkClick(pressed)) return;
             pressed.preventDefault();
             navigateReader(browseUrl);
-          }}><UiIcon name="book" /><span>逛品書</span></a>
+          }}><UiIcon name="book" /><span>{t("browse")}</span></a>
         </div>
       </aside>
     </div>
-    {favoriteUndo && <div className={styles.undoToast} role="status"><span>已取消收藏「{favoriteUndo.circleName}」</span><button onClick={() => { updatePlanning((current) => restoreFavorite(current, favoriteUndo.favorite)); setFavoriteUndo(null); }}>復原收藏</button><button onClick={() => setFavoriteUndo(null)} aria-label="關閉收藏復原提示"><UiIcon name="close" /></button></div>}
+    {favoriteUndo && <div className={styles.undoToast} role="status"><span>{t("unfavorited", { name: favoriteUndo.circleName })}</span><button onClick={() => { updatePlanning((current) => restoreFavorite(current, favoriteUndo.favorite)); setFavoriteUndo(null); }}>{t("restoreFavorite")}</button><button onClick={() => setFavoriteUndo(null)} aria-label={t("closeUndo")}><UiIcon name="close" /></button></div>}
     {/* Keyed on the scope: a day or venue change (e.g. browser Back) starts a fresh check, and an earlier day's result cannot land on it. */}
     {offlinePrepOpen && <OfflinePrepDialog key={`${eventId} ${String(day)} ${venueAssignment.venueSpaceId}`} event={event} day={day} venueSpaceId={venueAssignment.venueSpaceId} onClose={() => setOfflinePrepOpen(false)} />}
     {shareOpen && <ShareItineraryDialog eventId={eventId} document={planning} onClose={() => setShareOpen(false)} />}
-    {showFullDetail && selected && createPortal(<div className={styles.fullDetailBackdrop} style={{ "--ui-font-scale": textScale === "extra" ? 1.24 : textScale === "large" ? 1.12 : 1 } as CSSProperties} role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) { event.preventDefault(); setShowFullDetail(false); } }}><div ref={fullDetailRef} className={styles.fullDetailDialog} role="dialog" aria-modal="true" aria-label={`${selected.name} 完整詳細資訊`} tabIndex={-1}>{fullDetailsPanel}</div></div>, document.body)}
+    {showFullDetail && selected && createPortal(<div className={styles.fullDetailBackdrop} style={{ "--ui-font-scale": textScale === "extra" ? 1.24 : textScale === "large" ? 1.12 : 1 } as CSSProperties} role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) { event.preventDefault(); setShowFullDetail(false); } }}><div ref={fullDetailRef} className={styles.fullDetailDialog} role="dialog" aria-modal="true" aria-label={t("fullDetail", { name: selected.name })} tabIndex={-1}>{fullDetailsPanel}</div></div>, document.body)}
   </main>;
 }

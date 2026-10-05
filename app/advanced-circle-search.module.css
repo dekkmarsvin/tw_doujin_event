@@ -23,7 +23,7 @@
 .suggestions em { flex:0 0 auto; color:var(--muted); font-size:calc(12px * var(--ui-font-scale,1)); font-style:normal; font-weight:700; white-space:nowrap; }
 .suggestions p { margin:0; padding:10px 8px; color:var(--muted); font-size:calc(12px * var(--ui-font-scale,1)); font-weight:500; line-height:1.5; }
 .segments { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:4px; }
-.segments button,.panel footer button { min-height:32px; padding:5px 7px; border:1px solid var(--line); border-radius:7px; background:#f9faf8; color:var(--muted); font-size:calc(12px * var(--ui-font-scale,1)); cursor:pointer; }
+.segments button,.panel footer button { min-height:32px; padding:5px 7px; border:1px solid var(--line); border-radius:7px; background:#f9faf8; color:var(--muted); font-size:calc(12px * var(--ui-font-scale,1)); overflow-wrap:anywhere; cursor:pointer; }
 .segments .active { border-color:var(--ink); background:var(--ink); color:#f9faf8; font-weight:800; }
 .panel footer { display:grid; grid-template-columns:1fr 1.4fr; gap:6px; padding-top:2px; }
 .panel footer .apply { border-color:var(--ink); background:var(--ink); color:#f9faf8; font-weight:800; }

@@ -8,6 +8,7 @@ const vite = await createServer({ configFile: false, root: process.cwd(), server
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { CircleDetails, CircleMediaGallery, DayItinerary, SearchResults } = await environment.runner.import("/app/event-workspace-panels.tsx");
+const { LocaleProvider } = await environment.runner.import("/app/i18n/locale-context.tsx");
 after(() => vite.close());
 
 const source = {
@@ -186,4 +187,21 @@ test("an itinerary entry keeps its plan state and still reads as retired", () =>
   }));
 
   assert.match(markup, /待前往 · 已取消參展/);
+});
+
+test("the shared circle details follow the interface language and leave the circle's own words alone", () => {
+  const authored = {
+    ...movedRecord,
+    circle: { ...movedRecord.circle, creatorTypes: ["繪師", "自創類型"], ageRatings: ["R18"], workTypes: ["女性向"], externalLinks: [{ kind: "catalog", provider: "官方網站", url: "https://circle.example/" }] },
+  };
+  const markup = renderToStaticMarkup(React.createElement(LocaleProvider, { initial: "en" }, React.createElement(CircleDetails, {
+    record: authored, sharedRecords: [authored], movedDestination: destinationRecord, favorite: null, plan: null, groups: [], embedded: true, ...callbacks,
+  })));
+
+  assert.match(markup, /原創 · Illustrator, 自創類型 · 作者/, "known options are translated, a circle's own wording is kept");
+  assert.match(markup, /#Female-oriented/);
+  assert.match(markup, /See new booth C09/);
+  assert.match(markup, /href="\/circle\?event=ff47&amp;circle=c-B03&amp;lang=en"/, "the claim link keeps the language");
+  assert.match(markup, /移動社團|完整販售資訊|官方網站/);
+  assert.doesNotMatch(markup, /已移動攤位|看新攤位|資料來源|認領/);
 });

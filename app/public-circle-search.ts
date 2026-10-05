@@ -1,3 +1,6 @@
+import type { Locale } from "./i18n/locale";
+import { defineMessages, translate } from "./i18n/messages";
+import { circleOptionLabel } from "./circle-overrides";
 import { circleSearchText, type CircleViewRecord } from "./circle-records";
 import { ageRatingFilterLabel, matchesAdvancedCircleSearch, normalizeWorkTopics, type AdvancedCircleSearch } from "./circle-search";
 import { venueAssignmentForVenueSpace, type EventDefinition } from "./event-catalog";
@@ -19,18 +22,25 @@ export function matchesPublicSearch(record: CircleViewRecord, event: EventDefini
     && (!needle || circleSearchText(record).includes(needle));
 }
 
-export function describePublicSearchFilters(event: EventDefinition, search: PublicSearch): PublicFilterDescriptor[] {
+const FILTER_PREFIX = defineMessages({
+  "zh-Hant": { all: "同時包含：", work: "作品：", creator: "創作者：", exclude: "排除：" },
+  en: { all: "All of: ", work: "Work: ", creator: "Creator: ", exclude: "Exclude: " },
+  ja: { all: "すべて含む：", work: "作品：", creator: "創作者：", exclude: "除外：" },
+});
+
+export function describePublicSearchFilters(event: EventDefinition, search: PublicSearch, locale: Locale = "zh-Hant"): PublicFilterDescriptor[] {
+  const prefix = (key: "all" | "work" | "creator" | "exclude") => translate(FILTER_PREFIX, locale, key);
   const { genre, advancedSearch } = search;
   const includedTopics = normalizeWorkTopics(advancedSearch.workTopics);
   // Under `all` every listed topic has to hold, so each chip reads as one more
   // requirement rather than one more alternative.
-  const topicPrefix = includedTopics.length > 1 && advancedSearch.workTopicMode === "all" ? "同時包含：" : "作品：";
+  const topicPrefix = includedTopics.length > 1 && advancedSearch.workTopicMode === "all" ? prefix("all") : prefix("work");
   return [
     ...(genre !== event.genres[0] ? [{ id: "genre", kind: "genre" as const, label: genre }] : []),
-    ...(advancedSearch.creatorType !== "ALL" ? [{ id: "creator", kind: "creator" as const, label: `創作者：${advancedSearch.creatorType}` }] : []),
+    ...(advancedSearch.creatorType !== "ALL" ? [{ id: "creator", kind: "creator" as const, label: `${prefix("creator")}${circleOptionLabel(advancedSearch.creatorType, locale)}` }] : []),
     ...includedTopics.map((topic) => ({ id: `work:${topic}`, kind: "work" as const, label: `${topicPrefix}${topic}`, value: topic })),
-    ...normalizeWorkTopics(advancedSearch.excludedWorkTopics).map((topic) => ({ id: `work-exclude:${topic}`, kind: "work-exclude" as const, label: `排除：${topic}`, value: topic })),
-    ...(advancedSearch.workType !== "ALL" ? [{ id: "work-type", kind: "work-type" as const, label: advancedSearch.workType }] : []),
-    ...(advancedSearch.adultContent !== "ALL" ? [{ id: "adult", kind: "adult" as const, label: ageRatingFilterLabel(advancedSearch.adultContent) }] : []),
+    ...normalizeWorkTopics(advancedSearch.excludedWorkTopics).map((topic) => ({ id: `work-exclude:${topic}`, kind: "work-exclude" as const, label: `${prefix("exclude")}${topic}`, value: topic })),
+    ...(advancedSearch.workType !== "ALL" ? [{ id: "work-type", kind: "work-type" as const, label: circleOptionLabel(advancedSearch.workType, locale) }] : []),
+    ...(advancedSearch.adultContent !== "ALL" ? [{ id: "adult", kind: "adult" as const, label: ageRatingFilterLabel(advancedSearch.adultContent, locale) }] : []),
   ];
 }

@@ -1,13 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocale } from "./i18n/locale-context";
 import {
   EMPTY_PLANNING_DOCUMENT,
   PLANNING_CHANGED_EVENT,
   PLANNING_STORAGE_KEY,
   inspectPlanningStorage,
+  planningStorageMessage,
   savePlanningDocument,
   type PlanningDocument,
+  type PlanningStorageIssue,
 } from "./planning-store";
 
 /**
@@ -19,7 +22,9 @@ import {
 export function usePlanning(eventId: string, catalogSettled: boolean) {
   const [document, setDocument] = useState<PlanningDocument>(EMPTY_PLANNING_DOCUMENT);
   const [ready, setReady] = useState(false);
-  const [storageError, setStorageError] = useState("");
+  // Kept as an issue, not a sentence, so a language switch re-renders it without reloading storage.
+  const [storageIssue, setStorageIssue] = useState<PlanningStorageIssue | null>(null);
+  const { locale } = useLocale();
   const [unsupportedRaw, setUnsupportedRaw] = useState<string | null>(null);
   const writable = useRef(true);
 
@@ -30,7 +35,7 @@ export function usePlanning(eventId: string, catalogSettled: boolean) {
       const snapshot = inspectPlanningStorage(localStorage, eventId);
       writable.current = snapshot.writable;
       setDocument(snapshot.document);
-      setStorageError(snapshot.error);
+      setStorageIssue(snapshot.issue);
       setUnsupportedRaw(snapshot.writable ? null : snapshot.raw);
     };
     const onStorage = (event: StorageEvent) => { if (event.key === PLANNING_STORAGE_KEY) reload(); };
@@ -38,9 +43,9 @@ export function usePlanning(eventId: string, catalogSettled: boolean) {
       if (cancelled) return;
       const initial = inspectPlanningStorage(localStorage, eventId);
       writable.current = initial.writable;
-      setStorageError(initial.error);
+      setStorageIssue(initial.issue);
       setUnsupportedRaw(initial.writable ? null : initial.raw);
-      try { setDocument(initial.writable ? savePlanningDocument(localStorage, initial.document) : initial.document); } catch { setDocument(initial.document); setStorageError("瀏覽器無法寫入規劃資料；目前內容只存在這個分頁。請先匯出備份。"); }
+      try { setDocument(initial.writable ? savePlanningDocument(localStorage, initial.document) : initial.document); } catch { setDocument(initial.document); setStorageIssue("write-blocked"); }
       setReady(true);
     });
     window.addEventListener("storage", onStorage);
@@ -61,7 +66,7 @@ export function usePlanning(eventId: string, catalogSettled: boolean) {
         queueMicrotask(() => window.dispatchEvent(new CustomEvent(PLANNING_CHANGED_EVENT)));
         return saved;
       } catch {
-        setStorageError("瀏覽器無法儲存這次變更；目前內容只存在這個分頁。請先匯出備份。");
+        setStorageIssue("save-failed");
         return next;
       }
     });
@@ -72,16 +77,17 @@ export function usePlanning(eventId: string, catalogSettled: boolean) {
     try {
       const saved = savePlanningDocument(localStorage, next);
       writable.current = true;
-      setStorageError("");
+      setStorageIssue(null);
       setUnsupportedRaw(null);
       setDocument(saved);
       window.dispatchEvent(new CustomEvent(PLANNING_CHANGED_EVENT));
       return true;
     } catch {
-      setStorageError("瀏覽器無法儲存這次變更；目前內容只存在這個分頁。請先匯出備份。");
+      setStorageIssue("save-failed");
       return false;
     }
   }, []);
 
+  const storageError = storageIssue ? planningStorageMessage(storageIssue, locale) : "";
   return { document, ready, update, replace, storageError, unsupportedRaw };
 }

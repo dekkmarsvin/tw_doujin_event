@@ -4,7 +4,27 @@ import { placementStatusLabel, representativeMedia, type CircleViewRecord } from
 import { buildWorkTopicSuggestions, describeCircleMatch, type AdvancedCircleSearch, type CircleMatchReason } from "./circle-search";
 import type { PlanningDisplayFilters } from "./display-filter-controls";
 import { venueAssignmentForVenueSpace, type EventDefinition } from "./event-catalog";
+import type { Locale } from "./i18n/locale";
+import { defineMessages, translate } from "./i18n/messages";
 import type { PlanningDocument } from "./planning-store";
+
+const MESSAGES = defineMessages({
+  "zh-Hant": {
+    favorited: "已收藏", next: "下一站", visited: "已走訪", planned: "待前往", notPlanned: "未加入行程",
+    favoriteOnly: "只看收藏", ungroupedFavorites: "未分組收藏", favoriteGroup: "收藏群組",
+    nameSeparator: "、", partSeparator: "，",
+  },
+  en: {
+    favorited: "Favorite", next: "Next stop", visited: "Visited", planned: "To visit", notPlanned: "Not in plan",
+    favoriteOnly: "Favorites only", ungroupedFavorites: "Ungrouped favorites", favoriteGroup: "Favorite group",
+    nameSeparator: " / ", partSeparator: ", ",
+  },
+  ja: {
+    favorited: "お気に入り", next: "次の行き先", visited: "訪問済み", planned: "未訪問", notPlanned: "プラン外",
+    favoriteOnly: "お気に入りのみ", ungroupedFavorites: "未分類のお気に入り", favoriteGroup: "お気に入りグループ",
+    nameSeparator: "・", partSeparator: "、",
+  },
+});
 
 type WorkspaceFilterKind = "genre" | "favorite" | "creator" | "work" | "work-exclude" | "work-type" | "adult" | "favorite-group" | "visit";
 
@@ -32,6 +52,8 @@ type ProjectionInput = {
   planningDisplay: PlanningDisplayFilters;
   navigationMode: boolean;
   selectedRecordId: string | null;
+  /** The interface language of the map labels and filter chips; data stays as written. */
+  locale?: Locale;
 };
 
 /**
@@ -45,7 +67,8 @@ function movedDestination(record: CircleViewRecord, eventRecords: CircleViewReco
 }
 
 export function projectEventWorkspace(input: ProjectionInput) {
-  const { event, records, recordsById, recordsByCircleId, planning, day, venueSpaceId, genre, query, favoriteOnly, advancedSearch, planningDisplay, navigationMode, selectedRecordId } = input;
+  const { event, records, recordsById, recordsByCircleId, planning, day, venueSpaceId, genre, query, favoriteOnly, advancedSearch, planningDisplay, navigationMode, selectedRecordId, locale = "zh-Hant" } = input;
+  const t = (key: keyof (typeof MESSAGES)["zh-Hant"]) => translate(MESSAGES, locale, key);
   // The space comes from the reader's state rather than from the area, because
   // "all areas" names no space of its own -- and because the map on screen is
   // one day in one venue space, so a booth outside it has no coordinates here.
@@ -114,7 +137,7 @@ export function projectEventWorkspace(input: ProjectionInput) {
   // Only the visible result set is explained; the reasons are read per card and
   // recomputing them there would repeat the alias expansion on every render.
   const matchReasonsByRecordId = new Map<string, CircleMatchReason[]>(
-    filtered.map((record) => [record.recordId, describeCircleMatch(record, { query, search: advancedSearch })] as const),
+    filtered.map((record) => [record.recordId, describeCircleMatch(record, { query, search: advancedSearch }, locale)] as const),
   );
   const resultCircleCount = new Set(filtered.map((record) => record.circle.id)).size;
   const genreCircleIds = new Map(event.genres.map((value) => [value, new Set<string>()]));
@@ -141,19 +164,20 @@ export function projectEventWorkspace(input: ProjectionInput) {
       : undefined;
     // Only a wholly retired booth gets slot-level wording: on a booth someone
     // else took over, one label for two circles would say nothing usable.
-    const retiredLabels = retired ? [placementStatusLabel(retired)] : [];
+    const retiredLabels = retired ? [placementStatusLabel(retired, locale)] : [];
     const statusLabels = [
       ...retiredLabels,
-      favorite ? "已收藏" : "",
-      planEntries.some((entry) => entry.status === "next") ? "下一站" : "",
-      planEntries.some((entry) => entry.status === "visited") ? "已走訪" : "",
-      planEntries.some((entry) => entry.status === "planned") ? "待前往" : "",
+      favorite ? t("favorited") : "",
+      planEntries.some((entry) => entry.status === "next") ? t("next") : "",
+      planEntries.some((entry) => entry.status === "visited") ? t("visited") : "",
+      planEntries.some((entry) => entry.status === "planned") ? t("planned") : "",
     ].filter(Boolean);
+    const names = marker.records.map((record) => record.name).join(t("nameSeparator"));
     return [marker.code, {
       tone: representative.tone,
-      label: [marker.records.map((record) => record.name).join("、"), ...retiredLabels].join("，"),
-      ariaLabel: [marker.code, marker.records.map((record) => record.name).join("、"), ...statusLabels,
-        ...new Set(marker.records.map((record) => record.genre).filter((value) => value !== event.genres[0]))].join("，"),
+      label: [names, ...retiredLabels].join(t("partSeparator")),
+      ariaLabel: [marker.code, names, ...statusLabels,
+        ...new Set(marker.records.map((record) => record.genre).filter((value) => value !== event.genres[0]))].join(t("partSeparator")),
       selected: selected?.day === day && selected.code === marker.code,
       favorite,
       planned: planEntries.length > 0,
@@ -163,13 +187,13 @@ export function projectEventWorkspace(input: ProjectionInput) {
       thumbnailUrl: representativeMedia(representative.circle.media)?.url,
     }];
   }));
-  const publicFilters = describePublicSearchFilters(event, { genre, query, advancedSearch });
+  const publicFilters = describePublicSearchFilters(event, { genre, query, advancedSearch }, locale);
   const filters: WorkspaceFilterDescriptor[] = [
     ...publicFilters.filter((filter) => filter.kind === "genre"),
-    ...(favoriteOnly ? [{ id: "favorite", kind: "favorite" as const, label: "只看收藏" }] : []),
+    ...(favoriteOnly ? [{ id: "favorite", kind: "favorite" as const, label: t("favoriteOnly") }] : []),
     ...publicFilters.filter((filter) => filter.kind !== "genre"),
-    ...(planningDisplay.favoriteGroupId !== "ALL" ? [{ id: "favorite-group", kind: "favorite-group" as const, label: planningDisplay.favoriteGroupId === "UNGROUPED" ? "未分組收藏" : groups.get(planningDisplay.favoriteGroupId) ?? "收藏群組" }] : []),
-    ...(planningDisplay.visitStatus !== "ALL" ? [{ id: "visit", kind: "visit" as const, label: ({ planned: "待前往", next: "下一站", visited: "已走訪", "not-planned": "未加入行程" } as const)[planningDisplay.visitStatus] }] : []),
+    ...(planningDisplay.favoriteGroupId !== "ALL" ? [{ id: "favorite-group", kind: "favorite-group" as const, label: planningDisplay.favoriteGroupId === "UNGROUPED" ? t("ungroupedFavorites") : groups.get(planningDisplay.favoriteGroupId) ?? t("favoriteGroup") }] : []),
+    ...(planningDisplay.visitStatus !== "ALL" ? [{ id: "visit", kind: "visit" as const, label: t(({ planned: "planned", next: "next", visited: "visited", "not-planned": "notPlanned" } as const)[planningDisplay.visitStatus]) }] : []),
   ];
   return {
     favorites, favoriteIds, favoriteGroupLabels, dayPlan, plansById, dayRecordsByCircleId,

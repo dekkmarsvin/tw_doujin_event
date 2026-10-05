@@ -6,9 +6,64 @@ import styles from "./event-map-renderer.module.css";
 import { MAP_MEDIA_LABEL_BAND, mapLabelFontSize, type MapLabelPresentation } from "./map-label-presentation";
 import { DEFAULT_MAP_MARKER_PRESENTATION, layoutMapMarkerLabels, mapMarkerLabelKey, type MapMarkerLabel, type MapMarkerPresentation } from "./map-marker-presentation";
 import { MapAccessBadge, MapMarkerText, MapServiceBadge, MapSpaceMarkDrawing } from "./map-marker-icons";
-import { MAP_FACILITY_TYPE_LABELS } from "./map-facility-directory";
+import { mapFacilityEntryText, mapFacilityTypeLabel } from "./map-facility-directory";
+import { useLocale, useMessages } from "./i18n/locale-context";
+import { defineMessages } from "./i18n/messages";
 import { MapNoteDrawing, MapPathDrawing } from "./map-annotation-drawing";
 import { MapShapeDrawing } from "./map-shape-drawing";
+
+/** Outside the Reader (map review and contribution) there is no provider, so
+ * these read Traditional Chinese as before. */
+const MESSAGES = defineMessages({
+  "zh-Hant": {
+    unassigned: "{code} 未配置社團",
+    map: "{event} 社團攤位配置圖",
+    mapInstructions: "{event} 社團攤位配置圖，使用方向鍵移動焦點，Enter 或空白鍵開啟攤位",
+    areaRegions: "展區範圍",
+    landmarks: "非一般攤位區",
+    spaceMarks: "保留／取消格",
+    reserved: MAP_SPACE_MARK_LABELS.reserved,
+    cancelled: MAP_SPACE_MARK_LABELS.cancelled,
+    annotations: "地圖註記",
+    rows: "一般攤位排",
+    access: "出入口",
+    unnamed: "未命名",
+    accessPoint: "{name}，{type}",
+    services: "服務設施",
+  },
+  en: {
+    unassigned: "{code} no circle assigned",
+    map: "{event} booth map",
+    mapInstructions: "{event} booth map. Use the arrow keys to move between booths; press Enter or Space to open one.",
+    areaRegions: "Area boundaries",
+    landmarks: "Non-booth areas",
+    spaceMarks: "Reserved and cancelled tables",
+    reserved: "Reserved empty table",
+    cancelled: "Cancelled booth",
+    annotations: "Map notes",
+    rows: "Booth rows",
+    access: "Entrances & exits",
+    unnamed: "Unnamed",
+    accessPoint: "{name}, {type}",
+    services: "Services",
+  },
+  ja: {
+    unassigned: "{code} サークル未配置",
+    map: "{event} 配置マップ",
+    mapInstructions: "{event} 配置マップ。矢印キーでスペースを移動し、Enter キーまたはスペースキーで開きます。",
+    areaRegions: "エリアの範囲",
+    landmarks: "一般スペース以外のエリア",
+    spaceMarks: "予備・キャンセルの机",
+    reserved: "予備の空き机",
+    cancelled: "キャンセルされたスペース",
+    annotations: "マップの注記",
+    rows: "スペースの列",
+    access: "出入口",
+    unnamed: "名称なし",
+    accessPoint: "{name}、{type}",
+    services: "サービス施設",
+  },
+});
 
 export type MapSlotView = {
   tone?: "coral" | "mint" | "blue" | "amber" | "lilac";
@@ -42,6 +97,8 @@ type AccessibleEventMapRendererProps = {
 
 export default function AccessibleEventMapRenderer({ eventName, layout, slots, showMedia = false, showAreaRegions = true, areaLabels = {}, labelPresentation, markerPresentation = DEFAULT_MAP_MARKER_PRESENTATION, locatedMarker = null, onFocusCode, onSelect }: AccessibleEventMapRendererProps) {
   const clipPrefix = useId().replaceAll(":", "");
+  const { locale } = useLocale();
+  const t = useMessages(MESSAGES);
   const interactiveSlots = useMemo(() => layout.rows.flatMap((row) => row.slots).filter((slot) => !!slots[slot.code]), [layout.rows, slots]);
   const selectedCode = interactiveSlots.find((slot) => slots[slot.code]?.selected)?.code;
   const [keyboardCode, setKeyboardCode] = useState(selectedCode ?? interactiveSlots[0]?.code ?? "");
@@ -125,25 +182,25 @@ export default function AccessibleEventMapRenderer({ eventName, layout, slots, s
       {view?.planned && !view.next && <circle fill="#d59b37" stroke="#fff" strokeWidth=".6" cx={slot.rect.x + 2.8} cy={slot.rect.y + 2.8} r="1.8" />}
       {view?.visited && <path fill="none" stroke="#4f6559" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" d={`M ${slot.rect.x + 1.5} ${slot.rect.y + slot.rect.height / 2} L ${slot.rect.x + slot.rect.width / 2 - 1} ${slot.rect.y + slot.rect.height - 2} L ${slot.rect.x + slot.rect.width - 1.5} ${slot.rect.y + 2}`} />}
       {view?.next && <path className={styles.nextMark} d={`M ${slot.rect.x + 2} ${slot.rect.y + slot.rect.height - 3} L ${slot.rect.x + slot.rect.width - 3} ${slot.rect.y + 3} M ${slot.rect.x + slot.rect.width - 7} ${slot.rect.y + 3} H ${slot.rect.x + slot.rect.width - 3} V ${slot.rect.y + 7}`} />}
-      <title>{view?.label ?? `${slot.code} 未配置社團`}</title>
+      <title>{view?.label ?? t("unassigned", { code: slot.code })}</title>
     </g>;
   };
 
   const selectedSlots = layout.rows.flatMap((row) => row.slots).filter((slot) => slots[slot.code]?.selected);
 
-  return <svg className={styles.map} viewBox={`0 0 ${layout.width} ${layout.height}`} role="group" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) { setFocusWithin(false); onFocusCode?.(null); } }} aria-label={`${eventName} 社團攤位配置圖，使用方向鍵移動焦點，Enter 或空白鍵開啟攤位`}>
-    <title>{`${eventName} 社團攤位配置圖`}</title>
+  return <svg className={styles.map} viewBox={`0 0 ${layout.width} ${layout.height}`} role="group" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) { setFocusWithin(false); onFocusCode?.(null); } }} aria-label={t("mapInstructions", { event: eventName })}>
+    <title>{t("map", { event: eventName })}</title>
     {(showMedia || labelPresentation) && <defs>{layout.rows.flatMap((row) => row.slots).flatMap((slot) => labelPresentation || slots[slot.code]?.thumbnailUrl ? [<clipPath key={slot.code} id={`${clipPrefix}-${slot.code}`}><rect x={slot.rect.x} y={slot.rect.y} width={slot.rect.width} height={slot.rect.height} rx={Math.min(2.5, slot.rect.height * .16)} /></clipPath>] : [])}</defs>}
     <rect className={styles.paper} x="0" y="0" width={layout.width} height={layout.height} />
     <MapShapeDrawing className={styles.floor} shape={layout.floor} />
-    {showAreaRegions && !!layout.areaRegions?.length && <g className={styles.areaRegions} aria-label="展區範圍">{layout.areaRegions.map((region) => {
+    {showAreaRegions && !!layout.areaRegions?.length && <g className={styles.areaRegions} aria-label={t("areaRegions")}>{layout.areaRegions.map((region) => {
       const name = Object.hasOwn(areaLabels, region.areaId) ? areaLabels[region.areaId] : region.areaId;
       return <polygon key={region.id} role="img" aria-label={`${region.areaId} · ${name}`} points={region.points.map((point) => `${point.x},${point.y}`).join(" ")} fill={MAP_AREA_COLORS[region.color]} />;
     })}</g>}
-    <g aria-label="非一般攤位區">{layout.landmarks.map((landmark) => <g key={landmark.id} role={landmark.label ? "img" : undefined} aria-label={landmark.label || undefined}><MapShapeDrawing className={styles.landmark} shape={landmark.rect} /></g>)}</g>
-    {!!layout.spaceMarks?.length && <g className={styles.spaceMarks} aria-label="保留／取消格">{layout.spaceMarks.map(mark => <g key={mark.id} data-space-mark={mark.id} role="img" aria-label={MAP_SPACE_MARK_LABELS[mark.kind]}><MapSpaceMarkDrawing mark={mark} presentation={markerPresentation} /><title>{MAP_SPACE_MARK_LABELS[mark.kind]}</title></g>)}</g>}
-    {(!!layout.notes?.length || !!layout.paths?.length) && <g aria-label="地圖註記" pointerEvents="none">{layout.paths?.map(path => <MapPathDrawing key={path.id} path={path} />)}{layout.notes?.map(note => <MapNoteDrawing key={note.id} note={note} presentation={markerPresentation} />)}</g>}
-    <g aria-label="一般攤位排">{layout.rows.map((row) => <g key={row.label} data-row={row.label} data-orientation={row.orientation}>
+    <g aria-label={t("landmarks")}>{layout.landmarks.map((landmark) => <g key={landmark.id} role={landmark.label ? "img" : undefined} aria-label={landmark.label || undefined}><MapShapeDrawing className={styles.landmark} shape={landmark.rect} /></g>)}</g>
+    {!!layout.spaceMarks?.length && <g className={styles.spaceMarks} aria-label={t("spaceMarks")}>{layout.spaceMarks.map(mark => <g key={mark.id} data-space-mark={mark.id} role="img" aria-label={t(mark.kind)}><MapSpaceMarkDrawing mark={mark} presentation={markerPresentation} /><title>{t(mark.kind)}</title></g>)}</g>}
+    {(!!layout.notes?.length || !!layout.paths?.length) && <g aria-label={t("annotations")} pointerEvents="none">{layout.paths?.map(path => <MapPathDrawing key={path.id} path={path} />)}{layout.notes?.map(note => <MapNoteDrawing key={note.id} note={note} presentation={markerPresentation} />)}</g>}
+    <g aria-label={t("rows")}>{layout.rows.map((row) => <g key={row.label} data-row={row.label} data-orientation={row.orientation}>
       {row.slots.filter((slot) => !slots[slot.code]?.selected).map(renderSlot)}
     </g>)}<g data-layer="selected-slots">{selectedSlots.map(renderSlot)}</g></g>
     {/* Unnamed shapes with nothing to select: a label on a role-less group is not read, so the group is hidden instead. */}
@@ -167,21 +224,20 @@ export default function AccessibleEventMapRenderer({ eventName, layout, slots, s
         return label && <g key={row.label} data-marker={mapMarkerLabelKey("row", row.label)} transform={screenGroup(label.x, label.y)}>{markerText(label, styles.rowLabel)}</g>;
       })}
     </g>
-    <g className={styles.markerLayer} aria-label="出入口">{layout.accessPoints.map((point) => {
+    <g className={styles.markerLayer} aria-label={t("access")}>{layout.accessPoints.map((point) => {
       const key = mapMarkerLabelKey("access", point.id);
       const label = markerLabels.get(key);
-      return <g key={point.id} data-marker={key} className={point.kind === "exit" ? styles.exit : point.kind === "both" ? styles.bothWays : styles.entrance} role="img" aria-label={`${point.label || "未命名"}，${MAP_FACILITY_TYPE_LABELS[point.kind]}`} transform={screenGroup(point.x, point.y)}>
+      return <g key={point.id} data-marker={key} className={point.kind === "exit" ? styles.exit : point.kind === "both" ? styles.bothWays : styles.entrance} role="img" aria-label={t("accessPoint", { name: point.label || t("unnamed"), type: mapFacilityTypeLabel(point.kind, locale) })} transform={screenGroup(point.x, point.y)}>
         {locatedMarker === key && <circle className={styles.locatedRing} r={17} />}
         <MapAccessBadge kind={point.kind} direction={point.direction} />
         {label && markerText(label, styles.accessLabel)}
       </g>;
     })}</g>
-    {layout.servicePoints?.length ? <g className={styles.markerLayer} aria-label="服務設施">{layout.servicePoints.map((point) => {
+    {layout.servicePoints?.length ? <g className={styles.markerLayer} aria-label={t("services")}>{layout.servicePoints.map((point) => {
       const key = mapMarkerLabelKey("service", point.id);
       const label = markerLabels.get(key);
-      const type = MAP_FACILITY_TYPE_LABELS[point.kind];
       const name = point.label?.trim();
-      return <g key={point.id} data-marker={key} className={styles.service} role="img" aria-label={name && !name.includes(type) ? `${name}，${type}` : name || type} transform={screenGroup(point.x, point.y)}>
+      return <g key={point.id} data-marker={key} className={styles.service} role="img" aria-label={mapFacilityEntryText({ kind: point.kind, name: name || null }, locale).ariaLabel} transform={screenGroup(point.x, point.y)}>
         {locatedMarker === key && <circle className={styles.locatedRing} r={17} />}
         <MapServiceBadge kind={point.kind} />
         {label && markerText(label, styles.serviceLabel)}

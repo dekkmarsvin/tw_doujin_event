@@ -1,3 +1,6 @@
+import type { Locale } from "./i18n/locale";
+import { defineMessages, translate } from "./i18n/messages";
+
 export const PLANNING_SCHEMA_VERSION = 3 as const;
 export const PLANNING_STORAGE_KEY = "event-map-planning-v1";
 export const LEGACY_FAVORITES_KEY = "event-map-favorites";
@@ -46,11 +49,41 @@ export const EMPTY_PLANNING_DOCUMENT: PlanningDocument = {
   visitPlans: [],
 };
 
+/** Why this browser's planning data is protected or not saved. */
+export type PlanningStorageIssue = "incompatible" | "unparseable" | "write-blocked" | "save-failed";
+
+const STORAGE_MESSAGES = defineMessages<PlanningStorageIssue>({
+  "zh-Hant": {
+    incompatible: "偵測到不相容的規劃資料版本；原始資料已保留，尚未覆寫。",
+    unparseable: "規劃資料無法解析；原始資料已保留，尚未覆寫。",
+    "write-blocked": "瀏覽器無法寫入規劃資料；目前內容只存在這個分頁。請先匯出備份。",
+    "save-failed": "瀏覽器無法儲存這次變更；目前內容只存在這個分頁。請先匯出備份。",
+  },
+  en: {
+    incompatible: "Your saved planning data is from an incompatible version. The original data is kept and has not been overwritten.",
+    unparseable: "Your saved planning data could not be read. The original data is kept and has not been overwritten.",
+    "write-blocked": "This browser cannot save planning data. Your changes exist only in this tab, so export a backup first.",
+    "save-failed": "This browser could not save the change. It exists only in this tab, so export a backup first.",
+  },
+  ja: {
+    incompatible: "互換性のないバージョンの保存データが見つかりました。元のデータは上書きせずに保持しています。",
+    unparseable: "保存データを読み取れません。元のデータは上書きせずに保持しています。",
+    "write-blocked": "このブラウザにデータを保存できません。現在の内容はこのタブにしかないため、先にバックアップを書き出してください。",
+    "save-failed": "このブラウザに変更を保存できませんでした。現在の内容はこのタブにしかないため、先にバックアップを書き出してください。",
+  },
+});
+
+export function planningStorageMessage(issue: PlanningStorageIssue, locale: Locale = "zh-Hant"): string {
+  return translate(STORAGE_MESSAGES, locale, issue);
+}
+
 type PlanningLoadSnapshot = {
   document: PlanningDocument;
   writable: boolean;
   raw: string | null;
+  /** Traditional Chinese text of `issue`; components translate `issue` instead. */
   error: string;
+  issue: PlanningStorageIssue | null;
 };
 
 const isObject = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -154,14 +187,14 @@ export function inspectPlanningStorage(storage: Pick<Storage, "getItem">, eventI
     try {
       const parsed = JSON.parse(saved);
       if (!isObject(parsed) || parsed.schemaVersion !== PLANNING_SCHEMA_VERSION) {
-        return { document: EMPTY_PLANNING_DOCUMENT, writable: false, raw: saved, error: "偵測到不相容的規劃資料版本；原始資料已保留，尚未覆寫。" };
+        return { document: EMPTY_PLANNING_DOCUMENT, writable: false, raw: saved, error: planningStorageMessage("incompatible"), issue: "incompatible" };
       }
-      return { document: parsePlanningDocument(parsed), writable: true, raw: saved, error: "" };
+      return { document: parsePlanningDocument(parsed), writable: true, raw: saved, error: "", issue: null };
     } catch {
-      return { document: EMPTY_PLANNING_DOCUMENT, writable: false, raw: saved, error: "規劃資料無法解析；原始資料已保留，尚未覆寫。" };
+      return { document: EMPTY_PLANNING_DOCUMENT, writable: false, raw: saved, error: planningStorageMessage("unparseable"), issue: "unparseable" };
     }
   }
-  return { document: readPreSchemaFavorites(storage, eventId), writable: true, raw: null, error: "" };
+  return { document: readPreSchemaFavorites(storage, eventId), writable: true, raw: null, error: "", issue: null };
 }
 
 export function savePlanningDocument(storage: Pick<Storage, "setItem" | "removeItem">, document: PlanningDocument) {

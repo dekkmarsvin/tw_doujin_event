@@ -319,6 +319,12 @@ test("invalid-item reasons identify the collection and one-based item index, cap
   assert.match(result.errors[4], /收藏.*6/);
 });
 
+test("rejection reasons are kept as issues that read in every interface language", () => {
+  const result = previewBackup({ ...sample(), favorites: [favorite("sample", "valid"), null] });
+  assert.deepEqual(result.issues.map((issue) => transfer.backupIssueMessage(issue, "zh-Hant")), result.errors);
+  for (const locale of ["en", "ja"]) assert.doesNotMatch(transfer.backupIssueMessage(result.issues[0], locale), /收藏|須為/u);
+});
+
 test("replace summary spans all local events and counts shared/unused global groups correctly", () => {
   const current = document({ favoriteGroups: [group("shared"), group("removed", { sortOrder: 1 }), group("unused", { sortOrder: 2 })], favorites: [favorite("a", "kept", { groupId: "shared" }), favorite("a", "removed", { groupId: "removed" }), favorite("b", "removed", { groupId: "shared" })], visitPlans: [plan("a", 1, "kept"), plan("a", 2, "removed"), plan("b", "original-day", "removed")] });
   const incoming = document({ favoriteGroups: [group("shared")], favorites: [favorite("a", "kept", { groupId: "shared" }), favorite("new-event", "new")], visitPlans: [plan("a", 1, "kept")] });
