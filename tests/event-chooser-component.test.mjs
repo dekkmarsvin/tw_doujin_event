@@ -96,10 +96,12 @@ test("an empty published collection has a readable empty state and no empty grou
 });
 
 // #439: the chooser and the static introduction pages are one header, drawn by
-// two renderers. Equal markup is what lets one stylesheet serve both.
+// two renderers. Equal markup is what lets one stylesheet serve both; only the
+// chooser adds the language switcher, in the actions slot both share.
 test("the chooser draws the static pages' header, its sign-in naming no event", () => {
   const header = render({}).match(/<header class="site-header">[\s\S]*?<\/header>/)?.[0];
-  assert.equal(header, publicHeaderHtml(publicLoginHref()));
+  assert.match(header, /<div class="site-header-actions"><label [^>]*>[\s\S]*?<select aria-label="介面語言"/);
+  assert.equal(header.replace(/<label [\s\S]*?<\/label>/, ""), publicHeaderHtml(publicLoginHref()));
   assert.match(header, /<a class="site-header-brand" href="\/">/);
   assert.match(header, /<a class="site-header-login" href="\/circle">登入<\/a>/);
   assert.equal(publicLoginHref({ circleId: "c-900001" }), "/circle", "a circle is never named without its event");

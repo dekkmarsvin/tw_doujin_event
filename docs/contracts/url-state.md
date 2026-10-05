@@ -2,7 +2,7 @@
 
 URL 是跨模組的共享狀態，因此獨立成一份契約：搜尋、地圖、規劃篩選與顯示設定都往同一組查詢參數寫入。任何模組新增可分享狀態，都必須先在這裡登記。
 
-**實作**：`app/public-search-url.ts`（公開條件 codec）、`app/public-circle-search.ts`（公開條件及範圍判斷）、[`app/event-url-state.ts`](../../app/event-url-state.ts)（schema、defaults、codec、活動解析與 history intent）、[`app/event-entry.tsx`](../../app/event-entry.tsx)（選擇器與讀者畫面的分流）、[`app/event-chooser.tsx`](../../app/event-chooser.tsx) 與 [`app/event-calendar.ts`](../../app/event-calendar.ts)（活動日期、排序及分組）、[`app/map-view-state.ts`](../../app/map-view-state.ts)（選取解析）、[`app/event-workspace-projection.ts`](../../app/event-workspace-projection.ts)（共享衍生狀態）、[`app/seo.ts`](../../app/seo.ts)、[`app/static-discovery.ts`](../../app/static-discovery.ts)、[`scripts/build-discovery-pages.mjs`](../../scripts/build-discovery-pages.mjs)（搜尋入口與 metadata）
+**實作**：`app/public-search-url.ts`（公開條件 codec）、`app/public-circle-search.ts`（公開條件及範圍判斷）、[`app/event-url-state.ts`](../../app/event-url-state.ts)（schema、defaults、codec、活動解析與 history intent）、[`app/event-entry.tsx`](../../app/event-entry.tsx)（選擇器與讀者畫面的分流）、[`app/event-chooser.tsx`](../../app/event-chooser.tsx) 與 [`app/event-calendar.ts`](../../app/event-calendar.ts)（活動日期、排序及分組）、[`app/map-view-state.ts`](../../app/map-view-state.ts)（選取解析）、[`app/event-workspace-projection.ts`](../../app/event-workspace-projection.ts)（共享衍生狀態）、[`app/seo.ts`](../../app/seo.ts)、[`app/static-discovery.ts`](../../app/static-discovery.ts)、[`scripts/build-discovery-pages.mjs`](../../scripts/build-discovery-pages.mjs)（搜尋入口與 metadata）、[`app/i18n/locale.ts`](../../app/i18n/locale.ts)、[`app/i18n/locale-browser.ts`](../../app/i18n/locale-browser.ts)、[`app/i18n/locale-context.tsx`](../../app/i18n/locale-context.tsx)（介面語言）
 **測試**：`tests/event-url-state.test.mjs`、`tests/event-chooser-component.test.mjs`、[tests/browser/reader-event-chooser.mjs](../../tests/browser/reader-event-chooser.mjs)、`tests/map-view-state.test.mjs`、`tests/event-workspace-projection.test.mjs`、`tests/seo.test.mjs`、`tests/discovery-artifact.test.mjs`
 
 Reader 的互動與可還原狀態都掛在根路徑的 query string，不建立會和 Pages `index.html` 正規化衝突的 SPA rewrite。公開介紹頁使用下述真正的靜態目錄，不承載 Reader 互動狀態。
@@ -46,8 +46,11 @@ Reader 的互動與可還原狀態都掛在根路徑的 query string，不建立
 | `selectedCircle` | 地圖／詳情 | canonical `CircleRecord.id` |
 | `selectedBooth` | 地圖／詳情 | 實際 `PlacementRecord` 的攤位代碼 |
 | `share` | 分享行程 | 短網址 snapshot ID；讀取後移除 |
+| `lang` | 介面語言 | `en`、`ja`；繁體中文省略。只決定介面語言，不是檢視狀態 |
 
 **分享清單 `share`**：短網址 `/s/<shareId>` 帶讀者到 `/?event=<id>&share=<shareId>`。閱讀端只在啟動時讀取一次，取得 snapshot 後顯示唯讀預覽，並自 URL 移除；不寫入其他參數，也不影響 `selectedCircle` 等狀態。格式與到期見[收藏與走訪規劃契約](./planning.md#分享行程)與 [ADR-0079](../adr/0079-shared-itineraries-use-short-links-and-qr-codes.md)。
+
+**介面語言 `lang`**：有效值決定這次顯示的介面語言，優先於這個瀏覽器明確選過的語言，再依序是瀏覽器語言偏好與繁體中文；大小寫不同的正式值視同有效，其他值忽略，不改寫網址。區域形式只在讀取瀏覽器偏好時對應（`zh-TW`、`zh-HK` → 繁體中文，`en-*` → 英文，`ja-*` → 日文），簡體中文與其他語言回到下一順位。站內連結在英文、日文時帶 `lang`，繁體中文省略；切換語言以 replace 改寫目前網址並保留其他參數與 hash，不新增歷史紀錄，也不重新掛載讀者畫面或規劃資料。只有使用者明確切換才記住選擇；他人分享或郵件連結的 `lang` 只影響當次顯示。`lang` 不進入規劃資料、備份或分享 snapshot。
 
 地圖除 `event`、`day` 外，**參數在等於預設值時從 URL 移除**，不留下無意義的殘留條件；多場地活動必須寫出 `venueSpaceId`，避免舊展區代碼或排序改變造成歸屬歧義。新網址不寫 `area`／`hall`。browse 的全範圍例外如下。
 

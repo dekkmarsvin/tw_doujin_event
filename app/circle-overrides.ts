@@ -1,3 +1,4 @@
+import type { Locale } from "./i18n/locale";
 import type { CircleExternalLink, CircleTemplateLinkKind } from "./circle-records";
 import { isCircleCategoryLabel, type CircleCategoryCatalog } from "./circle-categories";
 import { ACTIVE_EVENT, getEventDefinition } from "./event-catalog";
@@ -160,6 +161,31 @@ export const CREATOR_TYPE_OPTIONS = [
 export const WORK_TYPE_OPTIONS = ["男性向", "女性向", "一般向"] as const;
 
 export const AGE_RATING_OPTIONS = ["全年齡", "R15", "R18"] as const;
+
+const OPTION_LABELS: Record<string, Record<Exclude<Locale, "zh-Hant">, string>> = {
+  繪師: { en: "Illustrator", ja: "イラスト" },
+  Coser: { en: "Cosplayer", ja: "コスプレイヤー" },
+  Vtuber: { en: "VTuber", ja: "VTuber" },
+  寫手: { en: "Writer", ja: "文字書き" },
+  音聲作品: { en: "Audio works", ja: "音声作品" },
+  手工藝品: { en: "Handicrafts", ja: "ハンドメイド" },
+  模型: { en: "Models", ja: "模型" },
+  攝影: { en: "Photography", ja: "写真" },
+  男性向: { en: "Male-oriented", ja: "男性向け" },
+  女性向: { en: "Female-oriented", ja: "女性向け" },
+  一般向: { en: "General audience", ja: "一般向け" },
+  全年齡: { en: "All ages", ja: "全年齢" },
+};
+
+/**
+ * The label for one of the three option lists above, in the interface
+ * language. Only the display changes: the stored and filtered value is still
+ * the Chinese option, and a value outside the lists — an older option or a
+ * circle's own wording — is shown exactly as it was written.
+ */
+export function circleOptionLabel(value: string, locale: Locale = "zh-Hant") {
+  return locale === "zh-Hant" ? value : OPTION_LABELS[value]?.[locale] ?? value;
+}
 
 const LIST_FIELDS = CIRCLE_OVERRIDE_LIST_FIELDS.map(({ key }) => key);
 const TEXT_FIELDS = ["pen", "saleInfo"] as const;

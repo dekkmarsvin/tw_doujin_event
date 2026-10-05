@@ -2,7 +2,8 @@ import type { EventDefinition } from "./event-catalog";
 import type { CircleCatalogPayload } from "./circle-records";
 import { placementStatusLabel } from "./circle-records";
 import { dayDateLabel, eventCalendar, eventDayCalendarDate, eventDayDate, taipeiDate } from "./event-calendar";
-import { circleBooths, circlePath, eventPath, pageMetadata, PUBLIC_ORIGIN, readerLink, SHARE_IMAGE, SITE_TITLE } from "./seo";
+import { DEFAULT_LOCALE, type Locale } from "./i18n/locale";
+import { circleBooths, circlePath, eventPath, OG_LOCALE, pageMetadata, PUBLIC_ORIGIN, readerLink, SHARE_IMAGE, SITE_TITLE } from "./seo";
 import { CIRCLE_PAGE_ACTIONS_ID, CIRCLE_PAGE_PLAN_DAY_ATTRIBUTE, CIRCLE_PAGE_ROOT_ID, circlePageData, circlePageDataHtml } from "./circle-page-data";
 import { PUBLIC_HEADER, publicHeaderHtml, publicLoginHref } from "./public-header";
 
@@ -10,19 +11,20 @@ export const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (characte
 const link = (href: string, text: string, className = "") => `<a${className ? ` class="${className}"` : ""} href="${escapeHtml(href)}">${escapeHtml(text)}</a>`;
 const json = (value: unknown) => JSON.stringify(value).replace(/</g, "\\u003c");
 
-export function metadataHtml(metadata: ReturnType<typeof pageMetadata>, canonical = true) {
+/** `metadata.locale` is optional so a page that builds its own metadata (the short-link page) stays Traditional Chinese. */
+export function metadataHtml(metadata: Omit<ReturnType<typeof pageMetadata>, "locale"> & { locale?: Locale }, canonical = true) {
   return `<title>${escapeHtml(metadata.title)}</title>
 <meta name="description" content="${escapeHtml(metadata.description)}">
 ${canonical ? `<link rel="canonical" href="${escapeHtml(metadata.canonical)}"><meta property="og:url" content="${escapeHtml(metadata.canonical)}">` : ""}
-<meta property="og:type" content="website"><meta property="og:site_name" content="場刊 Map"><meta property="og:locale" content="zh_TW">
+<meta property="og:type" content="website"><meta property="og:site_name" content="場刊 Map"><meta property="og:locale" content="${OG_LOCALE[metadata.locale ?? DEFAULT_LOCALE]}">
 <meta property="og:title" content="${escapeHtml(metadata.title)}"><meta property="og:description" content="${escapeHtml(metadata.description)}">
 <meta property="og:image" content="${escapeHtml(metadata.image.url)}"><meta property="og:image:width" content="${metadata.image.width}"><meta property="og:image:height" content="${metadata.image.height}">
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${escapeHtml(metadata.title)}"><meta name="twitter:description" content="${escapeHtml(metadata.description)}">`;
 }
 
 /** `loginHref` is where the header's "登入" leads from this page (#439). */
-function documentHtml(metadata: ReturnType<typeof pageMetadata>, content: string, { loginHref, schema, assets = "" }: { loginHref: string; schema?: unknown; assets?: string }) {
-  return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+function documentHtml(metadata: Parameters<typeof metadataHtml>[0], content: string, { loginHref, schema, assets = "" }: { loginHref: string; schema?: unknown; assets?: string }) {
+  return `<!doctype html><html lang="${metadata.locale ?? DEFAULT_LOCALE}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 ${metadataHtml(metadata)}<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/fonts/geist.css"><link rel="stylesheet" href="/discovery.css"><link rel="stylesheet" href="${PUBLIC_HEADER.stylesheet}">
 ${schema ? `<script type="application/ld+json">${json(schema)}</script>` : ""}${assets}</head><body class="discovery">${publicHeaderHtml(loginHref)}<main>${content}</main><footer>${link(PORTAL_INTRO_PATH, "社團與主辦")}${link("/privacy/", "隱私權與資料使用")}</footer></body></html>`;
 }

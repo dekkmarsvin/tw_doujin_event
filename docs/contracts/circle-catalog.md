@@ -133,6 +133,7 @@ data repo 的 `events/<eventId>/circle-identity-groups.json` 明列每個 identi
 - 使用者選取、收藏或規劃的是 canonical circle ID；placement 只決定這次活動的日期與攤位。
 - 活動主辦資料標示為「活動主辦單位」；社團補充資料標示為 `由社團填寫`。來源列不顯示驗證狀態或信任措辭（[ADR-0036](../adr/0036-provenance-labels-name-the-source-not-its-trust-level.md)）。
 - 主要創作類別的篩選選項一律由 active event 的 `circleCategories` 投影，不保留工作簿分類或 UI 常數。
+- **介面語言只翻譯站方固定標籤。** 連結種類、來源列與「全部類別」等站方固定選項依介面語言顯示，篩選與儲存仍使用原值；活動、社團、場地、展區名稱、官方分類、作者、簡介與社團自填內容一律顯示原始登記，未知或舊選項保留原值。
 
 ### 社團介紹頁
 

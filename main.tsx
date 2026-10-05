@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import EventEntry from "./app/event-entry";
+import { LocaleProvider } from "./app/i18n/locale-context";
 import "./app/globals.css";
 
 const root = document.getElementById("root");
@@ -8,7 +9,9 @@ if (!root) throw new Error("Application root element is missing.");
 
 createRoot(root).render(
   <StrictMode>
-    <EventEntry />
+    <LocaleProvider>
+      <EventEntry />
+    </LocaleProvider>
   </StrictMode>,
 );
 

@@ -1,3 +1,5 @@
+import type { Locale } from "./i18n/locale";
+import { defineMessages, translate } from "./i18n/messages";
 import type { CircleViewRecord } from "./circle-records";
 import { WORK_TOPIC_ALIAS_GROUPS, type WorkTopicAliasGroup } from "./work-topic-aliases";
 // 搜尋選項與社團可填的值是同一份清單，分成兩份就會漂移。
@@ -129,8 +131,16 @@ export function circleIncludesGeneral(record: CircleViewRecord) {
   return record.circle.ageRatings.some((value) => /(^|[\s,，、/／])(?:一般|全年齡|general)(?=$|[\s,，、/／])/i.test(value.normalize("NFKC")));
 }
 
-export function ageRatingFilterLabel(value: AdvancedCircleSearch["adultContent"]) {
-  return value === "ALL" ? "不限" : value === "GENERAL" ? "只看全年齡" : `只看 ${value}`;
+const AGE_RATING_FILTER_LABEL = defineMessages({
+  "zh-Hant": { any: "不限", general: "只看全年齡", only: "只看 {rating}" },
+  en: { any: "Any", general: "All ages only", only: "{rating} only" },
+  ja: { any: "指定なし", general: "全年齢のみ", only: "{rating}のみ" },
+});
+
+export function ageRatingFilterLabel(value: AdvancedCircleSearch["adultContent"], locale: Locale = "zh-Hant") {
+  return value === "ALL" ? translate(AGE_RATING_FILTER_LABEL, locale, "any")
+    : value === "GENERAL" ? translate(AGE_RATING_FILTER_LABEL, locale, "general")
+    : translate(AGE_RATING_FILTER_LABEL, locale, "only", { rating: value });
 }
 
 export function matchesAdvancedCircleSearch(record: CircleViewRecord, search: AdvancedCircleSearch) {

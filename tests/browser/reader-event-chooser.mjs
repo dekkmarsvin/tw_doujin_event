@@ -91,6 +91,53 @@ try {
     await page.close();
   }
 
+  {
+    // #523: a Japanese browser lands in Japanese with no `lang` in the URL; event names stay as registered.
+    const page = await journey.page({ event: "", locale: "ja-JP", viewport: { width: 390, height: 844 } });
+    await page.getByRole("heading", { name: "イベントを選択" }).waitFor();
+    assert.equal(await page.evaluate(() => document.documentElement.lang), "ja");
+    assert.equal(await page.getByRole("link", { name: `配置マップを開く：${events[0].name}`, exact: true }).count(), 1, "the event name is not translated");
+    assert.doesNotMatch(page.url(), /lang=/, "a browser default writes nothing into the URL");
+    await journey.capture(page, "chooser-ja-390");
+    await page.close();
+  }
+
+  {
+    // A link's language shows this visit; an explicit switch replaces the URL in
+    // place, keeps what the page was showing and is remembered.
+    const page = await journey.page({ event: "unknown-event", params: "&lang=en", viewport: { width: 1440, height: 900 } });
+    await page.getByRole("heading", { name: "Choose an event" }).waitFor();
+    // The English tagline is the longest: just above the phone layout it gives
+    // way to the actions instead of running underneath them.
+    await page.setViewportSize({ width: 421, height: 900 });
+    const tagline = await page.getByRole("banner").getByText("Doujin event booth map", { exact: true }).evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      return { right: Math.min(box.right, box.left + node.clientWidth), overflowing: node.scrollWidth > node.clientWidth };
+    });
+    const actions = await page.locator(".site-header-actions").boundingBox();
+    assert.ok(tagline.right <= actions.x, `the tagline stops before the actions at 421px: ${JSON.stringify({ tagline, actions })}`);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const history = await page.evaluate(() => window.history.length);
+    await page.getByRole("banner").getByRole("combobox", { name: "Language" }).selectOption("ja");
+    await page.getByRole("heading", { name: "イベントを選択" }).waitFor();
+    assert.equal(new URL(page.url()).search, "?event=unknown-event&lang=ja", "only the language changes in the URL");
+    assert.equal(await page.evaluate(() => window.history.length), history, "switching adds no history entry");
+    assert.equal(await page.getByRole("status").count(), 1, "the dead-link notice is still shown");
+    assert.equal(await page.getByRole("link", { name: "ログイン", exact: true }).getAttribute("href"), "/circle?lang=ja");
+    // The reader map is not translated yet, so it must not claim to be Japanese.
+    await page.getByRole("link", { name: `配置マップを開く：${events[0].name}`, exact: true }).click();
+    await page.locator("[data-slot-code]").first().waitFor();
+    assert.match(page.url(), /[?&]lang=ja(&|$)/, "the language travels with the reader");
+    assert.equal(await page.evaluate(() => document.documentElement.lang), "zh-Hant");
+    await page.goto(new URL("/?event=unknown-event", page.url()).href);
+    await page.getByRole("heading", { name: "イベントを選択" }).waitFor({ timeout: 5000 });
+    await page.getByRole("banner").getByRole("combobox", { name: "表示言語" }).selectOption("zh-Hant");
+    await page.getByRole("heading", { name: "選擇活動" }).waitFor();
+    assert.doesNotMatch(page.url(), /lang=/, "Traditional Chinese needs no parameter");
+    await journey.capture(page, "chooser-back-to-zh-1440");
+    await page.close();
+  }
+
   // #439: what a first visit sees at the top, on the narrowest phone and a
   // desktop: "登入" as its own button, never a menu item, whole at every width,
   // and shown without the page asking the server who is reading.
@@ -113,10 +160,12 @@ try {
     assert.deepEqual(asked, [], "the header asks the server nothing");
     await journey.capture(page, `chooser-header-${width}`);
     if (width === 390) {
-      // Keyboard: the brand, then 登入, then the page — and Enter follows it.
+      // Keyboard: the brand, the language, then 登入, then the page — and Enter follows it.
       await page.keyboard.press("Tab");
       await page.keyboard.press("Tab");
-      assert.equal(await login.evaluate((node) => node === document.activeElement), true, "登入 is the second stop");
+      assert.equal(await header.getByRole("combobox", { name: "介面語言" }).evaluate((node) => node === document.activeElement), true, "the language is the second stop");
+      await page.keyboard.press("Tab");
+      assert.equal(await login.evaluate((node) => node === document.activeElement), true, "登入 is the third stop");
       await page.keyboard.press("Enter");
       await page.waitForURL((url) => url.pathname === "/circle");
       await page.getByRole("heading", { name: "登入", exact: true }).waitFor();

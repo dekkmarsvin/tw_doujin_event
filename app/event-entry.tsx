@@ -9,6 +9,7 @@ import EventMapApp from "./event-map-app";
 import { applyReaderMetadata, pageMetadata } from "./seo";
 import { PUBLISHED_EVENTS, type EventDefinition } from "./event-catalog";
 import { resolveUrlEvent, type ResolvedUrlEvent } from "./event-url-state";
+import { LOCALE_QUERY_PARAM } from "./i18n/locale";
 
 const resolve = (): ResolvedUrlEvent => resolveUrlEvent(
   PUBLISHED_EVENTS,
@@ -58,8 +59,10 @@ export default function EventEntry() {
   }, []);
 
   const chooseEvent = useCallback(() => {
-    // Return to a clean chooser even when arriving through an external deep link.
-    window.history.pushState({}, "", window.location.pathname);
+    // Return to a clean chooser even when arriving through an external deep link;
+    // only the interface language survives, since it is not the event's state.
+    const lang = new URL(window.location.href).searchParams.get(LOCALE_QUERY_PARAM);
+    window.history.pushState({}, "", lang ? `${window.location.pathname}?${new URLSearchParams({ [LOCALE_QUERY_PARAM]: lang })}` : window.location.pathname);
     setResolved({ kind: "choose" });
   }, []);
 

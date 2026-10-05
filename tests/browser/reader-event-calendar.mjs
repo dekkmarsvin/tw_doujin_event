@@ -5,17 +5,20 @@ import { start } from "./support/journey.mjs";
 const journey = await start("reader-event-calendar");
 try {
   for (const width of [1440, 360]) {
-    for (const [date, groups] of [
-      ["2026-08-25", ["upcoming"]],
-      ["2026-09-01", ["upcoming", "ongoing"]],
-      ["2026-09-15", ["upcoming", "past"]],
-      ["2026-10-02", ["ongoing", "past"]],
-      ["2026-10-05", ["past"]],
+    // #521: current events run from the soonest start, so before either opens
+    // the earlier one leads; once one has started or ended the other leads.
+    const later = ["第二範例活動", "範例創作市集"];
+    for (const [date, groups, names] of [
+      ["2026-08-25", ["upcoming"], ["範例創作市集", "第二範例活動"]],
+      ["2026-09-01", ["upcoming", "ongoing"], later],
+      ["2026-09-15", ["upcoming", "past"], later],
+      ["2026-10-02", ["ongoing", "past"], later],
+      ["2026-10-05", ["past"], later],
     ]) {
       const page = await journey.page({ event: "", viewport: { width, height: 844 }, routes: (page) => page.clock.setFixedTime(new Date(`${date}T12:00:00+08:00`)) });
       await page.getByRole("heading", { name: "選擇活動" }).waitFor();
       assert.deepEqual(await page.locator("[data-event-group]").evaluateAll((nodes) => nodes.map((node) => node.dataset.eventGroup)), groups);
-      assert.deepEqual(await page.locator("main h3").allTextContents(), ["第二範例活動", "範例創作市集"]);
+      assert.deepEqual(await page.locator("main h3").allTextContents(), names);
       const past = page.locator('[data-event-group="past"] a').first();
       if (await past.count()) {
         assert.equal(await past.isEnabled(), true);

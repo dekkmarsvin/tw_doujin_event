@@ -1,3 +1,5 @@
+import type { Locale } from "./i18n/locale";
+import { defineMessages, translate } from "./i18n/messages";
 import { ACTIVE_EVENT, getEventDefinition, type EventDefinition } from "./event-catalog";
 import { indexCircleOverrides } from "./circle-overrides";
 import type { CircleOverride, CircleOverridesPayload } from "./circle-overrides";
@@ -61,9 +63,15 @@ type CatalogCircle = {
  */
 type PlacementStatus = "active" | "cancelled" | "moved";
 
+const PLACEMENT_STATUS_LABEL = defineMessages({
+  "zh-Hant": { cancelled: "已取消參展", moved: "已移動攤位" },
+  en: { cancelled: "Cancelled", moved: "Booth moved" },
+  ja: { cancelled: "参加取り消し", moved: "スペース移動" },
+});
+
 /** Wording readers see. Empty for `active`: a normal booth needs no note. */
-export function placementStatusLabel(status: PlacementStatus) {
-  return status === "cancelled" ? "已取消參展" : status === "moved" ? "已移動攤位" : "";
+export function placementStatusLabel(status: PlacementStatus, locale: Locale = "zh-Hant") {
+  return status === "active" ? "" : translate(PLACEMENT_STATUS_LABEL, locale, status);
 }
 
 type CatalogPlacement = {

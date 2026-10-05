@@ -1,5 +1,12 @@
+import type { Locale } from "./i18n/locale";
+
 const CIRCLE_CATEGORY_CATALOG_SCHEMA = "circle-category-catalog/1" as const;
 const ALL_CIRCLE_CATEGORIES = "全部類別" as const;
+
+/** Category values remain organizer data; this is only the filter's fixed label. */
+export function allCircleCategoriesLabel(locale: Locale = "zh-Hant"): string {
+  return locale === "en" ? "All categories" : locale === "ja" ? "すべてのカテゴリ" : ALL_CIRCLE_CATEGORIES;
+}
 
 type CircleCategoryDefinition = {
   id: string;

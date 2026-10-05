@@ -1,0 +1,19 @@
+[
+  { "name": "unauthenticated", "status": 401, "contentType": "application/json", "body": { "error": "尚未登入。", "code": "unauthenticated" } },
+  { "name": "claim-not-verified", "status": 403, "contentType": "application/json", "body": { "error": "你尚未通過這個社團的認領。", "code": "claim_not_verified" } },
+  { "name": "version-conflict", "status": 409, "contentType": "application/json", "body": { "error": "設定已變更，請重新載入後再儲存。", "code": "version_conflict", "currentVersion": 3 } },
+  { "name": "circle-already-claimed", "status": 409, "contentType": "application/json", "body": { "error": "此社團已有通過的認領。", "code": "circle_already_claimed" } },
+  { "name": "legacy-conflict", "status": 409, "contentType": "application/json", "body": { "error": "設定已變更，請重新載入後再儲存。" } },
+  { "name": "platform-too-large", "status": 413, "contentType": "text/html", "body": "<html><body>Request entity too large</body></html>" },
+  { "name": "rate-limited", "status": 429, "contentType": "application/json", "body": { "error": "請求過於頻繁，請稍後再試。", "code": "rate_limited" } },
+  { "name": "share-snapshot-invalid", "status": 400, "contentType": "application/json", "body": { "error": "分享清單格式無效。", "code": "share_snapshot_invalid" } },
+  { "name": "share-not-found", "status": 404, "contentType": "application/json", "body": { "error": "這個分享連結不存在或已過期。", "code": "share_not_found" } },
+  { "name": "share-expired", "status": 410, "contentType": "application/json", "body": { "error": "這份清單已過期。", "code": "share_expired", "eventId": "sample" } },
+  { "name": "invalid-locale", "status": 400, "contentType": "application/json", "body": { "error": "請選擇支援的語言。", "code": "invalid_locale" } },
+  { "name": "preferences-get-unset", "status": 200, "contentType": "application/json", "body": { "cadence": "daily", "version": 0, "locale": null } },
+  { "name": "preferences-get-en", "status": 200, "contentType": "application/json", "body": { "cadence": "hourly", "version": 2, "locale": "en" } },
+  { "name": "preferences-put-locale-only", "status": 200, "contentType": "application/json", "body": { "version": 0, "locale": "ja" } },
+  { "name": "preferences-put-cadence-only", "status": 200, "contentType": "application/json", "body": { "version": 2, "cadence": "off" } },
+  { "name": "preferences-put-invalid-locale", "status": 400, "contentType": "application/json", "body": { "version": 0, "locale": "en-US" } },
+  { "name": "preferences-put-invalid", "status": 400, "contentType": "application/json", "body": { "version": 0 } }
+]

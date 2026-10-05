@@ -3,15 +3,20 @@
    window on every page, so no page's content column decides its padding.
    Selectors carry two classes to stay ahead of a page's own link rules. */
 .site-header { box-sizing:border-box; display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:72px; padding:10px 24px; border-bottom:1px solid #dfe3df; background:#fff; color:#202a35; font-family:Geist,system-ui,"Noto Sans TC",sans-serif; line-height:1.3; }
+.site-header:lang(ja) { font-family:Geist,"Hiragino Sans","Hiragino Kaku Gothic ProN","BIZ UDPGothic","Yu Gothic UI",Meiryo,"Noto Sans JP",system-ui,sans-serif; line-break:strict; }
 .site-header .site-header-brand { display:flex; align-items:center; gap:11px; min-width:0; border-radius:9px; color:inherit; text-decoration:none; }
 .site-header .site-header-mark { flex:none; width:38px; height:38px; display:grid; place-items:center; border-radius:11px 11px 11px 3px; background:#202a35; color:#fff; font-weight:800; box-shadow:3px 3px 0 #f4c65c; }
 .site-header .site-header-name { min-width:0; }
-.site-header .site-header-name b,.site-header .site-header-name small { display:block; white-space:nowrap; }
+/* The brand gives way to the actions: an English or Japanese tagline is longer
+   than the Chinese one, so it ends in an ellipsis rather than run under them. */
+.site-header .site-header-name b,.site-header .site-header-name small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .site-header .site-header-name b { font-size:calc(16px * var(--ui-font-scale,1)); letter-spacing:.08em; }
 .site-header .site-header-name small { margin-top:2px; color:#59626c; font-size:calc(12px * var(--ui-font-scale,1)); letter-spacing:.12em; }
 /* Secondary, so it is found without outranking a page's own first action.
    The map and browse views have their own header bar and add `reader-login`. */
 .site-header .site-header-login,.site-header-login.reader-login { flex:none; display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:0 16px; border:1px solid #b9c2bb; border-radius:7px; background:#f9faf8; color:#202a35; font-size:calc(14px * var(--ui-font-scale,1)); font-weight:700; text-decoration:none; white-space:nowrap; }
+/* The language switcher and "登入" travel together at the trailing edge. */
+.site-header .site-header-actions { flex:none; display:flex; align-items:center; gap:8px; }
 .site-header .site-header-login:hover,.site-header-login.reader-login:hover { border-color:#8a948e; background:#fff; }
 .site-header .site-header-login:active,.site-header-login.reader-login:active { filter:brightness(.95); }
 .site-header .site-header-brand:focus-visible,.site-header .site-header-login:focus-visible,.site-header-login.reader-login:focus-visible { outline:3px solid #8fac9c; outline-offset:2px; }
