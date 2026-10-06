@@ -103,7 +103,7 @@ export function accountNotificationLetter(origin: string, items: NotificationIte
   const destination = (item: NotificationItem) => notificationDestination(item, base.origin, circle ? locale : undefined);
   return renderLetter({
     kind: digest ? "general" : "system", origin: base.origin, locale,
-    subject: digest ? locale === "en" ? `場刊 Map｜Circle details updated for ${summary.length} circles` : locale === "ja" ? `場刊 Map｜${summary.length}サークルの補足情報更新` : `場刊 Map｜${summary.length} 個社團的補充資料更新` : `場刊 Map｜${first.name} ${title}`,
+    subject: digest ? locale === "en" ? `場刊 Map｜Circle details updated for ${summary.length} ${summary.length === 1 ? "circle" : "circles"}` : locale === "ja" ? `場刊 Map｜${summary.length}サークルの補足情報更新` : `場刊 Map｜${summary.length} 個社團的補充資料更新` : `場刊 Map｜${first.name} ${title}`,
     preheader: digest ? copy.preheader : title,
     category: digest ? copy.digestCategory : copy.category, stamp: formatTaipeiTime(first.occurred_at) + copy.zone, title: digest ? copy.digestTitle : title,
     paragraphs: digest ? [] : [ownMember ? "你的權限於以下時間發生異動。如需協助，請聯絡網站管理者。" : description.text],

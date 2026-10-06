@@ -114,7 +114,9 @@ function renderText(letter: Letter) {
 
 function brandRow(locale: Locale) {
   return `<table ${TABLE}><tr>`
+    + `<td width="38" valign="middle" style="width:38px;"><table ${TABLE} width="38" style="width:38px;table-layout:fixed;"><tr>`
     + `<td width="38" height="38" align="center" valign="middle" bgcolor="${INK}" aria-hidden="true" style="width:38px;height:38px;background-color:${INK};border-radius:11px 11px 11px 3px;box-shadow:3px 3px 0 ${GOLD};${text(19, 38, `font-weight:900;color:${ON_INK};`)}">場</td>`
+    + `</tr></table></td>`
     + `<td valign="middle" style="padding-left:12px;">`
     + `<div style="${text(16, 21, `font-weight:700;letter-spacing:0.08em;color:${INK};`)}">場刊 Map</div>`
     + `<div style="${text(11, 15, `letter-spacing:0.12em;color:${MUTED};`)}">${chrome[locale].tagline}</div>`
@@ -129,31 +131,34 @@ function topLine(letter: Letter) {
   // SVG, and an image would be blocked by default. The words carry the meaning.
   const left = urgent
     ? `<table ${TABLE}><tr>`
+      + `<td width="22" valign="middle"><table ${TABLE} width="22" style="width:22px;table-layout:fixed;"><tr>`
       + `<td width="22" height="22" align="center" valign="middle" bgcolor="${WARNING.mark}" aria-hidden="true" style="width:22px;height:22px;background-color:${WARNING.mark};border-radius:6px;${text(14, 22, "font-weight:900;color:#ffffff;")}">!</td>`
+      + `</tr></table></td>`
       + `<td valign="middle" style="padding-left:10px;">${label}</td>`
       + `</tr></table>`
     : label;
   const stamp = letter.stamp
-    ? `<td align="right" valign="middle" style="font-family:${MONO};font-size:12px;line-height:16px;font-weight:700;letter-spacing:0.06em;color:${color};">${escapeHtml(letter.stamp)}</td>`
+    ? `<tr><td style="padding-top:6px;font-family:${MONO};font-size:12px;line-height:18px;font-weight:700;letter-spacing:0.06em;color:${color};">${escapeHtml(letter.stamp)}</td></tr>`
     : "";
   const band = urgent
     ? `background-color:${WARNING.soft};border-bottom:1px solid ${WARNING.line};border-radius:11px 11px 0 0;`
     : `border-bottom:1px solid ${LINE};`;
   return `<td ${urgent ? `bgcolor="${WARNING.soft}" ` : ""}style="padding:14px 24px;${band}">`
-    + `<table ${TABLE} width="100%"><tr><td align="left" valign="middle">${left}</td>${stamp}</tr></table>`
+    + `<table ${TABLE} width="100%"><tr><td align="left" valign="middle">${left}</td></tr>${stamp}</table>`
     + `</td>`;
 }
 
 function factsTable(facts: LetterFact[]) {
-  // The label column is at least 76px and grows to its longest label rather
-  // than wrapping one; a digest labels its rows with a kind and an event code.
+  // Labels can be circle names or localized expiry text. Stack each pair so
+  // long labels cannot squeeze the value or its link on a phone.
   const rows = facts.map((fact) => {
     const value = escapeHtml(fact.value);
     return `<tr>`
-      + `<td width="76" valign="top" style="width:76px;white-space:nowrap;padding:10px 16px 10px 0;border-bottom:1px solid ${LINE};${text(13, 20, `color:${MUTED};`)}">${escapeHtml(fact.label)}</td>`
-      + `<td valign="top" style="padding:10px 0;border-bottom:1px solid ${LINE};overflow-wrap:anywhere;word-break:break-word;font-family:${fact.data ? MONO : SANS};font-size:14px;line-height:20px;font-weight:700;${fact.data ? "letter-spacing:0.04em;" : ""}color:${INK};">`
+      + `<td style="padding:10px 0;border-bottom:1px solid ${LINE};">`
+      + `<div style="overflow-wrap:anywhere;word-break:break-word;${text(13, 20, `color:${MUTED};`)}">${escapeHtml(fact.label)}</div>`
+      + `<div style="padding-top:4px;overflow-wrap:anywhere;word-break:break-word;font-family:${fact.data ? MONO : SANS};font-size:14px;line-height:20px;font-weight:700;${fact.data ? "letter-spacing:0.04em;" : ""}color:${INK};">`
       + (fact.href ? `<a href="${escapeHtml(fact.href)}" style="color:${LINK};">${value}</a>` : value)
-      + `</td></tr>`;
+      + `</div></td></tr>`;
   }).join("");
   return `<table ${TABLE} width="100%" style="border-top:1px solid ${LINE};">${rows}</table>`;
 }
@@ -179,7 +184,7 @@ function renderHtml(letter: Letter, subject: string) {
   const locale = letter.locale ?? "zh-Hant";
   const row = (paddingTop: number, content: string) => `<tr><td style="padding-top:${paddingTop}px;">${content}</td></tr>`;
   const body = [
-    `<tr><td><h1 style="margin:0;${text(20, 27, `font-weight:700;color:${INK};`)}">${escapeHtml(letter.title)}</h1></td></tr>`,
+    `<tr><td><h1 style="margin:0;overflow-wrap:anywhere;word-break:break-word;${text(20, 27, `font-weight:700;color:${INK};`)}">${escapeHtml(letter.title)}</h1></td></tr>`,
     ...letter.paragraphs.map((paragraph) => row(10, `<p style="margin:0;${text(15, 26, `color:${INK};`)}">${escapeHtml(paragraph)}</p>`)),
   ];
   if (letter.facts?.length) body.push(row(20, factsTable(letter.facts)));
@@ -216,7 +221,7 @@ function renderHtml(letter: Letter, subject: string) {
 <tr><td style="padding:24px 24px 28px;"><table ${TABLE} width="100%">${body.join("")}</table></td></tr>
 </table>
 </td></tr>
-<tr><td style="padding:20px 4px 0;${text(12, 20, `color:${MUTED};`)}">${footerLink}${chrome[locale].support} <a href="mailto:${SUPPORT_ADDRESS}" style="color:${LINK};">${SUPPORT_ADDRESS}</a><br>場刊 Map · <a href="${origin}" style="color:${LINK};">${host}</a></td></tr>
+<tr><td style="padding:20px 4px 0;overflow-wrap:anywhere;word-break:break-word;${text(12, 20, `color:${MUTED};`)}">${footerLink}${chrome[locale].support} <a href="mailto:${SUPPORT_ADDRESS}" style="color:${LINK};">${SUPPORT_ADDRESS}</a><br>場刊 Map · <a href="${origin}" style="color:${LINK};">${host}</a></td></tr>
 </table>
 <!--[if mso]></td></tr></table><![endif]-->
 </td></tr>
