@@ -135,7 +135,7 @@ function PublicHeader({ loginHref }: { loginHref: string }) {
   const { locale } = useLocale();
   return <header className="site-header">
     <a className="site-header-brand" href={localizedHref(home, locale)}><span className="site-header-mark" aria-hidden="true">{mark}</span><span className="site-header-name"><b>{name}</b><small data-i18n="header.tagline">{t("tagline")}</small></span></a>
-    <div className="site-header-actions">
+    <div className={`site-header-actions ${styles.headerActions}`}>
       <LanguageSwitcher />
       <a className="site-header-login" href={loginHref} data-i18n="header.login">{t("login")}</a>
     </div>
