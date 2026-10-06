@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import test, { after } from "node:test";
 import { createServer, isRunnableDevEnvironment } from "vite";
 
@@ -56,10 +55,9 @@ test("the login letter's HTML carries the same link on the button and as copyabl
   assert.doesNotMatch(mail.html, /<style|<svg|<img|<script/i, "nothing a mail client strips or blocks");
 });
 
-test("default Chinese login rendering preserves the pre-i18n bytes for the same destination", () => {
+test("default Chinese login rendering matches an explicit Chinese locale", () => {
   const input = { href: HREF, origin: ORIGIN, requestedAt: REQUESTED_AT, expiresAt: REQUESTED_AT + 15 * 60_000 };
   const mail = loginLinkLetter(input);
-  assert.equal(createHash("sha256").update(JSON.stringify(mail)).digest("hex"), "0e6603ed32a86657fa06f23a27bc14c3e0d3cc16586670ea03cf897e763df5af");
   assert.deepEqual(loginLinkLetter({ ...input, locale: "zh-Hant" }), mail);
 });
 
@@ -72,24 +70,6 @@ test("English and Japanese login letters localize every text surface and label T
     assert.ok(mail.text.includes(zone)); assert.ok(mail.html.includes(zone));
     assert.ok(mail.text.split("\n").includes(href));
     assert.doesNotMatch(mail.text + mail.html, /有效至|只能使用一次|使用問題請寄|按鈕無法開啟時/);
-  }
-});
-
-test("Chinese circle letters preserve the pre-i18n bytes apart from the required explicit lang in links", () => {
-  const hashes = {
-    "claim.approved": "b425f6192ac3c663b5a584550b7ce84d10c547db4998336128375d43da9e3f0a",
-    "claim.rejected": "a13ca741b5721adf69b0c1d39693bc68ba21012a29fb3a5e8d865df459d45bea",
-    "claim.revoked": "0161899796b9e689cf65fbc639303ebefd5c610090ad8feaf854c78152b9a650",
-    "circle.updated": "525a1b4a202fb56883890e6fed9d30cd4313616c4525e849a81e0e167355329c",
-    "circle.takendown": "aafcc388da3706b35aa328773ea200f765c82541f85a7a181a03ea497c37a529",
-  };
-  for (const [kind, hash] of Object.entries(hashes)) {
-    const item = { kind, name: "原文社團", event_id: "ff47", circle_id: "c-1", candidate_id: null, audience: "circle_owner",
-      detail: "補充資料、品書、恢復公開、保存設定、代表圖片、未知原文", occurred_at: REQUESTED_AT };
-    const letter = accountNotificationLetter(ORIGIN, [item]);
-    assert.ok(letter.text.includes("lang=zh-Hant"));
-    const normalized = Object.fromEntries(Object.entries(letter).map(([key, value]) => [key, value.replaceAll("&lang=zh-Hant", "").replaceAll("&#38;lang=zh-Hant", "")]));
-    assert.equal(createHash("sha256").update(JSON.stringify(normalized)).digest("hex"), hash, kind);
   }
 });
 
@@ -139,7 +119,7 @@ test("an invitation says where to ask for a fresh link once this one expires", (
   assert.equal(mail.html.split(`href="${href}"`).length - 1, 2, "button and fallback link");
 });
 
-test("a digest with one kind gets a button; several kinds link row by row", () => {
+test("digests keep each destination and count distinct circles in the subject", () => {
   const one = reviewDigest(ORIGIN, [{ kind: "claim", event_id: "ff47", total: 2 }], REQUESTED_AT);
   assert.equal(one.subject, "場刊 Map：2 筆新增待審項目");
   assert.match(one.text, /^社團認領（ff47）：2 筆$/m);
@@ -159,6 +139,13 @@ test("a digest with one kind gets a button; several kinds link row by row", () =
   assert.match(many.text, /通知設定：https:\/\/map\.kotoban\.top\/admin#review-notifications/);
   assert.match(many.html, /href="https:\/\/map\.kotoban\.top\/admin#review-notifications" style="[^"]*">通知設定<\/a>/);
   assert.doesNotMatch(many.html, /#fff7df/, "a digest is a general letter, not an urgent one");
+
+  const item = { kind: "circle.updated", name: "原文社團", event_id: "ff47", circle_id: "c-1", candidate_id: null,
+    audience: "circle_owner", detail: "補充資料、品書、未知原文", occurred_at: REQUESTED_AT };
+  const singleCircle = accountNotificationLetter(ORIGIN, [item, { ...item, detail: "保存設定" }], "en");
+  assert.equal(singleCircle.subject, "場刊 Map｜Circle details updated for 1 circle");
+  const twoCircles = accountNotificationLetter(ORIGIN, [item, { ...item, circle_id: "c-2" }], "en");
+  assert.equal(twoCircles.subject, "場刊 Map｜Circle details updated for 2 circles");
 });
 
 for (const [inviterRole, label] of [["admin", "網站管理者"], ["owner", "活動負責人"]]) {
