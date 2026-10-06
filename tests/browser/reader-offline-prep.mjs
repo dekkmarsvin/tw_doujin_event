@@ -51,6 +51,21 @@ try {
       "switching language offline preserves the saved plan and original memo");
     await journey.capture(page, `reader-offline-prep-${locale}`);
   }
+  // The dictionary being cached must also let the reader finish an errand.
+  await page.getByRole("combobox", { name: "介面語言" }).selectOption("en");
+  await page.getByRole("tab", { name: "Explore", exact: true }).click();
+  await page.getByRole("textbox", { name: "Search circles, booths or works", exact: true }).fill("南星");
+  await page.getByRole("link", { name: /南星工房/ }).first().click();
+  await page.getByRole("button", { name: "Add 南星工房 to favorites", exact: true }).click();
+  await page.getByRole("button", { name: "Add to today’s plan", exact: true }).click();
+  const expanded = await page.evaluate(key => JSON.parse(localStorage.getItem(key)), PLAN_KEY);
+  assert.ok(expanded.favorites.some(entry => entry.circleId === "c-900002"));
+  assert.ok(expanded.visitPlans.some(entry => entry.circleId === "c-900002" && entry.day === 1));
+  assert.equal(expanded.favorites.find(entry => entry.circleId === "c-900001").memo, "離線備註");
+  await page.getByRole("combobox", { name: "Language" }).selectOption("ja");
+  await page.getByRole("tab", { name: "プラン 2", exact: true }).waitFor();
+  assert.deepEqual(await page.evaluate(key => JSON.parse(localStorage.getItem(key)), PLAN_KEY), expanded);
+  await journey.capture(page, "reader-offline-search-plan-ja");
   await page.context().setOffline(false);
   await page.close();
   await journey.finish();
