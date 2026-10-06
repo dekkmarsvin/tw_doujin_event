@@ -1,6 +1,9 @@
 .shell { min-height:100vh; display:flex; flex-direction:column; background:var(--paper); }
 
 /* The header is the shared public one: public/site-header.css. */
+/* Keep the new controls together even when the service worker serves an older
+   copy of that stylesheet; this rule travels with the chooser's bundle. */
+.headerActions { flex:none; display:flex; align-items:center; gap:8px; }
 
 .main { width:100%; max-width:640px; margin:0 auto; padding:28px 20px 40px; }
 .main h1 { margin:0 0 6px; font-size:calc(20px * var(--ui-font-scale,1)); font-weight:700; letter-spacing:.02em; }

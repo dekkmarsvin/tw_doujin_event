@@ -25,6 +25,27 @@ const mapEntry = (event) => `開啟攤位地圖：${event.name}`;
 
 const journey = await start("reader-event-chooser");
 try {
+  // A returning reader can receive new HTML with the previous public header
+  // stylesheet: /site-header.css is stale-while-revalidate. That older sheet
+  // predates the action group introduced alongside the language switcher.
+  for (const width of [1440, 390, 360]) {
+    const page = await journey.page({ event: "", viewport: { width, height: 844 }, routes: async (page) => {
+      await page.route("**/site-header.css", async (route) => {
+        const response = await route.fetch();
+        const body = (await response.text()).split("\n").filter((line) => !line.includes(".site-header-actions")).join("\n");
+        await route.fulfill({ response, body });
+      });
+    } });
+    await page.getByRole("heading", { name: "選擇活動" }).waitFor();
+    const language = await page.getByRole("banner").getByRole("combobox", { name: "介面語言" }).evaluate((node) => node.closest("label").getBoundingClientRect().toJSON());
+    const login = await page.getByRole("link", { name: "登入", exact: true }).evaluate((node) => node.getBoundingClientRect().toJSON());
+    (journey.report.headerActions ??= []).push({ width, language, login });
+    await journey.capture(page, `chooser-stale-header-styles-${width}`);
+    assert.ok(login.left - language.right >= 8 - 0.5, "language and login retain space with the previous stylesheet");
+    assert.ok(Math.abs(login.top - language.top) < 1 && Math.abs(login.bottom - language.bottom) < 1, "language and login share their top and bottom edges");
+    await page.close();
+  }
+
   {
     const page = await journey.page({ event: "", params: "" });
     await page.getByRole("heading", { name: "選擇活動" }).waitFor();

@@ -9,7 +9,7 @@ const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { default: EventChooser } = await environment.runner.import("/app/event-chooser.tsx");
 const { eventCalendar, eventsByProximity, groupCalendarEvents, nearestEvent, taipeiDate } = await environment.runner.import("/app/event-calendar.ts");
-const { publicHeaderHtml, publicLoginHref } = await environment.runner.import("/app/public-header.ts");
+const { publicLoginHref } = await environment.runner.import("/app/public-header.ts");
 after(() => vite.close());
 
 const events = [
@@ -95,14 +95,8 @@ test("an empty published collection has a readable empty state and no empty grou
   assert.doesNotMatch(html, /<a href|data-event-group/);
 });
 
-// #439: the chooser and the static introduction pages are one header, drawn by
-// two renderers. Equal markup is what lets one stylesheet serve both; only the
-// chooser adds the language switcher, in the actions slot both share.
-test("the chooser draws the static pages' header, its sign-in naming no event", () => {
-  const header = render({}).match(/<header class="site-header">[\s\S]*?<\/header>/)?.[0];
-  assert.match(header, /<div class="site-header-actions"><label [^>]*>[\s\S]*?<select aria-label="介面語言"/);
-  assert.equal(header.replace(/<label [\s\S]*?<\/label>/, ""), publicHeaderHtml(publicLoginHref()));
-  assert.match(header, /<a class="site-header-brand" href="\/">/);
-  assert.match(header, /<a class="site-header-login" href="\/circle"[^>]*>登入<\/a>/);
+// Header destinations, language selection and keyboard navigation are covered
+// by browser/reader-event-chooser.mjs; keep the helper's invalid context here.
+test("a circle without an event does not change the sign-in destination", () => {
   assert.equal(publicLoginHref({ circleId: "c-900001" }), "/circle", "a circle is never named without its event");
 });
