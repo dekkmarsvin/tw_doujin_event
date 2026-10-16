@@ -75,8 +75,46 @@ jobs:
           bash -n .claude/hooks/session-start.sh
           env -u CLAUDE_CODE_REMOTE bash .claude/hooks/session-start.sh
 
+  # Preview code checks run beside deployment, never on its critical path.
+  verify-preview:
+    name: Verify preview code
+    needs: scope
+    if: needs.scope.outputs.profile == 'full' && (github.event_name == 'pull_request' || github.ref_name != 'main') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Build and test public artifact
+        run: npm test
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npx tsc --noEmit --incremental false
+
+      - name: Build independent Workers and record source fingerprints
+        run: node scripts/worker-delivery.mjs --build-only
+
+      - name: Upload Worker build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-build-evidence
+          path: .wrangler/worker-delivery.json
+          retention-days: 7
+
   deploy:
-    name: Verify and deploy
+    # Preserve the production job identity and its deployment/smoke steps for
+    # publication checkpoints. Preview success alone is not the required gate.
+    name: ${{ (github.event_name == 'pull_request' || github.ref_name != 'main') && 'Build and deploy preview' || 'Verify and deploy' }}
     needs: scope
     if: (needs.scope.outputs.profile == 'full' || needs.scope.outputs.profile == 'publication-data') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
@@ -99,23 +137,23 @@ jobs:
         run: npm ci
 
       - name: Build and test public artifact
-        if: needs.scope.outputs.profile == 'full'
+        if: needs.scope.outputs.profile == 'full' && github.event_name != 'pull_request' && github.ref_name == 'main'
         run: npm test
 
       - name: Lint
-        if: needs.scope.outputs.profile == 'full'
+        if: needs.scope.outputs.profile == 'full' && github.event_name != 'pull_request' && github.ref_name == 'main'
         run: npm run lint
 
       - name: Type-check
-        if: needs.scope.outputs.profile == 'full'
+        if: needs.scope.outputs.profile == 'full' && github.event_name != 'pull_request' && github.ref_name == 'main'
         run: npx tsc --noEmit --incremental false
 
       - name: Build independent Workers and record source fingerprints
-        if: needs.scope.outputs.profile == 'full'
+        if: needs.scope.outputs.profile == 'full' && github.event_name != 'pull_request' && github.ref_name == 'main'
         run: node scripts/worker-delivery.mjs --build-only
 
       - name: Upload Worker build evidence
-        if: always() && needs.scope.outputs.profile == 'full'
+        if: always() && needs.scope.outputs.profile == 'full' && github.event_name != 'pull_request' && github.ref_name == 'main'
         uses: actions/upload-artifact@v4
         with:
           name: worker-build-evidence
@@ -278,6 +316,21 @@ jobs:
           fi
           exit 1
 
+
+  preview-verification:
+    # Use a different name on main even when skipped: production consumers
+    # require exactly one job named "Verify and deploy" in the run.
+    name: ${{ (github.event_name == 'pull_request' || github.ref_name != 'main') && 'Verify and deploy' || 'Preview verification gate' }}
+    needs: [scope, deploy, verify-preview]
+    if: always() && (needs.scope.outputs.profile == 'full' || needs.scope.outputs.profile == 'publication-data') && (github.event_name == 'pull_request' || github.ref_name != 'main') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Require deployment and applicable code checks
+        if: needs.deploy.result != 'success' || (needs.scope.outputs.profile == 'full' && needs.verify-preview.result != 'success')
+        run: exit 1
+      - name: Record preview verification
+        run: echo 'Preview deployment and all applicable code checks passed. Browser acceptance and Full preview portal E2E remain separate checks.' >> "$GITHUB_STEP_SUMMARY"
 
   # map.kotoban.top is the reader-facing production hostname. Keep observing it
   # anonymously, but do not turn a zone-level block of GitHub runner traffic into

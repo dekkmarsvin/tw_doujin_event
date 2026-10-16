@@ -205,6 +205,10 @@ main 的非完整候選、以及 PR 的 `publication-data` 候選，另比較最
 
 `publication-data` 保留 `Verify and deploy`、`Full preview portal E2E`、`Browser acceptance` 的實際成功 gate 與同 head 檢查。它重新 fetch／驗證每個已發布 pin、identity grouping、reference、schema、map/day/venue coverage，建置正式成品，再核對完整發布集合、placement 的日期與場地、staging 與 dist bytes、HTML/JS 入口及 deployment manifest hashes。只有未變動程式的完整 Node suite、lint、type-check、Worker rebuild 不適用。Browser 在正式 build 上開啟所有已發布活動的日期／場地、桌面／手機、社團選取及 warm reload，不再為純資料更新重跑 fixture portal journeys。預覽 portal E2E、Access 與正式 smoke 保留，必要 check 不以空 job 或 skipped 代替。
 
+同 repository 的 PR 與非 main 手動部署，`Build and deploy preview` 只等待分類，執行 production build、發布成品檢查、Pages 部署及 Access／application smoke；完整 profile 的 `Verify preview code` 同時執行 Node／D1 suite、lint、type-check 與 Worker build。Preview 可在測試完成前供人工操作，但不能視為程式驗證通過。`Verify and deploy` 在兩條路徑結束後核對結果；任一失敗、取消或必要檢查未執行都不會通過。`publication-data` 依既有成功 main 基準免跑未變更程式檢查，仍須 preview 部署及成品檢查成功。`Full preview portal E2E` 只等待部署，`Browser acceptance` 維持獨立 workflow；合併時仍須核對所有適用檢查。
+
+main 的 `Verify and deploy` 保留原順序：完整 profile 先通過 Node／D1、lint、type-check 與 Worker build，再建置、部署及執行 production smoke。正式發布的 job／step identity 與成功 main 基準判定不變。這個拆分縮短取得 preview 的等待路徑，並未減少測試執行量。
+
 Browser job 使用與 Playwright lockfile 版本相符的官方容器，內含 browser 與 Linux libraries，避免每次執行 apt。更新 Playwright 時同步更新 image tag；容器拉取時間算進整個 job 耗時，不只比較安裝 step。
 
 輕量流程的 `Check non-product changes` 執行 contribution-files（已含 doc-map），tooling 類另檢查 Claude JSON、hook 語法與非遠端模式。不部署、不跑產品 Node／browser／remote preview E2E；summary 明確標示它們不適用且未執行，不能當成那些測試通過的證據。以下部署表適用完整 gate；手動 dispatch 一律完整執行。
