@@ -161,7 +161,11 @@ CI 的 `Browser acceptance` 位於獨立 `Browser verification` workflow，只�
 
 `reader-header`、`reader-mobile-tools`、`mobile-circle-sheet`、`reader-narrow-desktop` 的代表性案例保留手機／桌機操作、360×640 回歸尺寸、相關 760／761 與 1050／1051 斷點、最大字級及觸控拖曳。完整模式保留全部原有尺寸／字級組合。名單的重複尺寸檢查保留 1040、1440、2560，詳情高度保留 761、1440；其餘少量版面分支與 resize／history／recovery 操作在兩種模式都執行，不因尺寸減量而略過整條 journey。
 
-共用 `selectMatrix` 只選尺寸組合，不選斷言。`--matrix none` 在上述流程仍執行代表性操作；它只略過 `map-viewport` 額外的尺寸矩陣。上述流程的 `browser-report-*.json` 記錄實際完成的組合、`pagesOpened`、主文件完成載入的 `documentLoads`（含 reload／跨頁，不含同頁路由）與 `durationMs`；runner 另記錄每條 journey 的開始／結束時間。耗時受資料下載、啟動與執行環境影響，以同環境的報告比較，不把縮小矩陣的比例當成整套 CI 加速比例。
+`reader-map-facilities` 的代表性案例保留桌機標準字級、手機最大字級、兩種字級的 360×640 遮擋檢查，以及分散於桌機／手機的全部四個排標籤方向；完整模式再交叉驗證尺寸與方向。`map-authoring-trace` 的共用描摹、拖曳與幾何細節在代表性模式由 Organizer 驗證一次，兩個入口仍各自驗證配置圖控制、個人偏好、六排調整、儲存與重新開啟；完整模式在兩個入口都跑完整細節。名單保留 20,000 筆資料與每頁筆數切換，以搜尋得到的 105 筆結果驗證首末頁及返回，不逐頁走過 200 頁。
+
+共用 `selectMatrix` 選取案例組合，每個選中案例仍執行其全部斷言。`--matrix none` 在上述流程仍執行代表性操作；它只略過 `map-viewport` 額外的尺寸矩陣。上述流程的 `browser-report-*.json` 記錄實際完成的組合、`pagesOpened`、主文件完成載入的 `documentLoads`（含 reload／跨頁，不含同頁路由）與 `durationMs`；runner 另記錄每條 journey 的開始／結束時間。耗時受資料下載、啟動與執行環境影響，以同環境的報告比較，不把縮小矩陣的比例當成整套 CI 加速比例。
+
+共用 journey 的成功截圖在代表性模式保留每個頁面／尺寸的第一張，以及明確指定的關鍵結果；完整模式保留每次截圖。每次 `capture` 仍檢查水平溢出，report 的 `screenshots` 列出實際保存的成功畫面；失敗時的截圖、畫面文字與請求診斷不受此減量影響。
 
 `npm run test:browser` 自己處理所有前置：staging、啟動 Vite、等待相依預先打包完成、跑完後關閉伺服器。不需要另開 terminal，也不需要自行組 `MAP_TEST_URL`。
 

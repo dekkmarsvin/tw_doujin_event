@@ -27,7 +27,7 @@ function savedRow(index) {
     venueSpaceId,
     areaId: venueSpaceId === "space-b" || index === 0 ? "ALL" : "A",
     codes,
-    circleName: `社團 ${String(index + 1).padStart(5, "0")}`,
+    circleName: `社團 ${String(index + 1).padStart(5, "0")}${index < 105 ? " 分頁邊界" : ""}`,
     stableKey: `internal-${String(index + 1).padStart(5, "0")}`,
     identityGroup: `stable:internal-${String(index + 1).padStart(5, "0")}`,
   };
@@ -210,18 +210,32 @@ try {
   }
   await organizer.setViewportSize({ width: 1600, height: 1000 });
   const next = list.getByRole("button", { name: "下一頁", exact: true });
-  for (let page = 2; page <= 200; page++) await next.click();
-  await status("第 19,901–20,000 筆，共 20,000 筆");
-  assert.equal(await rowsOnPage.last().locator("td").nth(1).innerText(), "B20000");
-  assert.equal(await next.isDisabled(), true);
+  await next.click();
+  await status("第 101–200 筆，共 20,000 筆");
   // A smaller page keeps the stretch already in view; a long list cannot show every row at once.
   const perPage = list.getByLabel("每頁筆數", { exact: true });
   await perPage.selectOption("25");
-  await status("第 19,901–19,925 筆，共 20,000 筆");
+  await status("第 101–125 筆，共 20,000 筆");
   assert.equal(await rowsOnPage.count(), 25);
   assert.deepEqual(await perPage.locator('option[value="all"]').evaluate(option => [option.disabled, option.textContent]), [true, "全部（500 筆以內）"]);
   await perPage.selectOption("100");
-  await status("第 19,901–20,000 筆，共 20,000 筆");
+  await status("第 101–200 筆，共 20,000 筆");
+  // The same 20,000-row list exercises its last-page boundary through a
+  // 105-row search result, without clicking through 198 identical pages.
+  await search.fill("分頁邊界");
+  await status("第 1–100 筆，共 105 筆");
+  const previous = list.getByRole("button", { name: "上一頁", exact: true });
+  assert.equal(await previous.isDisabled(), true);
+  await next.click();
+  await status("第 101–105 筆，共 105 筆");
+  assert.equal(await rowsOnPage.count(), 5);
+  assert.equal(await rowsOnPage.last().locator("td").nth(1).innerText(), "B00104");
+  assert.equal(await next.isDisabled(), true);
+  await previous.click();
+  await status("第 1–100 筆，共 105 筆");
+  assert.equal(await rowsOnPage.count(), 100);
+  await search.fill("");
+  await status("第 1–100 筆，共 20,000 筆");
   const sort = list.getByLabel("攤位排序", { exact: true });
   await sort.selectOption("desc");
   assert.equal(await rowsOnPage.first().locator("td").nth(1).innerText(), "B20000");
@@ -383,6 +397,6 @@ try {
   await status("展區名稱已儲存。"); assert.equal(detail.draft.venue.assignments[0].areaLabels.A, "新版攤活動");
   await organizer.reload(); await list.waitFor();
   assert.equal(await rowsOnPage.count(), 2);
-  await journey.capture(organizer, "roster-after-reimport");
+  await journey.capture(organizer, "roster-after-reimport", { screenshot: true });
   await journey.finish();
 } catch (error) { await journey.abort(error); }

@@ -1,12 +1,14 @@
 // staged-data: pinned
 import assert from "node:assert/strict";
 import { start } from "./support/journey.mjs";
+import { selectMatrix } from "./support/matrix.mjs";
 
 // Entrances, exits, row and area names stay readable on the fitted map, the
 // facility list locates them, and a double tap on the empty map zooms in.
 const journey = await start("reader-map-facilities");
 journey.report.source = "local pinned FF47, not production";
 journey.report.measurements = [];
+journey.report.matrix = [];
 const settle = page => page.waitForTimeout(250);
 const MINIMUM = { access: 11, service: 11, row: 12, landmark: 11 };
 const MAXIMUM = { access: 14, service: 14, row: 28, landmark: 28 };
@@ -56,7 +58,10 @@ const checkBounds = (measured, scale, context) => {
 };
 
 try {
-  for (const [width, height, scale, factor] of [[1440, 900, "standard", 1], [390, 844, "standard", 1], [1440, 900, "extra", 1.24]]) {
+  for (const [width, height, scale, factor] of selectMatrix(
+    [[1440, 900, "standard", 1], [390, 844, "standard", 1], [1440, 900, "extra", 1.24], [390, 844, "extra", 1.24]],
+    [[1440, 900, "standard", 1], [390, 844, "extra", 1.24]],
+  )) {
     const context = `${width}x${height} ${scale}`;
     const page = await journey.mapPage({ event: "ff47", viewport: { width, height }, routes: async page => {
       await page.addInitScript(value => localStorage.setItem("event-map-text-scale", value), scale);
@@ -130,6 +135,7 @@ try {
     assert.ok(close.zoom > 5.99);
     checkBounds(close, factor, `${context} 600%`);
     journey.report.measurements.push({ context, state: "600%", labels: close.labels.map(({ key, px }) => ({ key, px: +px.toFixed(2) })) });
+    journey.report.matrix.push({ scenario: "facilities", width, height, scale });
     await page.close();
   }
 
@@ -224,7 +230,13 @@ try {
 
   // The same published row accepts all four sides, including Chinese names;
   // changing label placement must keep its real booth rectangles selectable.
-  for (const [width, height, textScale] of [[1440, 900, "standard"], [390, 844, "extra"]]) for (const side of ["above", "below", "left", "right"]) {
+  // Every side is checked in PRs; full mode also repeats each side at the
+  // other viewport/text scale. Phone occlusion remains covered above.
+  const labelCases = selectMatrix(
+    [[1440, 900, "standard"], [390, 844, "extra"]].flatMap(view => ["above", "below", "left", "right"].map(side => [...view, side])),
+    [[1440, 900, "standard", "above"], [1440, 900, "standard", "below"], [390, 844, "extra", "left"], [390, 844, "extra", "right"]],
+  );
+  for (const [width, height, textScale, side] of labelCases) {
     const page = await journey.mapPage({ event: "ff47", viewport: { width, height }, routes: async page => {
       await page.addInitScript(value => localStorage.setItem("event-map-text-scale", value), textScale);
       await page.route("**/data/events/ff47/map.json", async route => {
@@ -249,6 +261,7 @@ try {
     await page.locator('[data-slot-code="A01"]').focus();
     await page.keyboard.press("Enter");
     assert.equal(new URL(page.url()).searchParams.get("selectedBooth"), "A01");
+    journey.report.matrix.push({ scenario: "row-label", width, height, scale: textScale, side });
     await page.close();
   }
 

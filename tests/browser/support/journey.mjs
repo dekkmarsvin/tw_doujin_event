@@ -28,8 +28,9 @@ export async function start(name, { showScrollbars = false } = {}) {
   const startedAt = performance.now();
   await mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true, ...(showScrollbars ? { ignoreDefaultArgs: ["--hide-scrollbars"] } : {}), ...(process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {}) });
-  const report = { journey: name, browser: browser.version(), recordedAt: new Date().toISOString(), source: "local fixtures, not production", matrixMode, pagesOpened: 0, documentLoads: 0, checks: [], errors: [] };
+  const report = { journey: name, browser: browser.version(), recordedAt: new Date().toISOString(), source: "local fixtures, not production", matrixMode, pagesOpened: 0, documentLoads: 0, checks: [], screenshots: [], errors: [] };
   const observations = new WeakMap();
+  const capturedViewports = new WeakMap();
   let aborted = false;
 
   return {
@@ -58,8 +59,18 @@ export async function start(name, { showScrollbars = false } = {}) {
       await page.waitForTimeout(250);
       return page;
     },
-    async capture(page, name) {
-      await page.screenshot({ path: path.join(output, `${name}.png`) });
+    async capture(page, name, { screenshot = false } = {}) {
+      // Successful PNGs are evidence, not pixel assertions. PRs keep the first
+      // at each page/viewport plus explicitly requested states; full matrix
+      // keeps every capture. Failure diagnostics always take their own images.
+      const viewport = JSON.stringify(page.viewportSize());
+      const captured = capturedViewports.get(page) ?? new Set();
+      if (screenshot || matrixMode === "full" || !captured.has(viewport)) {
+        await page.screenshot({ path: path.join(output, `${name}.png`) });
+        captured.add(viewport);
+        capturedViewports.set(page, captured);
+        report.screenshots.push(name);
+      }
       // Every journey owns this one: a reader who has to scroll sideways to
       // finish a sentence has a broken page whatever else passed.
       const overflow = await page.evaluate(() => document.body.scrollWidth - innerWidth);
