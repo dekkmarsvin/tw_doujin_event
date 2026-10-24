@@ -113,6 +113,17 @@ try {
   }
 
   {
+    // A stale browse link's view does not follow the reader onto the map entry.
+    const page = await journey.page({ event: "not-a-real-event-9z", params: "&view=browse" });
+    await page.getByRole("link", { name: mapEntry(events[0]), exact: true }).click();
+    await page.locator("[data-slot-code]").first().waitFor();
+    const url = new URL(page.url());
+    assert.equal(url.searchParams.get("event"), events[0].id);
+    assert.equal(url.searchParams.get("view"), null, "the map entry opens the map");
+    await page.close();
+  }
+
+  {
     // #523: a Japanese browser lands in Japanese with no `lang` in the URL; event names stay as registered.
     const page = await journey.page({ event: "", locale: "ja-JP", viewport: { width: 390, height: 844 } });
     await page.getByRole("heading", { name: "イベントを選択" }).waitFor();

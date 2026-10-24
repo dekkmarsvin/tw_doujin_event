@@ -5,7 +5,9 @@
    copy of that stylesheet; this rule travels with the chooser's bundle. */
 .headerActions { flex:none; display:flex; align-items:center; gap:8px; }
 
-.main { width:100%; max-width:640px; margin:0 auto; padding:28px 20px 40px; }
+/* The list, then the side column: beside it from 1024px, below it under that. */
+.layout { width:100%; max-width:1200px; margin:0 auto; padding:28px 20px 40px; box-sizing:border-box; display:grid; gap:32px; align-content:start; }
+.main { min-width:0; }
 .main h1 { margin:0 0 6px; font-size:calc(20px * var(--ui-font-scale,1)); font-weight:700; letter-spacing:.02em; }
 .main>p { margin:0 0 22px; color:var(--muted); font-size:calc(14px * var(--ui-font-scale,1)); }
 
@@ -18,14 +20,21 @@
 
 .list { display:grid; gap:12px; margin:0; padding:0; list-style:none; }
 .group + .group { margin-top:32px; }
-.group h2 { margin:0 0 10px; font-size:calc(14px * var(--ui-font-scale,1)); font-weight:700; color:var(--ink); }
+.group h2 { display:flex; align-items:center; gap:8px; margin:0 0 10px; font-size:calc(14px * var(--ui-font-scale,1)); font-weight:700; color:var(--ink); }
+.group[data-event-group="ongoing"] h2::before { content:""; width:8px; height:8px; border-radius:50%; background:var(--coral); }
 .group[data-event-group="past"] h2 { color:#59645d; }
 .empty { padding-block:24px; }
 
-.card { display:grid; gap:14px; padding:16px 18px 18px; border:1px solid var(--line); border-radius:12px; background:#fff; color:var(--ink); }
+.card { display:grid; grid-template-columns:auto minmax(0,1fr); gap:14px; padding:16px 18px 18px; border:1px solid var(--line); border-radius:12px; background:#fff; color:var(--ink); }
+.group[data-event-group="ongoing"] .card { border-color:var(--ink); }
+.when { display:flex; flex-direction:column; justify-content:center; gap:4px; padding-right:14px; border-right:1px solid var(--line); }
+.when b { font:700 calc(18px * var(--ui-font-scale,1)) var(--font-mono),monospace; letter-spacing:.02em; white-space:nowrap; }
+.when span { color:var(--muted); font-size:calc(12px * var(--ui-font-scale,1)); white-space:nowrap; }
+.what { min-width:0; display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; }
 .card h3 { margin:0; font-size:calc(16px * var(--ui-font-scale,1)); font-weight:700; line-height:1.35; overflow-wrap:anywhere; }
-.card p { margin:4px 0 0; color:#59645d; font-size:calc(14px * var(--ui-font-scale,1)); overflow-wrap:anywhere; }
-.entries { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.card p { flex-basis:100%; margin:0; color:#59645d; font-size:calc(14px * var(--ui-font-scale,1)); overflow-wrap:anywhere; }
+.countdown { padding:3px 8px; border-radius:5px; background:var(--cream); color:var(--muted); font-size:calc(12px * var(--ui-font-scale,1)); font-weight:800; white-space:nowrap; }
+.entries { grid-column:1 / -1; display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
 .entries a { display:inline-flex; align-items:center; justify-content:center; gap:4px; min-height:44px; border-radius:7px; font-size:calc(14px * var(--ui-font-scale,1)); font-weight:700; text-decoration:none; white-space:nowrap; }
 .entries a:focus-visible { outline:3px solid #8fac9c; outline-offset:2px; }
 .entries a:active { filter:brightness(.95); }
@@ -38,16 +47,54 @@
 
 /* Past events recede through surface and text colour, never opacity or disabled:
    the map entry drops to the secondary look but keeps its arrow and focus. */
-.group[data-event-group="past"] .card { border-color:#e5e8e2; background:var(--surface-soft); color:#59645d; }
+.group[data-event-group="past"] .card { grid-template-columns:minmax(0,1fr); border-color:#e5e8e2; background:var(--surface-soft); color:#59645d; }
 .group[data-event-group="past"] .map { border-color:var(--line); background:var(--surface-soft); color:var(--ink); }
 .group[data-event-group="past"] :is(.map,.browse):hover { border-color:#b9c2bb; background:#fff; }
 
+.aside { min-width:0; display:grid; gap:16px; align-content:start; }
+.panel { display:grid; gap:12px; padding:16px 18px 18px; border:1px solid var(--line); border-radius:12px; background:#fff; }
+.panel h2 { margin:0; font-size:calc(14px * var(--ui-font-scale,1)); font-weight:700; }
+.resume { display:grid; gap:8px; margin:0; padding:0; list-style:none; }
+.resume a { display:grid; gap:2px; min-height:44px; box-sizing:border-box; padding:8px 12px; border:1px solid var(--line); border-radius:9px; background:var(--surface-soft); color:var(--ink); text-decoration:none; }
+.resume a:hover { border-color:#b9c2bb; background:#fff; }
+.resume a:focus-visible { outline:3px solid #8fac9c; outline-offset:2px; }
+.resume b { font-size:calc(14px * var(--ui-font-scale,1)); overflow-wrap:anywhere; }
+.resume small { color:var(--muted); font-size:calc(12px * var(--ui-font-scale,1)); }
+.month { display:grid; gap:8px; }
+.month + .month { padding-top:16px; border-top:1px solid var(--line); }
+.days { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:2px; text-align:center; font:700 calc(12px * var(--ui-font-scale,1)) var(--font-mono),monospace; }
+.days span { padding:6px 0; border-radius:7px; }
+.days .weekday { color:var(--muted); font-family:inherit; }
+.days [data-event="current"] { background:var(--ink); color:var(--surface-soft); }
+.days [data-event="past"] { background:var(--cream); color:var(--muted); }
+.days [data-today] { box-shadow:inset 0 0 0 2px var(--coral); }
+
+@media (min-width:761px) {
+  .card { grid-template-columns:96px minmax(0,1fr) auto; align-items:center; gap:20px; }
+  .when { align-self:stretch; padding-right:20px; }
+  .when b { font-size:calc(22px * var(--ui-font-scale,1)); }
+  .entries { grid-column:auto; display:grid; grid-template-columns:auto auto; justify-content:end; }
+  .entries .introduction { grid-column:1 / -1; justify-self:end; margin-left:0; }
+  /* Ended events are a compact table: name and dates, then the three ways in on one line. */
+  .group[data-event-group="past"] .list { gap:0; border:1px solid #e5e8e2; border-radius:12px; overflow:hidden; }
+  .group[data-event-group="past"] .card { grid-template-columns:minmax(0,1fr) auto; padding:10px 18px; border:0; border-radius:0; }
+  .group[data-event-group="past"] .card + .card { border-top:1px solid #e5e8e2; }
+  .group[data-event-group="past"] .card h3 { font-size:calc(15px * var(--ui-font-scale,1)); }
+  .group[data-event-group="past"] .entries { display:flex; }
+  .aside { grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; }
+}
+@media (min-width:1024px) {
+  .layout { grid-template-columns:minmax(0,1fr) 300px; align-items:start; padding:32px 24px 48px; }
+  .aside { grid-template-columns:minmax(0,1fr); }
+}
 @media (max-width:760px) {
   .shell { --ui-font-scale:1; }
-  .main { padding:20px 16px 32px; }
+  .layout { padding:20px 16px 32px; }
 }
 @media (max-width:540px) {
-  .card { padding:14px 14px 16px; }
+  /* A phone has the full date line and no width to spare for its repeat. */
+  .card { grid-template-columns:minmax(0,1fr); padding:14px 14px 16px; }
+  .when { display:none; }
   .map,.browse { flex:1 1 0; }
   .entries .introduction { flex-basis:100%; justify-content:flex-start; margin-left:0; }
 }

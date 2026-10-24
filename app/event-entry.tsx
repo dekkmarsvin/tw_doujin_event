@@ -52,8 +52,13 @@ export default function EventEntry() {
   }, []);
 
   const selectEvent = useCallback((event: EventDefinition) => {
-    const url = new URL(window.location.href);
+    // Opens the map clean, as the entry's own href does in a new tab: a stale
+    // link's view or selection is not this event's state; only the language is.
+    const current = new URL(window.location.href);
+    const url = new URL(current.pathname, current.origin);
     url.searchParams.set("event", event.id);
+    const lang = current.searchParams.get(LOCALE_QUERY_PARAM);
+    if (lang) url.searchParams.set(LOCALE_QUERY_PARAM, lang);
     // A push, not a replace: the chooser is where back should return to.
     window.history.pushState({}, "", url);
     setView(readerView(url));

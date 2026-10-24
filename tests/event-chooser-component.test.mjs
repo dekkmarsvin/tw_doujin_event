@@ -41,7 +41,7 @@ test("lifecycle groups put the soonest current and the latest ended event first,
   const ids = source.map((event) => event.id);
   const groups = groupCalendarEvents(source, "2026-09-15");
   assert.deepEqual(groups.map((group) => [group.id, group.entries.map((entry) => entry.event.id)]), [
-    ["upcoming", ["event-a", "event-b"]], ["ongoing", ["ongoing"]], ["past", ["recent", "old"]],
+    ["ongoing", ["ongoing"]], ["upcoming", ["event-a", "event-b"]], ["past", ["recent", "old"]],
   ]);
   assert.deepEqual(source.map((event) => event.id), ids, "source collection is unchanged");
 });

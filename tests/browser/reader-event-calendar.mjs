@@ -7,10 +7,11 @@ try {
   for (const width of [1440, 360]) {
     // #521: current events run from the soonest start, so before either opens
     // the earlier one leads; once one has started or ended the other leads.
+    // The event being held is the first group.
     const later = ["第二範例活動", "範例創作市集"];
     for (const [date, groups, names] of [
       ["2026-08-25", ["upcoming"], ["範例創作市集", "第二範例活動"]],
-      ["2026-09-01", ["upcoming", "ongoing"], later],
+      ["2026-09-01", ["ongoing", "upcoming"], ["範例創作市集", "第二範例活動"]],
       ["2026-09-15", ["upcoming", "past"], later],
       ["2026-10-02", ["ongoing", "past"], later],
       ["2026-10-05", ["past"], later],
@@ -33,6 +34,26 @@ try {
       }
       await page.close();
     }
+  }
+
+  {
+    // The side column offers the current events this browser has planning
+    // for, reads that planning without rewriting it, and opens the event.
+    const key = "event-map-planning-v1";
+    const saved = JSON.stringify({ schemaVersion: 3, favoriteGroups: [], visitPlans: [], favorites: ["sample", "sample-two"].map((eventId) => ({ eventId, circleId: "c-1", groupId: null, memo: "", createdAt: "2026-09-01T00:00:00Z", updatedAt: "2026-09-01T00:00:00Z" })) });
+    const page = await journey.page({ event: "", viewport: { width: 1440, height: 900 }, routes: async (page) => {
+      await page.clock.setFixedTime(new Date("2026-09-15T12:00:00+08:00"));
+      await page.addInitScript(([key, saved]) => { if (!localStorage.getItem(key)) localStorage.setItem(key, saved); }, [key, saved]);
+    } });
+    const resume = page.getByRole("complementary").getByRole("link");
+    await resume.first().waitFor();
+    assert.deepEqual(await resume.allTextContents(), ["第二範例活動收藏 1"], "an ended event is not offered");
+    assert.equal(await page.evaluate((key) => localStorage.getItem(key), key), saved, "the chooser leaves planning as saved");
+    await journey.capture(page, "calendar-resume-planning");
+    await resume.click();
+    await page.locator("[data-slot-code]").first().waitFor();
+    assert.match(page.url(), /event=sample-two(&|$)/);
+    await page.close();
   }
 
   // Leaving the chooser open across midnight must not leave yesterday's group.

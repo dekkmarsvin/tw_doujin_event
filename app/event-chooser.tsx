@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { EventDefinition } from "./event-catalog";
 import { groupCalendarEvents, taipeiDate } from "./event-calendar";
 import styles from "./event-chooser.module.css";
+import EventChooserAside from "./event-chooser-aside";
 import { LanguageSwitcher } from "./i18n/language-switcher";
 import { localizedHref } from "./i18n/locale";
 import { useDocumentLanguage, useLocale, useMessages } from "./i18n/locale-context";
@@ -23,6 +24,8 @@ const MESSAGES = defineMessages({
     browseFor: "逛品書：{name}",
     introduction: "活動介紹與社團名單",
     introductionFor: "活動介紹與社團名單：{name}",
+    tomorrow: "明天",
+    daysLeft: "還有 {days} 天",
     empty: "目前沒有公開活動，請稍後再來查看。",
   },
   en: {
@@ -36,6 +39,8 @@ const MESSAGES = defineMessages({
     browseFor: "Browse item lists: {name}",
     introduction: "Event info and circle list",
     introductionFor: "Event info and circle list: {name}",
+    tomorrow: "Tomorrow",
+    daysLeft: "In {days} days",
     empty: "No events are public right now. Please check back later.",
   },
   ja: {
@@ -49,6 +54,8 @@ const MESSAGES = defineMessages({
     browseFor: "お品書きを見る：{name}",
     introduction: "イベント情報とサークル一覧",
     introductionFor: "イベント情報とサークル一覧：{name}",
+    tomorrow: "明日",
+    daysLeft: "あと{days}日",
     empty: "現在公開中のイベントはありません。しばらくしてから再度ご確認ください。",
   },
 });
@@ -80,8 +87,10 @@ export default function EventChooser({ events, unresolved, onSelect }: {
   const t = useMessages(MESSAGES);
   useDocumentLanguage();
   const groups = groupCalendarEvents(events, today, locale);
+  const weekday = new Intl.DateTimeFormat(locale, { timeZone: "UTC", weekday: "short" });
   return <div className={styles.shell}>
     <PublicHeader loginHref={localizedHref(publicLoginHref(), locale)} />
+    <div className={styles.layout}>
     <main className={styles.main}>
       <h1>{t("title")}</h1>
       <p>{t("intro")}</p>
@@ -97,12 +106,20 @@ export default function EventChooser({ events, unresolved, onSelect }: {
       {groups.map((group) => <section key={group.id} className={styles.group} data-event-group={group.id} aria-labelledby={`event-group-${group.id}`}>
         <h2 id={`event-group-${group.id}`}>{group.label}</h2>
         <ul className={styles.list}>
-        {/* One card per event: what it is, then the ways in. The map is the
-            primary entry and catalog browse its peer; each link names its event
-            so a list of links read out of context still says where it goes. */}
-        {group.entries.map(({ event, label }) => <li key={event.id} className={styles.card}>
-          <div>
+        {/* One row per event: when, what it is, then the ways in. The map is
+            the primary entry and catalog browse its peer; each link names its
+            event so a list of links read out of context still says where it goes.
+            The date block repeats the label for scanning, so it is not read out. */}
+        {group.entries.map(({ event, label, start, end }) => {
+          const days = start ? (Date.parse(start) - Date.parse(today)) / 86_400_000 : 0;
+          return <li key={event.id} className={styles.card}>
+          {group.id !== "past" && <div className={styles.when} aria-hidden="true">{start && <>
+            <b>{start.slice(5).replace("-", ".")}</b>
+            <span>{[...new Set([start, end])].map((date) => weekday.format(new Date(`${date}T00:00:00Z`))).join("–")}</span>
+          </>}</div>}
+          <div className={styles.what}>
             <h3>{event.name}</h3>
+            {group.id === "upcoming" && days > 0 && <span className={styles.countdown}>{days === 1 ? t("tomorrow") : t("daysLeft", { days })}</span>}
             <p>{label} · {event.venue}</p>
           </div>
           <div className={styles.entries}>
@@ -120,11 +137,14 @@ export default function EventChooser({ events, unresolved, onSelect }: {
             }}>{t("browse")}</a>
             <a className={styles.introduction} href={localizedHref(eventPath(event.id), locale)} aria-label={t("introductionFor", { name: event.name })}>{t("introduction")}</a>
           </div>
-        </li>)}
+        </li>;
+        })}
         </ul>
       </section>)}
       {events.length === 0 && <p className={styles.empty} role="status">{t("empty")}</p>}
     </main>
+    {events.length > 0 && <EventChooserAside groups={groups} today={today} onSelect={onSelect} />}
+    </div>
   </div>;
 }
 
