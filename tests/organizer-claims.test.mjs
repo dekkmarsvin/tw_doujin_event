@@ -119,6 +119,132 @@ function overridesRequest(candidateId, cookie, body, query = "社團") {
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
 }
+
+function noticeRequest(cookie, method = "GET", body, candidateId = "candidate-a") {
+  return new Request(`${origin}/api/organizer/events/${candidateId}/notice?event=event-b`, {
+    method, headers: { origin, ...(cookie ? { cookie } : {}), "content-type": "application/json" },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+}
+const noticeInput = { kind: "important", text: " 活動取消 ", url: "https://example.test/notice", eventId: "event-b", updatedAt: "forged" };
+const publicOverlay = (etag) => handlers.publicOverrides(new Request(`${origin}/data/events/event-a/overrides.json`, {
+  headers: etag ? { "if-none-match": etag } : {},
+}), "event-a");
+
+for (const [email, role] of [["owner@example.test", "organizer_owner"], ["editor@example.test", "organizer_editor"], ["admin@example.test", "admin"]]) {
+  test(`${role} publishes, reads, updates and clears the candidate event notice with audit`, async () => {
+    const cookie = await signIn(email);
+    assert.deepEqual(await (await handlers.readOrganizerNotice(noticeRequest(cookie), "candidate-a")).json(), { notice: null });
+    const result = await handlers.saveOrganizerNotice(noticeRequest(cookie, "PUT", noticeInput), "candidate-a");
+    assert.equal(result.status, 200, await result.clone().text());
+    const notice = { kind: "important", text: "活動取消", url: noticeInput.url, updatedAt: new Date(now).toISOString() };
+    assert.deepEqual(await result.json(), { notice });
+    assert.deepEqual(await (await handlers.readOrganizerNotice(noticeRequest(cookie), "candidate-a")).json(), { notice });
+    assert.equal(await repo.getEventNotice("event-b"), null, "body/query cannot redirect event scope");
+    const before = await publicOverlay();
+    assert.deepEqual((await before.json()).notice, notice);
+    const updated = await handlers.saveOrganizerNotice(noticeRequest(cookie, "PUT", { kind: "info", text: "活動延期", url: "" }), "candidate-a");
+    assert.equal(updated.status, 200);
+    assert.equal((await updated.json()).notice.url, undefined);
+    const after = await publicOverlay(before.headers.get("etag"));
+    assert.equal(after.status, 200);
+    assert.equal((await after.json()).notice.text, "活動延期");
+    assert.notEqual(after.headers.get("etag"), before.headers.get("etag"));
+    assert.equal((await publicOverlay(after.headers.get("etag"))).status, 304);
+    assert.deepEqual(await (await handlers.clearOrganizerNotice(noticeRequest(cookie, "DELETE"), "candidate-a")).json(), { notice: null });
+    assert.deepEqual(await (await handlers.readOrganizerNotice(noticeRequest(cookie), "candidate-a")).json(), { notice: null });
+    const cleared = await publicOverlay(after.headers.get("etag"));
+    assert.equal(cleared.status, 200);
+    assert.equal(Object.hasOwn(await cleared.json(), "notice"), false);
+    assert.equal((await handlers.clearOrganizerNotice(noticeRequest(cookie, "DELETE"), "candidate-a")).status, 200, "clear is idempotent");
+    const audits = await database.prepare("SELECT actor_account_id, actor_role, action, detail_json FROM audit_log WHERE action LIKE 'event_notice.%' ORDER BY rowid").all();
+    assert.deepEqual(audits.results.map(row => row.action), ["event_notice.published", "event_notice.published", "event_notice.cleared", "event_notice.cleared"]);
+    for (const audit of audits.results) {
+      assert.equal(audit.actor_role, role);
+      assert.ok(audit.actor_account_id);
+      assert.deepEqual(JSON.parse(audit.detail_json), { candidateId: "candidate-a", eventId: "event-a" });
+    }
+  });
+}
+
+test("notice endpoints enforce the overrides authorization boundary and reject invalid input", async () => {
+  const owner = await signIn("owner@example.test"), outsider = await signIn("stranger@example.test");
+  await candidate("draft-notice", "event-a", now, "AMEND"); await grant("draft-notice", ids.ownerId, "owner");
+  await candidate("unserved-notice", "not-served"); await grant("unserved-notice", ids.ownerId, "owner");
+  await database.prepare("UPDATE organizer_event_candidates SET published_version=1 WHERE id='unserved-notice'").run();
+  for (const [id, cookie, status] of [["candidate-a", null, 401], ["candidate-a", outsider, 404], ["candidate-b", owner, 404], ["draft-notice", owner, 404], ["unserved-notice", owner, 404]]) {
+    assert.equal((await handlers.readOrganizerNotice(noticeRequest(cookie, "GET", undefined, id), id)).status, status);
+    assert.equal((await handlers.saveOrganizerNotice(noticeRequest(cookie, "PUT", noticeInput, id), id)).status, status);
+    assert.equal((await handlers.clearOrganizerNotice(noticeRequest(cookie, "DELETE", undefined, id), id)).status, status);
+  }
+  for (const [change, error] of [[{ text: " " }, "請填寫公告說明。"], [{ text: "字".repeat(201) }, "說明最多 200 字。"], [{ kind: "warning" }, "請選擇公告類型。"], [{ url: "http://example.test" }, "連結必須是 https:// 開頭的網址。"]]) {
+    const response = await handlers.saveOrganizerNotice(noticeRequest(owner, "PUT", { ...noticeInput, ...change }), "candidate-a");
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error });
+  }
+  assert.equal(await repo.getEventNotice("event-a"), null);
+});
+
+test("notice writes recheck revoked grants at the D1 mutation", async () => {
+  const cookie = await signIn("editor@example.test");
+  handlers = createCirclePortalHandlers({ ...options, repository: { ...repo, writeEventNotice: async (...args) => {
+    await database.prepare("UPDATE organizer_event_grants SET revoked_at=?1 WHERE account_id=?2").bind(now, ids.editorId).run();
+    return repo.writeEventNotice(...args);
+  } } });
+  assert.equal((await handlers.saveOrganizerNotice(noticeRequest(cookie, "PUT", noticeInput), "candidate-a")).status, 404);
+  assert.equal(await repo.getEventNotice("event-a"), null);
+});
+
+for (const clear of [false, true]) {
+  test(`an older circle rebuild preserves a completed notice ${clear ? "clear" : "update"} with distinct revisions and ETags`, async () => {
+    const cookie = await signIn("owner@example.test");
+    await supplement("event-a");
+    await handlers.saveOrganizerNotice(noticeRequest(cookie, "PUT", noticeInput), "candidate-a");
+    let reached, release;
+    const paused = new Promise(resolve => { reached = resolve; });
+    const resume = new Promise(resolve => { release = resolve; });
+    let hold = true;
+    const slow = createIdentityRepository({
+      prepare(sql) {
+        function wrap(statement) {
+          return {
+            bind: (...args) => wrap(statement.bind(...args)),
+            all: (...args) => statement.all(...args), run: (...args) => statement.run(...args),
+            first: async (...args) => {
+              if (hold && /INSERT INTO overrides_doc/.test(sql)) { hold = false; reached(); await resume; }
+              return statement.first(...args);
+            },
+          };
+        }
+        return wrap(database.prepare(sql));
+      },
+      batch: (...args) => database.batch(...args),
+    });
+    const older = slow.rebuildOverridesDoc("event-a", "event-a", now, "during");
+    await paused;
+    try {
+      // This newer circle content makes the delayed snapshot observably distinct.
+      await database.prepare("UPDATE circle_overrides SET fields_json=?1 WHERE event_id='event-a'").bind('{"saleInfo":"newer circle content"}').run();
+      const response = clear
+        ? await handlers.clearOrganizerNotice(noticeRequest(cookie, "DELETE"), "candidate-a")
+        : await handlers.saveOrganizerNotice(noticeRequest(cookie, "PUT", { kind: "info", text: "新的公告", url: "" }), "candidate-a");
+      assert.equal(response.status, 200);
+      const completed = await publicOverlay();
+      const completedBody = await completed.json();
+      release();
+      const rebuilt = await older;
+      const current = await publicOverlay(completed.headers.get("etag"));
+      assert.equal(current.status, 200, "previous strong ETag must not produce a false 304");
+      const body = await current.json();
+      assert.notDeepEqual(body.overrides, completedBody.overrides);
+      assert.ok(body.revision > completedBody.revision);
+      assert.equal(body.revision, rebuilt.revision);
+      assert.notEqual(current.headers.get("etag"), completed.headers.get("etag"));
+      assert.deepEqual(body.notice, clear ? undefined : { kind: "info", text: "新的公告", updatedAt: new Date(now).toISOString() });
+      assert.equal(Object.hasOwn(body, "notice"), !clear);
+    } finally { release(); await older; }
+  });
+}
 async function supplement(eventId, circleId = "c-1", media = false) {
   const claimId = eventId === "event-a" ? "claim-a" : "claim-b";
   await repo.markClaimVerified(claimId, "admin", now, "admin@example.test");

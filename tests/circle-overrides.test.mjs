@@ -9,6 +9,7 @@ if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test envir
 const records = await environment.runner.import("/app/circle-records.ts");
 const overrides = await environment.runner.import("/app/circle-overrides.ts");
 const messages = await environment.runner.import("/app/circle-override-messages.ts");
+const notices = await environment.runner.import("/app/event-notice.ts");
 after(() => vite.close());
 
 const payload = JSON.parse(await readFile(new URL("../fixtures/events/sample/circles.json", import.meta.url), "utf8"));
@@ -26,6 +27,36 @@ function envelope(list) {
 function withFields(circleId, fields) {
   return envelope([{ circleId, updatedAt: "2026-08-13T00:00:00.000Z", fields }]);
 }
+
+test("notice input validates its bounded text, kind and optional HTTPS link", () => {
+  const input = { kind: "important", text: " 說".trim().repeat(200), url: " https://example.test/notice " };
+  assert.deepEqual(notices.parseEventNoticeInput(input), { ...input, url: input.url.trim() });
+  for (const [change, problem] of [
+    [{ text: "說".repeat(201) }, "說明最多 200 字。"],
+    [{ text: "  " }, "請填寫公告說明。"],
+    [{ kind: "warning" }, "請選擇公告類型。"],
+    [{ url: "http://example.test" }, "連結必須是 https:// 開頭的網址。"],
+    [{ url: "javascript:alert(1)" }, "連結必須是 https:// 開頭的網址。"],
+    [{ url: "https://example.test/" + "a".repeat(500) }, "連結最多 500 字。"],
+  ]) {
+    assert.equal(notices.eventNoticeInputProblem({ ...input, ...change }), problem);
+    assert.equal(notices.parseEventNoticeInput({ ...input, ...change }), null);
+  }
+  assert.deepEqual(notices.parseEventNoticeInput({ kind: "info", text: " 公告 ", url: "" }), { kind: "info", text: "公告", url: "" });
+});
+
+test("overlay preserves a valid notice and drops only malformed or absent notices", () => {
+  const notice = { kind: "important", text: "活動取消", url: "https://example.test/notice", updatedAt: "2026-10-24T00:00:00.000Z" };
+  const document = withFields(placed.id, { saleInfo: "仍有補充資料" });
+  assert.deepEqual(overrides.parseCircleOverridesPayload({ ...document, notice }).notice, notice);
+  assert.deepEqual(notices.parseEventNotice({ ...notice, url: undefined }), { kind: notice.kind, text: notice.text, updatedAt: notice.updatedAt });
+  for (const malformed of [null, { ...notice, kind: "warning" }, { ...notice, text: " " }, { ...notice, url: "http://example.test" }, { ...notice, updatedAt: "yesterday" }]) {
+    const parsed = overrides.parseCircleOverridesPayload({ ...document, notice: malformed });
+    assert.deepEqual(parsed.overrides, document.overrides);
+    assert.equal(Object.hasOwn(parsed, "notice"), false);
+  }
+  assert.equal(Object.hasOwn(overrides.parseCircleOverridesPayload(document), "notice"), false);
+});
 
 /**
  * The validator accepts any HTTPS image address (ADR-0052), so the CSP has to

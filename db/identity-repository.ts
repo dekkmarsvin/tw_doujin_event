@@ -1,4 +1,5 @@
 import { createAdminReferenceRepository } from "./admin-reference-repository";
+import { parseEventNotice, type EventNotice } from "../app/event-notice";
 import { CIRCLE_OVERRIDES_SCHEMA, circleRetentionExpiresAt, type CircleRetentionChoice } from "../app/circle-overrides";
 import {
   organizerVenueNameKey,
@@ -476,18 +477,15 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       for (const circleId of circleIds) {
         statements.push(database.prepare(`DELETE FROM circle_overrides WHERE event_id = ?1 AND circle_id = ?2`).bind(eventId, circleId));
       }
-      const current = await database.prepare(`SELECT revision, json FROM overrides_doc WHERE event_id = ?1`)
-        .bind(eventId).first<{ revision: number; json: string }>();
-      if (current) {
-        const document = JSON.parse(current.json) as { overrides: { circleId: string }[] };
-        const overrides = document.overrides.filter((override) => !circleIds.has(override.circleId));
-        if (overrides.length !== document.overrides.length) {
-          const revision = current.revision + 1;
-          statements.push(database.prepare(
-            `UPDATE overrides_doc SET revision = ?1, json = ?2, updated_at = ?3 WHERE event_id = ?4`,
-          ).bind(revision, JSON.stringify({ ...document, revision, overrides }), input.now, eventId));
-        }
-      }
+      statements.push(database.prepare(
+        `UPDATE overrides_doc SET revision = revision + 1, updated_at = ?3,
+          json = json_set(json, '$.revision', revision + 1, '$.overrides', json(
+            (SELECT json_group_array(json(value)) FROM json_each(overrides_doc.json, '$.overrides')
+             WHERE json_extract(value, '$.circleId') NOT IN (SELECT value FROM json_each(?2)))))
+         WHERE event_id = ?1 AND EXISTS (
+           SELECT 1 FROM json_each(overrides_doc.json, '$.overrides')
+           WHERE json_extract(value, '$.circleId') IN (SELECT value FROM json_each(?2)))`,
+      ).bind(eventId, JSON.stringify([...circleIds]), input.now));
     }
 
     statements.push(
@@ -509,6 +507,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       database.prepare(`UPDATE map_contributor_grants SET suspended_by = '[shredded]' WHERE suspended_by = ?1`).bind(input.email),
       database.prepare(`DELETE FROM map_contributor_grants WHERE account_id = ?1`).bind(input.accountId),
       database.prepare(`UPDATE organizer_venues SET created_by = '[shredded]' WHERE created_by = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE event_notices SET updated_by = '[shredded]' WHERE updated_by = ?1`).bind(input.accountId),
       // Pending requests have no decision to preserve. Reviewed applications
       // keep the decision and candidate link; erase submitted free text.
       database.prepare(`DELETE FROM organizer_applications WHERE account_id = ?1 AND status = 'pending'`).bind(input.accountId),
@@ -1163,22 +1162,50 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       updatedAt: new Date(row.updated_at).toISOString(),
       fields: JSON.parse(row.fields_json) as unknown,
     }));
-    const current = await database.prepare(`SELECT revision FROM overrides_doc WHERE event_id = ?1`)
-      .bind(eventId).first<{ revision: number }>();
-    const revision = (current?.revision ?? 0) + 1;
     const json = JSON.stringify({
       schema: CIRCLE_OVERRIDES_SCHEMA,
       eventId,
       generatedAt,
-      revision,
+      revision: 1,
       overrides,
     });
-    await database.prepare(
-      `INSERT INTO overrides_doc (event_id, revision, json, updated_at, phase) VALUES (?1, ?2, ?3, ?4, ?5)
-       ON CONFLICT(event_id) DO UPDATE SET revision = excluded.revision, json = excluded.json,
-         updated_at = excluded.updated_at, phase = excluded.phase`,
-    ).bind(eventId, revision, json, now, phase).run();
-    return { revision, json, phase };
+    // Read the notice at the write, never from a JS snapshot that could predate
+    // a completed publication/clear. Revision and its JSON value advance together.
+    return (await database.prepare(
+      `INSERT INTO overrides_doc (event_id, revision, json, updated_at, phase)
+       VALUES (?1, 1, json_patch(?2, COALESCE((
+         SELECT json_object('notice', json_patch(json_object('kind', kind, 'text', text, 'updatedAt', updated_at),
+           CASE WHEN url = '' THEN '{}' ELSE json_object('url', url) END))
+         FROM event_notices WHERE event_id = ?1), '{}')), ?3, ?4)
+       ON CONFLICT(event_id) DO UPDATE SET revision = overrides_doc.revision + 1,
+         json = json_set(excluded.json, '$.revision', overrides_doc.revision + 1),
+         updated_at = excluded.updated_at, phase = excluded.phase
+       RETURNING revision, json, phase`,
+    ).bind(eventId, json, now, phase).first<{ revision: number; json: string; phase: OverridesPhase }>())!;
+  }
+
+  async function getEventNotice(eventId: string): Promise<EventNotice | null> {
+    await ensureTables();
+    const row = await database.prepare(`SELECT kind, text, url, updated_at AS updatedAt FROM event_notices WHERE event_id = ?1`)
+      .bind(eventId).first();
+    return parseEventNotice(row);
+  }
+
+  async function writeEventNotice(eventId: string, notice: EventNotice | null, authority: OrganizerClaimAuthority) {
+    await ensureTables();
+    const permitted = organizerClaimAuthoritySql(2, 3, "?1");
+    const [access] = await database.batch([
+      database.prepare(`SELECT 1 WHERE ${permitted}`).bind(eventId, authority.candidateId, authority.accountId),
+      notice ? database.prepare(
+        `INSERT INTO event_notices (event_id, kind, text, url, updated_at, updated_by)
+         SELECT ?1, ?4, ?5, ?6, ?7, ?3 WHERE ${permitted}
+         ON CONFLICT(event_id) DO UPDATE SET kind = excluded.kind, text = excluded.text, url = excluded.url,
+           updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
+      ).bind(eventId, authority.candidateId, authority.accountId, notice.kind, notice.text, notice.url ?? "", notice.updatedAt)
+        : database.prepare(`DELETE FROM event_notices WHERE event_id = ?1 AND ${permitted}`)
+          .bind(eventId, authority.candidateId, authority.accountId),
+    ]);
+    return access.results.length > 0;
   }
 
   async function getOverridesDoc(eventId: string) {
@@ -3718,7 +3745,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       "organizer_amendment_changes", "organizer_amendments", "organizer_applications", "organizer_category_sequences",
       "organizer_import_rows", "organizer_import_sources", "organizer_event_reviews", "organizer_event_invitations", "organizer_event_grants", "organizer_event_revisions", "organizer_workspace_preferences", "organizer_workspace_state", "organizer_event_candidates", "organizer_venue_spaces", "organizer_venues", "organizer_reference_records",
       "map_draft_exports", "map_draft_files", "map_draft_reviews", "map_draft_comments", "map_draft_revisions", "map_drafts", "map_contributor_grants",
-      "planning_shares", "login_tokens", "sessions", "circle_claims", "circle_overrides", "overrides_doc", "audit_log", "preview_mail_sink", "accounts",
+      "planning_shares", "login_tokens", "sessions", "circle_claims", "circle_overrides", "overrides_doc", "event_notices", "audit_log", "preview_mail_sink", "accounts",
     ].map((table) => database.prepare(`DELETE FROM ${table}`)));
     await seedOrganizerVenueCatalog(database);
   }
@@ -3740,7 +3767,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     hasVerifiedClaim, verifiedClaimId, ownsCircle, markClaimVerified, setClaimStatus, recordChallengeAttempt,
     getOverride, listCircleClaimsForAdmin, listCircleModerationHistory,
     putOverride, deleteOverride, takedownOverride, listLiveOverrides, getPublicOverride, setPostEventHidden,
-    rebuildOverridesDoc, getOverridesDoc,
+    rebuildOverridesDoc, getOverridesDoc, getEventNotice, writeEventNotice,
     manageMapContributor, hasActiveMapContributor,
     createMapDraft, getMapDraft, normalizeMapDraftPeriodAliases,
     listMapDraftsForOwner, listMapDraftsForAdmin, listMapDraftFiles, listMapDraftReviews,

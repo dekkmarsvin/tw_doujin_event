@@ -271,6 +271,50 @@ try {
     await visit.close();
   }
 
+  // 7. #538: the organizer's event notice heads the map, the browse view and
+  //    the circle page, and an open page picks up a cleared notice the next
+  //    time it comes back to the foreground — reading the overlay only.
+  let notice = { kind: "important", text: "因颱風停辦，第二天活動取消。\n退費方式請見官網。", url: "https://organizer.test/typhoon", updatedAt: "2026-08-21T01:00:00.000Z" };
+  const requested = { base: 0, overlay: 0 };
+  const noticeRoutes = routes(async (target) => {
+    target.on("request", (request) => {
+      if (request.url().includes("/circles.json")) requested.base++;
+      if (request.url().includes("/overrides.json")) requested.overlay++;
+    });
+    await target.route("**/data/events/sample/overrides.json", (route) => route.fulfill({ status: 200, contentType: "application/json",
+      body: JSON.stringify({ schema: "circle-overrides/1", eventId: "sample", generatedAt: "2026-01-01T00:00:00.000+08:00", revision: notice ? 2 : 3, overrides: [], ...(notice ? { notice } : {}) }) }));
+  });
+  const resume = (target) => target.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  for (const [view, viewport] of [["map", { width: 1440, height: 900 }], ["map", { width: 390, height: 844 }], ["browse", { width: 390, height: 844 }], ["circle", { width: 390, height: 844 }]]) {
+    const target = view === "circle" ? await journey.page({ url: pageOf(TWO_DAYS), viewport, routes: noticeRoutes })
+      : view === "map" ? await journey.mapPage({ viewport, routes: noticeRoutes })
+        : await journey.page({ params: "&view=browse", viewport, routes: noticeRoutes });
+    const banner = target.getByRole("complementary", { name: "主辦公告" });
+    await banner.getByText("因颱風停辦", { exact: false }).waitFor();
+    assert.equal(await banner.getByRole("link", { name: "詳細資訊" }).getAttribute("href"), notice.url);
+    assert.equal(await banner.evaluate((node) => node.scrollWidth <= node.clientWidth), true, `${view} notice fits ${viewport.width}px`);
+    await journey.capture(target, `event-notice-${view}-${viewport.width}`);
+    if (view === "map" && viewport.width === 390) {
+      // The banner takes its room from the map, not from under the bottom sheet.
+      const [noticeBox, mapBox] = await Promise.all([banner.boundingBox(), target.locator(".map-region").boundingBox()]);
+      assert.ok(noticeBox.y + noticeBox.height <= mapBox.y + 1, `the notice sits above the map: ${JSON.stringify({ noticeBox, mapBox })}`);
+    }
+    if (view === "circle") {
+      const before = { ...requested };
+      notice = null;
+      await resume(target);
+      await banner.waitFor({ state: "detached" });
+      assert.equal(requested.base, before.base, "coming back reads no base");
+      assert.equal(requested.overlay, before.overlay + 1, "coming back reads the overlay once");
+      notice = { kind: "info", text: "入場時間延後一小時。", updatedAt: "2026-08-21T02:00:00.000Z" };
+      await target.evaluate(() => { document.dispatchEvent(new Event("visibilitychange")); window.dispatchEvent(new Event("online")); });
+      await target.getByRole("complementary", { name: "主辦公告" }).getByText("入場時間延後一小時。").waitFor();
+      assert.equal(requested.overlay, before.overlay + 2, "a resume and a reconnect at once share one read");
+      assert.equal(await target.getByRole("link", { name: "詳細資訊" }).count(), 0, "no link, no link words");
+    }
+    await target.close();
+  }
+
   await journey.finish();
 } catch (error) {
   await journey.abort(error);

@@ -2,6 +2,7 @@ import type { Locale } from "./i18n/locale";
 import type { CircleExternalLink, CircleTemplateLinkKind } from "./circle-records";
 import { isCircleCategoryLabel, type CircleCategoryCatalog } from "./circle-categories";
 import { ACTIVE_EVENT, getEventDefinition } from "./event-catalog";
+import { parseEventNotice, type EventNotice } from "./event-notice";
 
 export const CIRCLE_OVERRIDES_SCHEMA = "circle-overrides/1" as const;
 
@@ -68,6 +69,7 @@ export type CircleOverridesPayload = {
   generatedAt: string;
   revision: number;
   overrides: CircleOverride[];
+  notice?: EventNotice;
 };
 
 /** Caps exist so one circle cannot bloat the document every reader downloads. */
@@ -355,11 +357,13 @@ export function parseCircleOverridesPayload(value: unknown): CircleOverridesPayl
   if (!Array.isArray(payload.overrides)) return null;
 
   const event = getEventDefinition(payload.eventId);
+  const notice = parseEventNotice(payload.notice);
   return {
     schema: CIRCLE_OVERRIDES_SCHEMA,
     eventId: payload.eventId,
     generatedAt: payload.generatedAt,
     revision: payload.revision as number,
+    ...(notice ? { notice } : {}),
     // A transport may need to parse a structurally valid foreign-event
     // envelope before it can report the event-id mismatch. Known events also
     // enforce their catalog vocabulary; an unknown event gets only the bounded

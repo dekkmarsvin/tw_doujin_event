@@ -206,8 +206,11 @@ test("fresh public handler preserves revisions, 304 and phase rebuild without co
   const database = await preparedDatabase();
   const observed = observe(database);
   const repository = createIdentityRepository(observed.database, { bootstrapAdmins: ["admin@example.test"] });
+  const notice = { kind: "info", text: "活動延期", updatedAt: "2026-09-28T00:00:00.000Z" };
+  await database.prepare("INSERT INTO event_notices (event_id, kind, text, url, updated_at, updated_by) VALUES ('ff47', ?1, ?2, '', ?3, 'organizer')")
+    .bind(notice.kind, notice.text, notice.updatedAt).run();
   await database.prepare("INSERT INTO overrides_doc (event_id, revision, json, updated_at, phase) VALUES ('ff47', 10, ?1, 100, 'during')")
-    .bind(JSON.stringify({ schema: "circle-overrides/1", eventId: "ff47", generatedAt: "2026-09-28T00:00:00Z", revision: 10, overrides: [] })).run();
+    .bind(JSON.stringify({ schema: "circle-overrides/1", eventId: "ff47", generatedAt: "2026-09-28T00:00:00Z", revision: 10, overrides: [], notice })).run();
   const end = Date.parse("2026-09-28T12:00:00Z");
   let now = end - 1;
   const portal = createCirclePortalHandlers({ repository, config: {
@@ -227,8 +230,9 @@ test("fresh public handler preserves revisions, 304 and phase rebuild without co
   const afterEvent = await portal.publicOverrides(request({ "if-none-match": first.headers.get("etag") }), "ff47");
   assert.equal(afterEvent.status, 200);
   assert.notEqual(afterEvent.headers.get("etag"), first.headers.get("etag"));
-  assert.equal((await afterEvent.json()).revision, 11);
-  assert.deepEqual(observed.calls.filter(call => call.kind !== "first" && call.kind !== "all").map(call => call.sql[0].split(" (")[0].trim()), ["INSERT INTO overrides_doc"]);
+  const afterBody = await afterEvent.json();
+  assert.equal(afterBody.revision, 11);
+  assert.deepEqual(afterBody.notice, notice);
   assert.equal(await count(database, "admins"), 0);
   assert.equal(await count(database, "admin_notification_preferences"), 0);
   observed.calls.length = 0;

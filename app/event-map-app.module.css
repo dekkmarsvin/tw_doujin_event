@@ -106,6 +106,7 @@
 .storageError { max-width:150px; color:#a43e30; font-size:calc(12px * var(--ui-font-scale,1)); }
 @media (min-width:761px) {
   .shell:global(.app-shell) { height:100vh; height:100dvh; display:grid; grid-template-rows:auto minmax(0,1fr); min-height:0; }
+  .shell:global(.app-shell)[data-notice] { grid-template-rows:auto auto minmax(0,1fr); }
   /* Brand, event, search, map/browse switch, language, tools: the switch stays in the top row. */
   .shell :global(.topbar) { height:auto; min-height:72px; grid-template-columns:auto minmax(240px,max-content) minmax(240px,1fr) auto auto auto; gap:12px; padding:8px 16px; }
   .languageSlot { display:flex; }

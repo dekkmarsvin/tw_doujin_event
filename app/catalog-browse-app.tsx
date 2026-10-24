@@ -10,6 +10,7 @@ import { catalogBrowseUrl, parseCatalogBrowseUrl, switchReaderViewUrl, type Cata
 import { projectCatalogBrowse, type CatalogBrowseCard } from "./catalog-browse-projection";
 import { BROWSE_BATCH_SIZE, readBrowseHistory, saveBrowseHistory } from "./catalog-browse-history";
 import { useCircleCatalog } from "./use-circle-catalog";
+import { EventNoticeBanner } from "./event-notice-banner";
 import { useReaderPlanning } from "./reader-planning";
 import { restoreFavorite, toggleFavorite } from "./planning-store";
 import { applyReaderMetadata, circlePath, pageMetadata, readerLink } from "./seo";
@@ -178,6 +179,7 @@ export default function CatalogBrowseApp({ event, onChooseEvent }: { event: Even
     <header className={styles.header}>
       <div className={styles.identity}><div className={`brand ${styles.brand}`}><span aria-hidden="true">場</span>場刊 Map</div>{/* As on the map: the event name leads back to the chooser only when there is another event to choose. */}{onChooseEvent ? <a className={styles.event} href={localizedHref("/", locale)} onClick={(pressed) => { if (!ordinaryLinkClick(pressed)) return; pressed.preventDefault(); savePosition(); onChooseEvent(); }}><span>{event.name}<small>{eventCalendar(event, locale).label}</small></span><span className={styles.eventSwitch}>{t("switchEvent")}<UiIcon name="chevron-right" /></span></a> : <div className={styles.event}><span>{event.name}<small>{eventCalendar(event, locale).label}</small></span></div>}<ReaderViewTabs className={styles.viewSwitch} event={event} view="browse" url={url} beforeNavigate={savePosition} /><PlanningTools eventId={event.id} /><LanguageSwitcher className={styles.languageSwitcher} narrow /><a className={`site-header-login reader-login ${styles.readerLogin}`} href={localizedHref(publicLoginHref({ eventId: event.id }), locale)}>{header("login")}</a></div>
     </header>
+    <EventNoticeBanner notice={publication.overrides?.notice} className={styles.notice} />
     <main className={styles.main}>
       <h1 className={styles.srOnly}>{t("heading", { name: event.name })}</h1>
       <div className={styles.search}><UiIcon name="search" /><input aria-label={t("search")} placeholder={t("search")} value={state.query} onChange={(e) => change({ ...state, query: e.target.value }, true)} /></div>

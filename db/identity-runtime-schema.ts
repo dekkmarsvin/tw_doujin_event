@@ -48,6 +48,10 @@ function index(name: string, tableName: string, expression: string, options: { u
 }
 
 export const IDENTITY_TABLES = [
+  table("event_notices", [
+    "event_id TEXT PRIMARY KEY NOT NULL", "kind TEXT NOT NULL CHECK (kind IN ('info', 'important'))",
+    "text TEXT NOT NULL", "url TEXT NOT NULL", "updated_at TEXT NOT NULL", "updated_by TEXT NOT NULL",
+  ]),
   table("planning_shares", [
     "share_id TEXT PRIMARY KEY", "event_id TEXT NOT NULL", "items_json TEXT NOT NULL",
     "created_at INTEGER NOT NULL", "expires_at INTEGER NOT NULL", "request_ip_hash TEXT",

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { OrganizerAmendmentPanel } from "./organizer-amendment-panel";
 import { OrganizerApplicationsPanel } from "./organizer-applications-panel";
 import { OrganizerCirclePanel } from "./organizer-claims-panel";
+import { OrganizerNoticePanel } from "./organizer-notice-panel";
 import { OrganizerWorkspaceHeader } from "./organizer-workspace-header";
 import { useOrganizerPendingClaims } from "./use-organizer-pending-claims";
 import { groupOrganizerEvents, latestOrganizerEdition } from "../organizer-event-groups";
@@ -176,7 +177,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   // -- the map above all -- are what that width is for.
   const [eventListOpen, setEventListOpen] = useState(true);
   const [expandedEvents, setExpandedEvents] = useState<Record<string, boolean>>({});
-  const [surface, setSurface] = useState<"data" | "members" | "circles">(() =>
+  const [surface, setSurface] = useState<"data" | "members" | "circles" | "notice">(() =>
     entry.has("candidate") && entry.get("section") === "members" ? "members" : "data");
   const { pendingClaims, onQueueLoaded } = useOrganizerPendingClaims(
     detail?.claimReviewAvailable ? detail.event.id : null, detail?.event.eventId ?? null, surface === "circles",
@@ -476,6 +477,8 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
                   }}>活動資料</button>
                 {active && detail?.claimReviewAvailable && <button type="button" className={styles.ghost} aria-current={surface === "circles" ? "page" : undefined}
                   onClick={() => requestNavigation("開啟社團管理", () => setSurface("circles"))}>社團管理</button>}
+                {active && detail?.claimReviewAvailable && <button type="button" className={styles.ghost} aria-current={surface === "notice" ? "page" : undefined}
+                  onClick={() => requestNavigation("開啟活動公告", () => setSurface("notice"))}>活動公告</button>}
               </div>
             </div>;
           })}
@@ -520,6 +523,8 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
             : "收到主辦邀請後，活動會出現在左側。"}</p>
       </div>
         : surface === "members" ? <MembersPanel key={detail.event.id} session={session} detail={detail} onChanged={refresh} onClose={() => setSurface("data")} />
+        : surface === "notice" && detail.claimReviewAvailable && detail.event.eventId
+          ? <OrganizerNoticePanel key={detail.event.id} candidateId={detail.event.id} />
         : surface !== "data" && detail.claimReviewAvailable && detail.event.eventId
           ? <OrganizerCirclePanel key={detail.event.id} candidateId={detail.event.id} eventId={detail.event.eventId} canRevoke={detail.event.role !== "editor" || session.isAdmin} onQueueLoaded={onQueueLoaded} />
           : <WorkspaceSurface

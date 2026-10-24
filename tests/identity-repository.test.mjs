@@ -364,7 +364,10 @@ test("account deletion releases claims, removes owned overlays and shreds person
     eventId: "ff47", circleId: "ff47-delete-account", fieldsJson: JSON.stringify({ saleInfo: "personal content" }),
     updatedBy: accountId, now: NOW,
   });
-  await repository.rebuildOverridesDoc("ff47", "2026-08-13T00:00:00.000Z", NOW, "during");
+  const notice = { kind: "info", text: "主辦公告", updatedAt: new Date(NOW).toISOString() };
+  await database.prepare("INSERT INTO event_notices (event_id, kind, text, url, updated_at, updated_by) VALUES ('ff47', ?1, ?2, '', ?3, ?4)")
+    .bind(notice.kind, notice.text, notice.updatedAt, accountId).run();
+  const beforeDeletion = await repository.rebuildOverridesDoc("ff47", "2026-08-13T00:00:00.000Z", NOW, "during");
   const emailAuditDigest = "keyed-email-digest";
   await repository.writeAudit({
     at: NOW, actorAccountId: accountId, actorRole: "circle", action: "claim.created",
@@ -384,6 +387,13 @@ test("account deletion releases claims, removes owned overlays and shreds person
     ).first()).total, 0, `${table} must not retain the account`);
   }
   assert.equal(JSON.parse((await repository.getOverridesDoc("ff47")).json).overrides.some((item) => item.circleId === "ff47-delete-account"), false);
+  const afterDeletion = await repository.getOverridesDoc("ff47");
+  const afterDocument = JSON.parse(afterDeletion.json);
+  assert.deepEqual(afterDocument.notice, notice, "public organizer content survives account deletion");
+  assert.equal(afterDocument.revision, beforeDeletion.revision + 1);
+  assert.equal(afterDeletion.revision, afterDocument.revision);
+  assert.equal((await database.prepare("SELECT updated_by FROM event_notices WHERE event_id='ff47'").first()).updated_by, "[shredded]");
+  await database.prepare("DELETE FROM event_notices WHERE event_id='ff47'").run();
 
   const shredded = await database.prepare(`SELECT * FROM audit_log WHERE action = 'claim.created' AND shredded_at IS NOT NULL`).first();
   assert.equal(shredded.actor_account_id, null);

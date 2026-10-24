@@ -6,7 +6,7 @@ import { createServer, isRunnableDevEnvironment } from "vite";
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
-const { createCatalogPublication } = await environment.runner.import("/app/catalog-publication.ts");
+const { createCatalogPublication, subscribeOverlayResume } = await environment.runner.import("/app/catalog-publication.ts");
 const records = await environment.runner.import("/app/circle-records.ts");
 after(() => vite.close());
 beforeEach(() => records.resetCircleCatalog());
@@ -99,4 +99,83 @@ test("base identity mismatch fails closed while a later retry can recover", asyn
   await publication.retry("event-a");
   assert.equal(publication.getSnapshot("event-a").status, "ready");
   assert.equal(publication.getSnapshot("event-a").overlayStatus, "applied");
+});
+
+test("resume refresh loads only overlays, shares per-event in-flight work and applies a clear", async () => {
+  const calls = [];
+  let next;
+  const notice = { kind: "important", text: "活動取消", updatedAt: "2026-10-24T00:00:00.000Z" };
+  const publication = createCatalogPublication({
+    loadBase: async eventId => { calls.push(`base:${eventId}`); return resource(eventId === "event-a" ? baseA : baseB); },
+    loadOverlay: async eventId => { calls.push(`overlay:${eventId}`); return next ? next.promise : resource({ ...overlay(eventId), notice }); },
+  });
+  await publication.refreshOverlay("event-a");
+  assert.deepEqual(calls, [], "resume cannot start a base load");
+  next = deferred();
+  const loading = publication.load("event-a");
+  assert.equal(publication.refreshOverlay("event-a"), loading);
+  next.resolve(resource({ ...overlay("event-a"), notice }));
+  await loading;
+  next = undefined;
+  await publication.load("event-b");
+  assert.deepEqual(publication.getSnapshot("event-a").overrides.notice, notice);
+  calls.length = 0;
+  next = deferred();
+  const refreshA = publication.refreshOverlay("event-a");
+  assert.equal(publication.refreshOverlay("event-a"), refreshA);
+  assert.equal(publication.load("event-a"), refreshA);
+  const nextA = next;
+  next = deferred();
+  const refreshB = publication.refreshOverlay("event-b");
+  assert.notEqual(refreshB, refreshA);
+  // Resolve each event separately so their publication identities remain valid.
+  nextA.resolve(resource(overlay("event-a", "updated supplement")));
+  next.resolve(resource(overlay("event-b", "event-b updated supplement")));
+  await Promise.all([refreshA, refreshB]);
+  assert.deepEqual(calls.sort(), ["overlay:event-a", "overlay:event-b"]);
+  assert.equal(Object.hasOwn(publication.getSnapshot("event-a").overrides, "notice"), false);
+  assert.equal(publication.getSnapshot("event-a").catalog.circlesById.get(baseA.circles[0].id).saleInfo, "updated supplement");
+  assert.equal(publication.getSnapshot("event-b").catalog.circlesById.get(baseB.circles[0].id).saleInfo, "event-b updated supplement");
+});
+
+test("failed refresh preserves the existing snapshot and metadata", async () => {
+  let fail = false;
+  const publication = createCatalogPublication({
+    loadBase: async () => resource(baseA),
+    loadOverlay: async () => { if (fail) throw new Error("offline"); return resource(overlay("event-a"), "max-age=60", '"old"'); },
+  });
+  await publication.load("event-a");
+  const snapshot = publication.getSnapshot("event-a");
+  const metadata = publication.getCacheMetadata("event-a");
+  fail = true;
+  await publication.refreshOverlay("event-a");
+  assert.equal(publication.getSnapshot("event-a"), snapshot);
+  assert.equal(publication.getCacheMetadata("event-a"), metadata);
+});
+
+test("resume subscribes only to visible and online events and unsubscribes both", () => {
+  const previousDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const document = new EventTarget();
+  const window = new EventTarget();
+  document.visibilityState = "hidden";
+  Object.defineProperty(globalThis, "document", { configurable: true, value: document });
+  Object.defineProperty(globalThis, "window", { configurable: true, value: window });
+  try {
+    let calls = 0;
+    const stop = subscribeOverlayResume(() => { calls += 1; });
+    document.dispatchEvent(new Event("visibilitychange"));
+    assert.equal(calls, 0);
+    document.visibilityState = "visible";
+    document.dispatchEvent(new Event("visibilitychange"));
+    window.dispatchEvent(new Event("online"));
+    assert.equal(calls, 2);
+    stop();
+    document.dispatchEvent(new Event("visibilitychange"));
+    window.dispatchEvent(new Event("online"));
+    assert.equal(calls, 2);
+  } finally {
+    if (previousDocument) Object.defineProperty(globalThis, "document", previousDocument); else delete globalThis.document;
+    if (previousWindow) Object.defineProperty(globalThis, "window", previousWindow); else delete globalThis.window;
+  }
 });

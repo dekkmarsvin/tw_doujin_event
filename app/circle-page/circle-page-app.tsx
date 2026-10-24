@@ -4,8 +4,9 @@ import { localizedHref } from "../i18n/locale";
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { createCatalogPublication } from "../catalog-publication";
-import { CIRCLE_PAGE_ACTIONS_ID, CIRCLE_PAGE_PLAN_DAY_ATTRIBUTE } from "../circle-page-data";
+import { createCatalogPublication, subscribeOverlayResume } from "../catalog-publication";
+import { EventNoticeBanner } from "../event-notice-banner";
+import { CIRCLE_PAGE_ACTIONS_ID, CIRCLE_PAGE_NOTICE_ID, CIRCLE_PAGE_PLAN_DAY_ATTRIBUTE } from "../circle-page-data";
 import { CIRCLE_OVERRIDE_LIST_FIELDS } from "../circle-overrides";
 import { linkKindLabel, sourceDateLabel } from "../circle-presentation";
 import { mediaAltLabel, representativeMedia, sourceProviderLabel, type CircleCatalogPayload } from "../circle-records";
@@ -79,6 +80,7 @@ export default function CirclePageApp({ data }: { data: CircleCatalogPayload }) 
     loadOverlay: loadStaticCircleOverrides,
   }));
   useEffect(() => { void publication.load(eventId); }, [eventId, publication]);
+  useEffect(() => subscribeOverlayResume(() => { void publication.refreshOverlay(eventId); }), [eventId, publication]);
   const subscribe = useCallback((listener: () => void) => publication.subscribe(eventId, listener), [eventId, publication]);
   const snapshot = useCallback(() => publication.getSnapshot(eventId), [eventId, publication]);
   const state = useSyncExternalStore(subscribe, snapshot, snapshot);
@@ -107,6 +109,7 @@ export default function CirclePageApp({ data }: { data: CircleCatalogPayload }) 
   // and one slot on the first card of each day the circle can be visited.
   const [targets] = useState(() => ({
     bar: document.getElementById(CIRCLE_PAGE_ACTIONS_ID),
+    notice: document.getElementById(CIRCLE_PAGE_NOTICE_ID),
     days: [...document.querySelectorAll<HTMLElement>(`[${CIRCLE_PAGE_PLAN_DAY_ATTRIBUTE}]`)]
       .map((element) => ({ element, key: element.getAttribute(CIRCLE_PAGE_PLAN_DAY_ATTRIBUTE) ?? "" })),
   }));
@@ -155,6 +158,7 @@ export default function CirclePageApp({ data }: { data: CircleCatalogPayload }) 
   };
 
   return <>
+    {targets.notice && createPortal(<EventNoticeBanner notice={state.overrides?.notice} className={styles.notice} />, targets.notice)}
     {targets.bar && createPortal(<div ref={setBar} className={styles.actionBar} role="group" aria-label={t("actions")}>
       {planning.storageError && <p className={styles.error} role="alert">{planning.storageError}</p>}
       <div className={styles.feedback} role="status" aria-live="polite">
