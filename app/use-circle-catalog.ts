@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useSyncExternalStore } from "react";
-import { createCatalogPublication } from "./catalog-publication";
+import { createCatalogPublication, subscribeOverlayResume } from "./catalog-publication";
 import { loadStaticCircleCatalog } from "./static-circle-catalog-client";
 import { loadStaticCircleOverrides } from "./static-circle-overrides-client";
 
@@ -18,6 +18,7 @@ const browserCatalogPublication = createCatalogPublication({
  */
 export function useCircleCatalog(eventId: string) {
   useEffect(() => { void browserCatalogPublication.load(eventId); }, [eventId]);
+  useEffect(() => subscribeOverlayResume(() => { void browserCatalogPublication.refreshOverlay(eventId); }), [eventId]);
   const subscribe = useCallback((listener: () => void) => browserCatalogPublication.subscribe(eventId, listener), [eventId]);
   const snapshot = useCallback(() => browserCatalogPublication.getSnapshot(eventId), [eventId]);
   const state = useSyncExternalStore(subscribe, snapshot, snapshot);

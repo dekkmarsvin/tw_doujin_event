@@ -220,11 +220,17 @@ D1 保存草稿 revision、私人 object key、官方來源 URL、文件日期�
 
 **目的**：固定審閱者核准的精確幾何與匯出內容，避免下載時重新計算而漂移。**保存期**：不設期限；帳號刪除時將建立者去識別化。公開地圖仍只來自 event-data repository 的 reviewed snapshot 與 pin。
 
+### `event_notices` — 主辦的活動公告
+
+`event_id`（主鍵，每個活動一則）、`kind`（`info`／`important`）、`text`（200 字以內）、`url`（https 或空字串）、`updated_at`、`updated_by`（account ID）。
+
+**目的**：主辦向讀者公告活動的臨時異動。**內容是主辦撰寫的公開文字，不含個資**；儲存即公開，隨 `overrides_doc` 送出。 **保存期**：至主辦清除或以新公告覆寫，不保留歷史版本。 **處置**：清除時刪列並重建公開文件；帳號刪除時 `updated_by` 改為 `[shredded]`，公告本身保留。發布與清除留在 `audit_log`（`event_notice.published`／`event_notice.cleared`）。
+
 ### `overrides_doc` — 公開的 overlay 文件
 
 `event_id`、`revision`、`json`（實際對外送出的文件）、`updated_at`、`phase`。由 `rebuildOverridesDoc()` 從 live overrides 重建；`phase` 進 ETag，讓活動階段改變時快取不會提供已撤回的內容。
 
-**目的**：`/data/events/:eventId/overrides.json` 的來源。**內容是公開的**，但它是上面兩張表的衍生物，處置隨之。
+**目的**：`/data/events/:eventId/overrides.json` 的來源。**內容是公開的**，但它是 `circle_overrides` 與 `event_notices` 的衍生物，處置隨之。
 
 ### `audit_log` — 稽核記錄
 

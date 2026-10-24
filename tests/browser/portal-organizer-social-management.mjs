@@ -20,6 +20,7 @@ let revoked = false;
 let claims = [1, 2].map(index => ({ id: `social-claim-${index}`, eventId: "sample", circleId: "c-900001", circleName: "北風畫室", circleClaimed: false, evidenceUrl: null, evidenceNote: "社團代表", targetUrl: null, createdAt: now + index }));
 let claimsUnavailable = false;
 let reportedClaimCount = 602;
+let notice = null;
 const writes = [];
 try {
   const page = await journey.page({ url: `${base}/organizer`, routes: async page => {
@@ -42,6 +43,11 @@ try {
       if (path.endsWith("/overrides")) {
         if (req.method() === "POST") { writes.push({ candidate: path.split("/")[4], ...req.postDataJSON() }); status = "takendown"; return reply({ ok: true }); }
         return reply({ circles: url.searchParams.get("q") === "北風" ? [{ circleId: "c-900001", name: "北風畫室", status, ...(revoked ? {} : { verifiedClaimId: "north-owner" }) }, { circleId: "c-900002", name: "北風別館", status: "none" }] : [] });
+      }
+      if (path.endsWith("/notice")) {
+        if (req.method() === "PUT") { writes.push({ candidate: path.split("/")[4], notice: req.postDataJSON() }); notice = { ...req.postDataJSON(), updatedAt: new Date(now).toISOString() }; }
+        if (req.method() === "DELETE") { writes.push({ candidate: path.split("/")[4], notice: null }); notice = null; }
+        return reply({ notice });
       }
       if (path.endsWith("/workspace")) return reply(detail(path.split("/")[4]));
       if (path.startsWith("/api/organizer/events/")) return reply(detail(path.split("/")[4]));
@@ -113,6 +119,29 @@ try {
   assert.equal(await claimStatus.getAttribute("aria-current"), null);
   await page.waitForTimeout(250); // let the 180ms background transition settle before the capture
   await journey.capture(page, "organizer-header-status-navigation");
+
+  // #538: an Editor publishes, updates and clears the event notice; saving is publishing.
+  await page.getByRole("button", { name: "活動公告", exact: true }).click();
+  const noticePanel = page.locator('section[aria-labelledby="event-notice-heading"]');
+  await noticePanel.getByRole("button", { name: "發布公告", exact: true }).waitFor();
+  assert.equal(await noticePanel.getByRole("button", { name: "清除公告", exact: true }).count(), 0, "nothing to clear yet");
+  const noticeWrites = writes.length;
+  await noticePanel.getByRole("textbox", { name: "說明", exact: true }).fill("颱".repeat(201));
+  await noticePanel.getByRole("button", { name: "發布公告", exact: true }).click();
+  await noticePanel.getByRole("alert").getByText(/200 字/).waitFor();
+  assert.equal(writes.length, noticeWrites, "an over-long notice is refused before it is sent");
+  await noticePanel.getByRole("textbox", { name: "說明", exact: true }).fill("因颱風停辦，第二天活動取消。");
+  await noticePanel.getByRole("radio", { name: "重要", exact: true }).check();
+  await noticePanel.getByRole("textbox", { name: /連結/ }).fill("https://organizer.test/typhoon");
+  await noticePanel.getByRole("button", { name: "發布公告", exact: true }).click();
+  await noticePanel.getByText("已發布公告。", { exact: true }).waitFor();
+  assert.deepEqual(writes.at(-1), { candidate: "social-original", notice: { kind: "important", text: "因颱風停辦，第二天活動取消。", url: "https://organizer.test/typhoon" } });
+  await noticePanel.getByRole("button", { name: "更新公告", exact: true }).waitFor();
+  await journey.capture(page, "organizer-event-notice-published");
+  await noticePanel.getByRole("button", { name: "清除公告", exact: true }).click();
+  await noticePanel.getByText("已清除公告。", { exact: true }).waitFor();
+  assert.deepEqual(writes.at(-1), { candidate: "social-original", notice: null });
+  assert.equal(await noticePanel.getByRole("textbox", { name: "說明", exact: true }).inputValue(), "");
 
   // An Owner withdraws an approved claim from the same 社團管理 panel.
   for (const summary of summaries) summary.role = "owner";

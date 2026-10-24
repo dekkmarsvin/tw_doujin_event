@@ -1,4 +1,5 @@
 import type { MapAuthoringState } from "./map-authoring-state";
+import type { EventNotice, EventNoticeInput } from "./event-notice";
 import type { OrganizerApplication, OrganizerApplicationInput } from "./organizer-applications";
 import { PortalError, reportSessionResponse, type ReviewQueue } from "./circle-editor-client";
 import type { OrganizerReferenceCatalog } from "./organizer-reference-catalog";
@@ -426,4 +427,15 @@ export function readSharedReferences() {
 }
 export function saveSharedReference(input: Record<string, unknown>) {
   return organizerCall<{ ok: true; id: string }>('/api/admin/references', { method: 'POST', body: JSON.stringify(input) });
+}
+export function readOrganizerNotice(candidateId: string) {
+  return organizerCall<{ notice: EventNotice | null }>(`/api/organizer/events/${encodeURIComponent(candidateId)}/notice`);
+}
+
+export function saveOrganizerNotice(candidateId: string, input: EventNoticeInput) {
+  return organizerCall<{ notice: EventNotice }>(`/api/organizer/events/${encodeURIComponent(candidateId)}/notice`, { method: "PUT", body: JSON.stringify(input) });
+}
+
+export function clearOrganizerNotice(candidateId: string) {
+  return organizerCall<{ notice: null }>(`/api/organizer/events/${encodeURIComponent(candidateId)}/notice`, { method: "DELETE" });
 }

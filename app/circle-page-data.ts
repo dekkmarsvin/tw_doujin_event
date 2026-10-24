@@ -5,6 +5,8 @@ export const CIRCLE_PAGE_DATA_ID = "circle-page-data";
 export const CIRCLE_PAGE_ROOT_ID = "circle-page-root";
 /** Where the page script puts the favourite and share actions, under the name. */
 export const CIRCLE_PAGE_ACTIONS_ID = "circle-page-actions";
+/** Where the page script puts the organizer's event notice, above the name. */
+export const CIRCLE_PAGE_NOTICE_ID = "circle-page-notice";
 /** Marks the one booth card per day that holds that day's plan action; the value is the day id. */
 export const CIRCLE_PAGE_PLAN_DAY_ATTRIBUTE = "data-circle-plan-day";
 

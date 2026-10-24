@@ -225,6 +225,9 @@ test("deletes published and abandoned draft thumbnail bytes before removing an e
 test("the published document loses the purged circle and gets a new revision", async () => {
   await writeOverride("ff47-due", { choice: "purge", expiresAt: NOW - DAY });
   await writeOverride("ff47-keeps", { choice: "keep", expiresAt: null });
+  const notice = { kind: "important", text: "活動延期", updatedAt: new Date(NOW).toISOString() };
+  await database.prepare("INSERT INTO event_notices (event_id, kind, text, url, updated_at, updated_by) VALUES ('ff47', ?1, ?2, '', ?3, 'organizer')")
+    .bind(notice.kind, notice.text, notice.updatedAt).run();
   const before = await repository.rebuildOverridesDoc("ff47", DATA_UPDATED_AT, NOW - HOUR, "during");
   assert.deepEqual(JSON.parse(before.json).overrides.map((override) => override.circleId).sort(), ["ff47-due", "ff47-keeps"]);
 
@@ -237,6 +240,8 @@ test("the published document loses the purged circle and gets a new revision", a
   // The revision is in the ETag; without a bump caches keep serving what was
   // deleted. The phase and generatedAt stay as the last rebuild left them.
   assert.equal(document.revision, before.revision + 1);
+  assert.equal(after.revision, document.revision);
+  assert.deepEqual(document.notice, notice);
   assert.equal(document.generatedAt, DATA_UPDATED_AT);
   assert.equal(after.phase, before.phase);
 });

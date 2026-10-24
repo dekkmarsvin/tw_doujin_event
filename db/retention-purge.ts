@@ -316,17 +316,15 @@ async function purgeMapDraftData(
  * was just deleted from the database.
  */
 async function dropFromPublishedDocument(database: D1Database, eventId: string, purgedIds: Set<string>, now: number) {
-  const current = await database.prepare(`SELECT revision, json FROM overrides_doc WHERE event_id = ?1`)
-    .bind(eventId).first<{ revision: number; json: string }>();
-  if (!current) return;
-
-  const document = JSON.parse(current.json) as { overrides: { circleId: string }[] };
-  const overrides = document.overrides.filter((override) => !purgedIds.has(override.circleId));
-  if (overrides.length === document.overrides.length) return;
-
-  const revision = current.revision + 1;
-  await database.prepare(`UPDATE overrides_doc SET revision = ?1, json = ?2, updated_at = ?3 WHERE event_id = ?4`)
-    .bind(revision, JSON.stringify({ ...document, revision, overrides }), now, eventId)
+  await database.prepare(
+    `UPDATE overrides_doc SET revision = revision + 1, updated_at = ?3,
+       json = json_set(json, '$.revision', revision + 1, '$.overrides', json(
+         (SELECT json_group_array(json(value)) FROM json_each(overrides_doc.json, '$.overrides')
+          WHERE json_extract(value, '$.circleId') NOT IN (SELECT value FROM json_each(?2)))))
+     WHERE event_id = ?1 AND EXISTS (
+       SELECT 1 FROM json_each(overrides_doc.json, '$.overrides')
+       WHERE json_extract(value, '$.circleId') IN (SELECT value FROM json_each(?2)))`,
+  ).bind(eventId, JSON.stringify([...purgedIds]), now)
     .run();
 }
 

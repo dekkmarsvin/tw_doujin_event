@@ -1,4 +1,5 @@
 import { parseRequestLinkLocale, parseAccountNotificationPreferencesUpdate } from "./i18n/api-contract";
+import { eventNoticeInputProblem, parseEventNoticeInput, type EventNotice } from "./event-notice";
 import type { ApiErrorCode } from "./i18n/api-error";
 import { canSubmitEventApplication, contactSettingsProblem, parseSiteSettings } from "./site-settings";
 import type { AdminCircleDetail } from "./admin-circle-detail";
@@ -1842,6 +1843,46 @@ export function createCirclePortalHandlers({
       evidenceUrl: claim.evidence_url, evidenceNote: claim.evidence_note, targetUrl: claim.target_url,
       createdAt: claim.created_at, circleClaimed: !!claim.circle_claimed,
     })), mapDrafts: [], organizer: { applications: 0, submissions: 0 } });
+  }
+
+  async function readOrganizerNotice(request: Request, candidateId: string) {
+    const access = await organizerClaimAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    return json({ notice: await repository.getEventNotice(access.eventId) });
+  }
+
+  async function saveOrganizerNotice(request: Request, candidateId: string) {
+    return changeOrganizerNotice(request, candidateId, false);
+  }
+
+  async function clearOrganizerNotice(request: Request, candidateId: string) {
+    return changeOrganizerNotice(request, candidateId, true);
+  }
+
+  async function changeOrganizerNotice(request: Request, candidateId: string, clear: boolean) {
+    const access = await organizerClaimAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    const now = config.now();
+    let notice: EventNotice | null = null;
+    if (!clear) {
+      const body = await readJson(request);
+      const problem = eventNoticeInputProblem(body);
+      if (problem) return json({ error: problem }, 400);
+      const input = parseEventNoticeInput(body)!;
+      notice = { kind: input.kind, text: input.text, ...(input.url ? { url: input.url } : {}), updatedAt: new Date(now).toISOString() };
+    }
+    const applied = await repository.writeEventNotice(access.eventId, notice, { candidateId, accountId: access.current.accountId });
+    if (!applied) return json({ error: "找不到活動。" }, 404);
+    await repository.writeAudit({
+      at: now, actorAccountId: access.current.accountId, actorRole: organizerAuditRole(access),
+      action: clear ? "event_notice.cleared" : "event_notice.published", subjectType: "event_notice", subjectId: access.eventId,
+      detail: { candidateId, eventId: access.eventId }, ipHash: await clientIpHash(request),
+    });
+    const published = config.publishedEvent ? await config.publishedEvent(access.eventId)
+      : { dataUpdatedAt: await dataUpdatedAt(), eventEndsAt: await eventEndsAt() };
+    if (published) await repository.rebuildOverridesDoc(access.eventId, published.dataUpdatedAt, now,
+      now > Date.parse(published.eventEndsAt) ? "after" : "during");
+    return json({ notice });
   }
 
   async function organizerDecideClaim(request: Request, candidateId: string) {
@@ -3891,6 +3932,7 @@ export function createCirclePortalHandlers({
     // Authority comes from the candidate's own grant, checked in each handler.
     adminCreateOrganizerCandidate, listOrganizerCandidates, getOrganizerCandidate, updateOrganizerCandidate,
     organizerListClaims, organizerDecideClaim, organizerSearchTakedownCircles, organizerTakedown,
+    readOrganizerNotice, saveOrganizerNotice, clearOrganizerNotice,
     listOrganizerVenues, createOrganizerVenue, createOrganizerVenueSpace, createOrganizerReferenceEntry,
     updateOrganizerWorkspacePreference, completeOrganizerWorkspaceOnboarding, putOrganizerImport,
     listOrganizerMaps, getOrganizerMap, createOrganizerMap, updateOrganizerMap,

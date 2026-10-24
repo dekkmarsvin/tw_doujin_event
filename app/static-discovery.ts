@@ -4,7 +4,7 @@ import { placementStatusLabel } from "./circle-records";
 import { dayDateLabel, eventCalendar, eventDayCalendarDate, eventDayDate, taipeiDate } from "./event-calendar";
 import { DEFAULT_LOCALE, type Locale } from "./i18n/locale";
 import { circleBooths, circlePath, eventPath, OG_LOCALE, pageMetadata, PUBLIC_ORIGIN, readerLink, SHARE_IMAGE, SITE_TITLE } from "./seo";
-import { CIRCLE_PAGE_ACTIONS_ID, CIRCLE_PAGE_PLAN_DAY_ATTRIBUTE, CIRCLE_PAGE_ROOT_ID, circlePageData, circlePageDataHtml } from "./circle-page-data";
+import { CIRCLE_PAGE_ACTIONS_ID, CIRCLE_PAGE_NOTICE_ID, CIRCLE_PAGE_PLAN_DAY_ATTRIBUTE, CIRCLE_PAGE_ROOT_ID, circlePageData, circlePageDataHtml } from "./circle-page-data";
 import { PUBLIC_HEADER, publicHeaderHtml, publicLoginHref } from "./public-header";
 import { PUBLIC_PAGE_LOCALE_ID, PUBLIC_PAGE_MESSAGES, type PublicPageMessageKey } from "./public-page-messages";
 import { translate, type MessageParams } from "./i18n/messages";
@@ -161,6 +161,7 @@ export function discoveryPages(event: EventDefinition, catalog: CircleCatalogPay
     const venues = [...new Set(cards.filter((card) => card.status === "active").map((card) => card.venueName).filter(Boolean))];
     const claim = publicLoginHref({ eventId: event.id, circleId: circle.id });
     pages.set(circlePath(event.id, circle.id), documentHtml(pageMetadata(event, circle, placements), `<nav aria-label="${escapeHtml(say("eventNav"))}" data-i18n-attr="aria-label:eventNav">${link(eventPath(event.id), event.name)}</nav>
+<div id="${CIRCLE_PAGE_NOTICE_ID}"></div>
 <h1>${escapeHtml(circle.name)}</h1><p class="eyebrow">${[calendarHtml(calendar), ...venues.map(escapeHtml)].join(" · ")}</p>
 <div id="${CIRCLE_PAGE_ACTIONS_ID}"></div>
 ${text("h2", "boothsHeading")}<ol class="booth-cards">${cards.map((card) => boothCardHtml(event, card)).join("")}</ol>

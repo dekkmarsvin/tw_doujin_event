@@ -57,12 +57,41 @@ export function createCatalogPublication(adapter: CatalogPublicationAdapter) {
     return run;
   }
 
+  function refreshOverlay(eventId: string): Promise<void> {
+    const pending = inFlight.get(eventId);
+    if (pending) return pending;
+    if (getCircleCatalogState(eventId).status !== "ready") return Promise.resolve();
+    const run = (async () => {
+      try {
+        const overlay = await adapter.loadOverlay(eventId);
+        if (overlay.payload.eventId !== eventId) return;
+        setCircleOverrides(overlay.payload);
+        cacheMetadata.set(eventId, { ...cacheMetadata.get(eventId), overlay: { cacheControl: overlay.cacheControl, etag: overlay.etag } });
+      } catch {
+        // Resume is opportunistic: keep the currently displayed publication.
+      }
+    })().finally(() => { inFlight.delete(eventId); });
+    inFlight.set(eventId, run);
+    return run;
+  }
+
   return {
     load,
+    refreshOverlay,
     retry: (eventId: string) => load(eventId, { retry: true }),
     getSnapshot: (eventId: string) => getCircleCatalogState(eventId),
     subscribe: (eventId: string, listener: () => void) => subscribeCircleCatalog(eventId, listener),
     getCacheMetadata: (eventId: string) => cacheMetadata.get(eventId) ?? {},
+  };
+}
+
+export function subscribeOverlayResume(refresh: () => void): () => void {
+  const visible = () => { if (document.visibilityState === "visible") refresh(); };
+  document.addEventListener("visibilitychange", visible);
+  window.addEventListener("online", refresh);
+  return () => {
+    document.removeEventListener("visibilitychange", visible);
+    window.removeEventListener("online", refresh);
   };
 }
 

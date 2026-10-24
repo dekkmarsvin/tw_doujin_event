@@ -150,6 +150,13 @@
 .editorCard { max-width: none; }
 .eventClaimPanel { max-width: none; margin: 0; }
 .claimPanels { display: grid; gap: 18px; }
+.noticeFields { min-width: 0; margin: 0; padding: 0; border: 0; }
+.noticeMeta { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; }
+.noticeMeta[data-over] { color: #a43e30; font-weight: 700; }
+.noticeKinds { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; margin: 6px 0 0; padding: 0; border: 0; }
+.card .noticeKinds label { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: var(--ink); font-size: 14px; font-weight: 400; letter-spacing: normal; }
+.card .noticeKinds label:has(input:checked) { border-color: var(--coral); }
+.card .noticeKinds input { width: auto; margin: 0; padding: 0; border: 0; }
 .takedownSearch { display: flex; align-items: end; gap: 12px; margin-top: 18px; }
 .takedownSearch label { flex: 1; }
 .card .takedownSearch button { flex: 0 0 auto; margin: 0; }

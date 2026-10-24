@@ -1,0 +1,13 @@
+/* The circle page loads discovery.css, not globals.css, so every token carries its DESIGN.md value as a fallback. */
+/* Zero specificity for the box, so each page sets its own padding and border without an ordering fight. */
+:where(.banner) { padding:10px 24px; border-bottom:1px solid var(--line, #dfe3df); }
+.banner { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 12px; background:var(--surface-soft, #f9faf8); color:var(--ink, #202a35); font-size:calc(14px * var(--ui-font-scale,1)); line-height:1.5; }
+.banner[data-kind="important"] { border-color:#e9c48a; background:#fdf3e1; }
+.label { flex:none; display:inline-flex; align-items:center; gap:6px; color:var(--muted, #59626c); font-size:calc(12px * var(--ui-font-scale,1)); font-weight:800; letter-spacing:.1em; }
+.label>span { width:18px; height:18px; display:grid; place-items:center; border-radius:50%; background:var(--amber, #d99b44); color:#fff; letter-spacing:0; }
+.banner[data-kind="important"] .label { color:#8a5c22; }
+.text { flex:1 1 280px; min-width:0; margin:0; white-space:pre-line; overflow-wrap:anywhere; }
+.banner[data-kind="important"] .text { font-weight:700; }
+.link { flex:none; display:inline-flex; align-items:center; gap:4px; color:inherit; font-weight:700; text-decoration:underline; text-underline-offset:3px; }
+.link svg { width:14px; height:14px; }
+@media (max-width:760px) { :where(.banner) { padding:8px 16px; } .text { flex-basis:100%; } }

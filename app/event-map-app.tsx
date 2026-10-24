@@ -8,6 +8,7 @@ import { loadStaticEventMapResource } from "./static-event-map-client";
 import type { PublishedEventMap } from "./event-map";
 import { placementStatusLabel, resolveCircleIdAliases, type CircleViewRecord } from "./circle-records";
 import { useCircleCatalog } from "./use-circle-catalog";
+import { EventNoticeBanner } from "./event-notice-banner";
 import { CircleDetails, DayItinerary, SearchResults, type ActiveResultFilter } from "./event-workspace-panels";
 import { applyReaderMetadata, pageMetadata } from "./seo";
 import AdvancedCircleSearchControls from "./advanced-circle-search";
@@ -111,7 +112,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   useDocumentLanguage();
   const genres: readonly string[] = event.genres;
   const urlDefaults = defaultEventUrlState(event);
-  const { catalog, status: catalogStatus, error: catalogError } = useCircleCatalog(eventId);
+  const { catalog, status: catalogStatus, error: catalogError, overrides } = useCircleCatalog(eventId);
   const { records: circleRecords, recordsById: circleRecordsById, recordsByCircleId: circleRecordsByCircleId } = catalog;
   const catalogReady = catalogStatus === "ready";
   const [day, setDay] = useState<EventDay>(urlDefaults.day);
@@ -864,7 +865,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     onChooseEvent();
   }}>{eventInfo}<span className={styles.eventSwitch}>{t("switchEvent")}<UiIcon name="chevron-right" /></span></a> : eventInfo;
 
-  return <main className={`app-shell ${styles.shell}`} style={mobileShellStyle} data-mobile-summary={mobileSummary || undefined} data-text-scale={textScale} data-mobile-sheet-level={mobileSheetLevel} data-mobile-sheet-dragging={mobileSheetDragging || undefined}>
+  return <main className={`app-shell ${styles.shell}`} style={mobileShellStyle} data-mobile-summary={mobileSummary || undefined} data-text-scale={textScale} data-mobile-sheet-level={mobileSheetLevel} data-mobile-sheet-dragging={mobileSheetDragging || undefined} data-notice={overrides?.notice ? "" : undefined}>
     <header className="topbar">
       <div className="brand"><span aria-hidden="true">場</span><div><b>場刊 Map</b>{desktop && <small>{header("tagline")}</small>}</div></div>
       <div className="event">{eventIdentity}</div>
@@ -873,6 +874,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
       {desktop && <div className={styles.languageSlot}><LanguageSwitcher /></div>}
       {desktop ? <div className={styles.topbarActions}>{readerTools}{readerLogin}</div> : <><details ref={toolsMenuRef} className={styles.mobileToolsMenu}><summary>{t("tools")}</summary><div>{readerTools}</div></details>{readerLogin}</>}
     </header>
+    <EventNoticeBanner notice={overrides?.notice} />
     <div className={`workspace ${styles.workspace}`} data-details-open={desktop && desktopDetailsOpen && Boolean(selected) || undefined}>
       <aside ref={leftRailRef} className={`filters ${styles.leftRail}`}>
         <div className={styles.desktopTabs} role="tablist" aria-label={t("workspaceTabs")}>{(["explore", "plan"] as const).map((panel, index) => <button key={panel} ref={desktopPanel === panel ? desktopTabRef : undefined} id={"desktop-tab-" + panel} role="tab" aria-controls={"desktop-panel-" + panel} aria-selected={desktopPanel === panel} tabIndex={desktopPanel === panel ? 0 : -1} onClick={() => setDesktopPanel(panel)} onKeyDown={(keyEvent) => {

@@ -6,6 +6,8 @@
 /* The favourite and share actions, under the name; on a phone they stay at
    the foot of the screen so they are there wherever the reader has scrolled. */
 .actionBar { display:grid; gap:6px; margin:4px 0 8px; }
+/* The organizer's event notice sits in the column, so it is a card, not a full-width bar. */
+.notice { margin:12px 0 0; padding:10px 14px; border:1px solid var(--line); border-radius:12px; }
 .barButtons { display:flex; flex-wrap:wrap; gap:8px; }
 .feedback { min-height:1.65em; display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; font-size:14px; }
 .feedback:empty { min-height:0; }

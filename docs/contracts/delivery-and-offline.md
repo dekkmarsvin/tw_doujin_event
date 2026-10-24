@@ -33,7 +33,7 @@ FF47 的舊資料沒有 Organizer 候選及身分分組檔。除原始固定 pin
 
 社團介紹頁（`circlePath`）是可分享的出展頁。靜態 HTML 已列出社團名稱、每一筆配置與「在地圖查看」；未執行 JS 時仍是完整的官方頁面。頁面另外載入自己的入口 `circlePage`（Vite 以 `circle-page.html` 為模板建置，discovery build 把資產標籤複製到每個社團頁後移除模板），只做靜態 HTML 做不到的兩件事：
 
-- **即時讀取社團填寫的內容。** 經既有的 `/data/events/:eventId/overrides.json` 讀取，與地圖使用同一條路徑、同一個 publication module 與同一個 `buildCircleCatalog` 投影；不是新的公開讀取路徑。可撤下的社團內容因此不會寫進 build 產物。每次開啟頁面讀一次 overlay，不輪詢；已開啟頁面的更新時機同下方「更新可見性」。
+- **即時讀取社團填寫的內容。** 經既有的 `/data/events/:eventId/overrides.json` 讀取，與地圖使用同一條路徑、同一個 publication module 與同一個 `buildCircleCatalog` 投影；不是新的公開讀取路徑。可撤下的社團內容因此不會寫進 build 產物。每次開啟頁面讀一次 overlay，不輪詢；已開啟頁面的更新時機同下方「更新可見性」。頁面腳本使用自己的 publication instance，同樣接上切回前景／恢復連線的 overlay 重讀，並在名稱上方顯示 overlay 的活動公告。
 - **收藏、行程與分享。** 收藏與行程經既有 planning store 寫入，與地圖是同一份資料，見[收藏與走訪規劃契約](./planning.md#責任邊界)；逐日的「加入這天行程」填進靜態攤位卡預留的位置。分享只使用瀏覽器的系統分享或剪貼簿，不送出任何請求。
 
 頁面腳本需要的官方資料不另外請求：該社團在 reviewed base 中的名稱與全部 placement，以 `circle-catalog/3` 格式（只有這一個社團）寫在 HTML 的 `application/json` 區塊（`#circle-page-data`）。欄位逐一複製，不帶其他屬性；`day` 保持原型別，行程才會與地圖寫入的鍵一致。整份 `circles.json` 不因開啟一個社團頁而下載。
@@ -100,9 +100,11 @@ FF47 的舊資料沒有 Organizer 候選及身分分組檔。除原始固定 pin
 
 ### 更新可見性
 
-上述 `max-age` 是 HTTP 快取有效期，不是輪詢間隔。現行 `app/use-circle-catalog.ts` 在每個活動初次載入時取得資料，沒有定時重新載入；持續開著的頁面不保證在一分鐘內看到儲存或撤下結果。重新載入時依快取標頭驗證資料；Service Worker 不保存 overlay，取得 overlay 失敗時使用完整 reviewed base。
+上述 `max-age` 是 HTTP 快取有效期，不是輪詢間隔。地圖、逛品書與社團介紹頁在每個活動初次載入時取得 base 與 overlay；之後在頁面 `visibilitychange` 轉為可見及 `online` 事件時只重讀 overlay，不重取 base、不設定時器，重疊的觸發按活動合併成一次請求。重讀使用預設 fetch cache 模式：overlay 快取仍有效時可沿用舊內容；快取到期後的下一次觸發才向伺服器驗證並套用結果（社團補充資料、takedown 與活動公告的發布／清除都一樣）。快取到期本身不觸發更新，持續停留前景的頁面不保證在一分鐘內看到儲存或撤下結果。重讀失敗時保留目前畫面，不新增錯誤狀態。Service Worker 不保存 overlay，初次取得 overlay 失敗時使用完整 reviewed base，不顯示活動公告。
 
-**尚未達成、保留待決策的要求：**社團更新與管理者 takedown 約一分鐘內對已開啟的讀者頁面可見。要維持該要求需提出最小方案及請求成本；在維護者決定前，不把它寫成已實作、不刪除要求，也不默默加入輪詢。此落差的實測見 [#48](https://github.com/dekkmarsvin/tw_doujin_event/issues/48)。
+已開啟頁面的更新方式依 [#538](https://github.com/dekkmarsvin/tw_doujin_event/issues/538) 的維護者決策 2 採「切回前景或恢復連線時重讀」，不採定時輪詢；[#48](https://github.com/dekkmarsvin/tw_doujin_event/issues/48) 原本「約一分鐘內對已開啟頁面可見」的要求以此取代。成本比較見 #538。
+
+overlay 文件最外層可帶選填的 `notice`（`kind`：`info`／`important`、`text`、選填 https `url`、伺服器寫入的 `updatedAt`），沒有公告時不寫出這個鍵，schema 版本不變。Client 對格式錯誤的 `notice` 只丟棄公告，其餘 overlay 照常套用；不認得 `notice` 的舊 client 照常使用 overlay。
 
 **overlay 的每一次 revalidation 都是一次 Function 呼叫，包含回 304 的那些。** strong ETag 省的是頻寬，不是請求數：304 的分支在 Function 內部，且在算出 ETag 之前已經讀過一次 D1。Cloudflare 的邊緣不會在 Function 之前擋下這些請求——Workers Cache 是 `wrangler.jsonc` 的 `cache.enabled` 選項，目前沒有開；zone 層的預設快取副檔名清單也不含 `.json`。
 

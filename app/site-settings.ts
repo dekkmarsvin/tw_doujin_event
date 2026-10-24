@@ -45,7 +45,7 @@ export const CONTACT_URL_MAX = 500;
 export const CLAIM_REVIEW_NOTICE_MAX = 200;
 
 // The value lands in an href; never let `javascript:` or `data:` through.
-function isHttpsUrl(value: string) {
+export function isHttpsUrl(value: string) {
   try { return new URL(value).protocol === "https:"; } catch { return false; }
 }
 
