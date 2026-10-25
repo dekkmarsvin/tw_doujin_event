@@ -27,8 +27,9 @@ try {
         assert.equal(await eventDay.getAttribute("data-holiday"), "true");
         assert.equal(await eventDay.getAttribute("data-event"), date === "2026-10-02" ? "current" : "past");
         await eventDay.hover();
-        assert.equal(await eventDay.getByText("週末", { exact: true }).isVisible(), true, "event hints include the holiday name");
-        assert.match(await eventDay.getAttribute("aria-label"), /週末/);
+        assert.equal(await eventDay.getByText("第二範例活動", { exact: true }).isVisible(), true, "ordinary weekend event hints still name the event");
+        assert.equal(await eventDay.getByText("週末", { exact: true }).count(), 0);
+        assert.doesNotMatch(await eventDay.getAttribute("aria-label"), /週末/);
         await journey.capture(page, `calendar-holiday-event-${width}-${date}`);
       }
       if (await past.count()) {
@@ -50,7 +51,7 @@ try {
     for (const [date, holiday, note] of [
       ["2026-10-25", "2026-10-26", "補假"],
       ["2026-10-25", "2026-10-25", "臺灣光復暨金門古寧頭大捷紀念日"],
-      ["2026-10-25", "2026-10-24", "週末"],
+      ["2026-10-25", "2026-10-24", null],
       ["2027-02-01", "2027-02-04", "小年夜"],
       ["2027-12-01", "2027-12-31", "補假"],
       ["2028-01-01", null, null],
@@ -77,6 +78,49 @@ try {
       await journey.capture(page, `office-calendar-${width}-${holiday ?? date}`);
       await page.close();
     }
+  }
+
+  for (const width of [1440, 360]) {
+    // Adjust only the browser's fictional event dates, leaving published and
+    // staged data untouched. Both events overlap on the National Day weekend.
+    const page = await journey.page({ event: "", viewport: { width, height: 900 }, routes: async (page) => {
+      await page.clock.setFixedTime(new Date("2026-10-10T12:00:00+08:00"));
+      await page.route("**/app/event-catalog.ts", async (route) => {
+        const response = await route.fetch();
+        const dates = { sample: ["2026-10-10", "2026-10-11"], "sample-two": ["2026-10-09", "2026-10-10", "2026-10-11", "2026-10-12"] };
+        await route.fulfill({ response, body: `${await response.text()}\nfor (const event of PUBLISHED_EVENTS) {
+          const dates = ${JSON.stringify(dates)}[event.id];
+          event.days = event.days.map((day, index) => ({ ...day, dateLabel: dates[index] }));
+          event.eventEndsAt = dates.at(-1) + "T23:59:59+08:00";
+        }` });
+      });
+    } });
+    const calendar = page.getByRole("region", { name: "月曆", exact: true });
+    const sharedDay = calendar.locator('[data-date="2026-10-10"]');
+    assert.equal(await sharedDay.count(), 1, "two events share a single calendar date");
+    assert.equal(await sharedDay.getAttribute("data-holiday"), "true");
+    await sharedDay.hover();
+    for (const name of ["範例創作市集", "第二範例活動", "國慶日"]) {
+      assert.equal(await sharedDay.getByText(name, { exact: true }).isVisible(), true);
+      assert.ok((await sharedDay.getAttribute("aria-label")).includes(name));
+    }
+    await journey.capture(page, `calendar-two-events-holiday-${width}`);
+    const weekend = calendar.locator('[data-date="2026-10-11"]');
+    await page.mouse.move(0, 0);
+    await weekend.focus();
+    for (const name of ["範例創作市集", "第二範例活動"]) assert.equal(await weekend.getByText(name, { exact: true }).isVisible(), true, "keyboard focus also exposes both event names");
+    assert.equal(await weekend.getByText("週末", { exact: true }).count(), 0);
+    assert.equal(await weekend.getAttribute("title"), null);
+    await journey.capture(page, `calendar-two-events-weekend-${width}`);
+    await weekend.press("Enter");
+    const firstEvent = page.getByRole("link", { name: "開啟攤位地圖：第二範例活動", exact: true });
+    assert.equal(await firstEvent.evaluate((node) => node === document.activeElement), true, "pressing a shared date focuses the first listed event, ordered by start date");
+    await sharedDay.click();
+    assert.equal(await firstEvent.evaluate((node) => node === document.activeElement), true);
+    await page.getByRole("link", { name: "開啟攤位地圖：範例創作市集", exact: true }).click();
+    await page.locator("[data-slot-code]").first().waitFor();
+    assert.equal(new URL(page.url()).searchParams.get("event"), "sample", "the other event remains reachable from its own list entry");
+    await page.close();
   }
 
   {
