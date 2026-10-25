@@ -88,8 +88,8 @@ export function eventCalendar(event: EventDefinition, locale: Locale = "zh-Hant"
 }
 
 export const EVENT_GROUPS = [
-  { id: "upcoming", label: "即將到來" },
   { id: "ongoing", label: "舉辦中" },
+  { id: "upcoming", label: "即將到來" },
   { id: "past", label: "過往活動" },
   { id: "undated", label: "日期待確認" },
 ] as const;
