@@ -26,6 +26,10 @@ try {
         const eventDay = calendar.locator('[data-date="2026-10-03"]');
         assert.equal(await eventDay.getAttribute("data-holiday"), "true");
         assert.equal(await eventDay.getAttribute("data-event"), date === "2026-10-02" ? "current" : "past");
+        await eventDay.hover();
+        assert.equal(await eventDay.getByText("週末", { exact: true }).isVisible(), true, "event hints include the holiday name");
+        assert.match(await eventDay.getAttribute("aria-label"), /週末/);
+        await journey.capture(page, `calendar-holiday-event-${width}-${date}`);
       }
       if (await past.count()) {
         assert.equal(await past.isEnabled(), true);
@@ -88,6 +92,13 @@ try {
     await resume.first().waitFor();
     assert.deepEqual(await resume.allTextContents(), ["第二範例活動收藏 1"], "an ended event is not offered");
     assert.equal(await page.evaluate((key) => localStorage.getItem(key), key), saved, "the chooser leaves planning as saved");
+    // A calendar event day says what is on as soon as it is pointed at, and leads to that event.
+    const day = page.getByRole("button", { name: "10月1日（四） 第二範例活動", exact: true });
+    await day.hover();
+    assert.equal(await day.getByText("第二範例活動", { exact: true }).isVisible(), true, "hovering a day names its event");
+    await journey.capture(page, "calendar-day-hint");
+    await day.click();
+    assert.equal(await page.getByRole("link", { name: "開啟攤位地圖：第二範例活動", exact: true }).evaluate((node) => node === document.activeElement), true, "the day leads to its event's map entry");
     await journey.capture(page, "calendar-resume-planning");
     await resume.click();
     await page.locator("[data-slot-code]").first().waitFor();
