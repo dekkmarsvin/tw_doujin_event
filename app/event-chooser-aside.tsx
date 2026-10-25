@@ -46,7 +46,7 @@ function calendarMonths(groups: Groups, today: string) {
 
 /** Bring an event's row into view and put focus on its map entry. */
 function revealEvent(eventId: string) {
-  const row = document.getElementById(`event-${eventId}`);
+  const row = document.getElementById(`event-row-${eventId}`);
   row?.scrollIntoView({ block: "nearest", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   row?.querySelector("a")?.focus({ preventScroll: true });
 }
