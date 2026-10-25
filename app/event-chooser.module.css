@@ -68,11 +68,14 @@
 .days { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:2px; text-align:center; font:700 calc(12px * var(--ui-font-scale,1)) var(--font-mono),monospace; }
 .days>* { padding:6px 0; border-radius:7px; }
 .days .weekday { color:var(--muted); font-family:inherit; }
+.days [data-holiday] { color:#b13c30; }
 .days button { position:relative; border:0; font:inherit; cursor:pointer; }
 .days button:focus-visible { outline:3px solid #8fac9c; outline-offset:2px; }
 .days [data-event="current"] { background:var(--ink); color:var(--surface-soft); }
 .days [data-event="current"]:hover { background:#34404c; }
 .days [data-event="past"] { background:var(--cream); color:var(--muted); }
+.days [data-holiday][data-event="current"] { color:#ffb6aa; }
+.days [data-holiday][data-event="past"] { color:#b13c30; }
 .days [data-event="past"]:hover { background:#e7e4d9; }
 .days [data-today] { box-shadow:inset 0 0 0 2px var(--coral); }
 /* Shown at once on hover or keyboard focus; the button's own name says the same. */

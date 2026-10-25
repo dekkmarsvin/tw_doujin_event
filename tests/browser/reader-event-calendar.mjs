@@ -21,6 +21,16 @@ try {
       assert.deepEqual(await page.locator("[data-event-group]").evaluateAll((nodes) => nodes.map((node) => node.dataset.eventGroup)), groups);
       assert.deepEqual(await page.locator("main h3").allTextContents(), names);
       const past = page.locator('[data-event-group="past"] a').first();
+      if (date.startsWith("2026-10")) {
+        const calendar = page.getByRole("region", { name: "月曆", exact: true });
+        const eventDay = calendar.locator('[data-date="2026-10-03"]');
+        assert.equal(await eventDay.getAttribute("data-holiday"), "true");
+        assert.equal(await eventDay.getAttribute("data-event"), date === "2026-10-02" ? "current" : "past");
+        await eventDay.hover();
+        assert.equal(await eventDay.getByText("週末", { exact: true }).isVisible(), true, "event hints include the holiday name");
+        assert.match(await eventDay.getAttribute("aria-label"), /週末/);
+        await journey.capture(page, `calendar-holiday-event-${width}-${date}`);
+      }
       if (await past.count()) {
         assert.equal(await past.isEnabled(), true);
         await past.focus();
@@ -36,6 +46,39 @@ try {
     }
   }
 
+  for (const width of [1440, 360]) {
+    for (const [date, holiday, note] of [
+      ["2026-10-25", "2026-10-26", "補假"],
+      ["2026-10-25", "2026-10-25", "臺灣光復暨金門古寧頭大捷紀念日"],
+      ["2026-10-25", "2026-10-24", "週末"],
+      ["2027-02-01", "2027-02-04", "小年夜"],
+      ["2027-12-01", "2027-12-31", "補假"],
+      ["2028-01-01", null, null],
+    ]) {
+      const page = await journey.page({ event: "", viewport: { width, height: 900 }, routes: (page) => page.clock.setFixedTime(new Date(`${date}T12:00:00+08:00`)) });
+      const calendar = page.getByRole("region", { name: "月曆", exact: true });
+      await calendar.scrollIntoViewIfNeeded();
+      if (holiday) {
+        const cell = calendar.locator(`[data-date="${holiday}"]`);
+        assert.equal(await cell.getAttribute("data-holiday"), "true");
+        await cell.hover();
+        assert.equal(await cell.getAttribute("title"), note, "hover exposes the holiday through the browser's native tooltip");
+        const regular = calendar.locator(`[data-date="${date.slice(0, 7)}-01"]`);
+        assert.equal(await regular.getAttribute("data-holiday"), null);
+        assert.equal(await regular.getAttribute("title"), null);
+        const color = (locator) => locator.evaluate((node) => getComputedStyle(node).color);
+        assert.notEqual(await color(cell), await color(regular));
+      } else {
+        assert.equal(await calendar.locator("[data-holiday]").count(), 0);
+        assert.equal(await calendar.locator("[title]").count(), 0);
+      }
+      assert.equal(await calendar.getByRole("list").count(), 0, "holiday names are not repeated in a separate list");
+      if (date === "2026-10-25") assert.equal(await calendar.locator('[data-date="2026-10-25"]').getAttribute("data-today"), "true");
+      await journey.capture(page, `office-calendar-${width}-${holiday ?? date}`);
+      await page.close();
+    }
+  }
+
   {
     // The side column offers the current events this browser has planning
     // for, reads that planning without rewriting it, and opens the event.
@@ -45,7 +88,7 @@ try {
       await page.clock.setFixedTime(new Date("2026-09-15T12:00:00+08:00"));
       await page.addInitScript(([key, saved]) => { if (!localStorage.getItem(key)) localStorage.setItem(key, saved); }, [key, saved]);
     } });
-    const resume = page.getByRole("complementary").getByRole("link");
+    const resume = page.getByRole("region", { name: "繼續規劃", exact: true }).getByRole("link");
     await resume.first().waitFor();
     assert.deepEqual(await resume.allTextContents(), ["第二範例活動收藏 1"], "an ended event is not offered");
     assert.equal(await page.evaluate((key) => localStorage.getItem(key), key), saved, "the chooser leaves planning as saved");
