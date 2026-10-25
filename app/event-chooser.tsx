@@ -112,7 +112,7 @@ export default function EventChooser({ events, unresolved, onSelect }: {
             The date block repeats the label for scanning, so it is not read out. */}
         {group.entries.map(({ event, label, start, end }) => {
           const days = start ? (Date.parse(start) - Date.parse(today)) / 86_400_000 : 0;
-          return <li key={event.id} className={styles.card}>
+          return <li key={event.id} id={`event-row-${event.id}`} className={styles.card}>
           {group.id !== "past" && <div className={styles.when} aria-hidden="true">{start && <>
             <b>{start.slice(5).replace("-", ".")}</b>
             <span>{[...new Set([start, end])].map((date) => weekday.format(new Date(`${date}T00:00:00Z`))).join("–")}</span>

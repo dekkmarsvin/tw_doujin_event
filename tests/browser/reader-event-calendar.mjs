@@ -49,6 +49,13 @@ try {
     await resume.first().waitFor();
     assert.deepEqual(await resume.allTextContents(), ["第二範例活動收藏 1"], "an ended event is not offered");
     assert.equal(await page.evaluate((key) => localStorage.getItem(key), key), saved, "the chooser leaves planning as saved");
+    // A calendar event day says what is on as soon as it is pointed at, and leads to that event.
+    const day = page.getByRole("button", { name: "10月1日（四） 第二範例活動", exact: true });
+    await day.hover();
+    assert.equal(await day.getByText("第二範例活動", { exact: true }).isVisible(), true, "hovering a day names its event");
+    await journey.capture(page, "calendar-day-hint");
+    await day.click();
+    assert.equal(await page.getByRole("link", { name: "開啟攤位地圖：第二範例活動", exact: true }).evaluate((node) => node === document.activeElement), true, "the day leads to its event's map entry");
     await journey.capture(page, "calendar-resume-planning");
     await resume.click();
     await page.locator("[data-slot-code]").first().waitFor();
