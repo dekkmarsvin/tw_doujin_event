@@ -16,3 +16,9 @@ declare module "*.module.css" {
   const classes: Readonly<Record<string, string>>;
   export default classes;
 }
+
+/** Official office-calendar CSV snapshots imported as text by Vite. */
+declare module "*.csv?raw" {
+  const csv: string;
+  export default csv;
+}

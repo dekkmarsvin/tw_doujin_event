@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import React from "react";
+import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createServer, isRunnableDevEnvironment } from "vite";
 
@@ -10,6 +11,7 @@ if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test envir
 const { default: EventChooser } = await environment.runner.import("/app/event-chooser.tsx");
 const { eventCalendar, eventsByProximity, groupCalendarEvents, nearestEvent, taipeiDate } = await environment.runner.import("/app/event-calendar.ts");
 const { publicLoginHref } = await environment.runner.import("/app/public-header.ts");
+const { officeCalendarDate } = await environment.runner.import("/app/office-calendar.ts");
 after(() => vite.close());
 
 const events = [
@@ -24,6 +26,33 @@ const render = (properties) => renderToStaticMarkup(
 // Published entries, links and unknown-event disclosure are exercised by
 // browser/reader-event-chooser.mjs; calendar edge cases and the empty state stay here.
 const dated = (id, dates, end = dates.at(-1)) => ({ ...events[0], id, days: dates.map((dateLabel) => ({ dateLabel })), eventEndsAt: `${end}T23:59:59+08:00` });
+
+test("official office calendars contain a complete year in the supported CSV format", async () => {
+  for (const year of [2026, 2027]) {
+    const csv = await readFile(new URL(`../data/office-calendar/${year}.csv`, import.meta.url), "utf8");
+    const [header, ...rows] = csv.trim().replace(/^\uFEFF/, "").split(/\r?\n/);
+    assert.equal(header, "西元日期,星期,是否放假,備註");
+    const nextYear = Date.UTC(year + 1, 0, 1);
+    assert.equal(rows.length, (nextYear - Date.UTC(year, 0, 1)) / 86400000);
+    for (const [index, row] of rows.entries()) {
+      assert.match(row, /^\d{8},[日一二三四五六],[02],[^,"\r\n]*$/);
+      const [date, weekday, flag, note] = row.split(",");
+      const expected = new Date(Date.UTC(year, 0, index + 1));
+      const iso = expected.toISOString().slice(0, 10);
+      assert.equal(date, iso.replaceAll("-", ""));
+      assert.equal(weekday, "日一二三四五六"[expected.getUTCDay()]);
+      assert.deepEqual(officeCalendarDate(iso), { holiday: flag === "2", note });
+    }
+  }
+});
+
+test("official days off include substitute holidays and stop at the published years", () => {
+  assert.deepEqual(officeCalendarDate("2026-10-09"), { holiday: true, note: "補假" });
+  assert.deepEqual(officeCalendarDate("2026-10-26"), { holiday: true, note: "補假" });
+  assert.equal(officeCalendarDate("2026-10-12").holiday, false);
+  assert.deepEqual(officeCalendarDate("2027-12-31"), { holiday: true, note: "補假" });
+  assert.equal(officeCalendarDate("2028-01-01"), undefined);
+});
 
 test("calendar labels cover single days, month/year changes and legacy dates", () => {
   for (const [dates, end, expected] of [
