@@ -10,14 +10,14 @@ import { inspectPlanningStorage, type PlanningDocument } from "./planning-store"
 import { ordinaryLinkClick } from "./reader-navigation";
 
 const MESSAGES = defineMessages({
-  "zh-Hant": { resume: "繼續規劃", favorites: "收藏 {count}", plans: "行程 {count}", calendar: "月曆", weekend: "週末", workday: "補行上班" },
+  "zh-Hant": { resume: "繼續規劃", favorites: "收藏 {count}", plans: "行程 {count}", calendar: "月曆", weekend: "週末", workday: "補行上班", substitute: "補假" },
   en: {
     resume: "Continue planning",
     favorites: ({ count }) => Number(count) === 1 ? "1 favorite" : `${count} favorites`,
     plans: ({ count }) => Number(count) === 1 ? "1 plan item" : `${count} plan items`,
-    calendar: "Calendar", weekend: "Weekend", workday: "Make-up working day",
+    calendar: "Calendar", weekend: "Weekend", workday: "Make-up working day", substitute: "Substitute holiday",
   },
-  ja: { resume: "プランの続き", favorites: "お気に入り {count} 件", plans: "巡回プラン {count} 件", calendar: "カレンダー", weekend: "週末", workday: "振替出勤日" },
+  ja: { resume: "プランの続き", favorites: "お気に入り {count} 件", plans: "巡回プラン {count} 件", calendar: "カレンダー", weekend: "週末", workday: "振替出勤日", substitute: "振替休日" },
 });
 
 type Groups = ReturnType<typeof groupCalendarEvents>;
@@ -107,7 +107,8 @@ export default function EventChooserAside({ groups, today, onSelect }: {
             {cells.map((date, index) => {
               const entry = date ? officeCalendarDate(date) : undefined;
               const weekend = date && [0, 6].includes(new Date(`${date}T00:00:00Z`).getUTCDay());
-              const note = entry && (entry.note || (weekend ? t(entry.holiday ? "weekend" : "workday") : ""));
+              // 補假 is a category like 週末 and is translated; holiday names stay official text.
+              const note = entry && (entry.note === "補假" ? t("substitute") : entry.note || (weekend ? t(entry.holiday ? "weekend" : "workday") : ""));
               const held = date ? days.get(date) : undefined;
               if (!date || !held) return <span key={date ?? `b${index}`} title={note || undefined} data-date={date ?? undefined} data-holiday={entry?.holiday || undefined} data-today={date === today || undefined} aria-hidden="true">{date ? Number(date.slice(8)) : ""}</span>;
               const label = dayDateLabel(date, locale);
