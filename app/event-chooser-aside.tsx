@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { EventDefinition } from "./event-catalog";
-import { eventDayCalendarDate, type groupCalendarEvents } from "./event-calendar";
+import { dayDateLabel, eventDayCalendarDate, type groupCalendarEvents } from "./event-calendar";
 import styles from "./event-chooser.module.css";
 import { localizedHref } from "./i18n/locale";
 import { useLocale, useMessages } from "./i18n/locale-context";
@@ -32,11 +32,23 @@ function monthCells(year: number, month: number) {
  * later month: a reader sees where today sits and what comes next.
  */
 function calendarMonths(groups: Groups, today: string) {
-  const days = new Set(groups.flatMap((group) => group.entries).flatMap(({ event }) => event.days.map((day) => eventDayCalendarDate(event, day.id))).filter((date): date is string => !!date));
+  const days = new Map<string, EventDefinition[]>();
+  for (const { event } of groups.flatMap((group) => group.entries)) {
+    for (const date of new Set(event.days.map((day) => eventDayCalendarDate(event, day.id)))) {
+      if (date) days.set(date, [...days.get(date) ?? [], event]);
+    }
+  }
   const months = [today.slice(0, 7)];
-  const next = [...days].filter((date) => date.slice(0, 7) > months[0]).sort()[0];
+  const next = [...days.keys()].filter((date) => date.slice(0, 7) > months[0]).sort()[0];
   if (next) months.push(next.slice(0, 7));
   return { days, months };
+}
+
+/** Bring an event's row into view and put focus on its map entry. */
+function revealEvent(eventId: string) {
+  const row = document.getElementById(`event-${eventId}`);
+  row?.scrollIntoView({ block: "nearest", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  row?.querySelector("a")?.focus({ preventScroll: true });
 }
 
 /**
@@ -66,6 +78,7 @@ export default function EventChooserAside({ groups, today, onSelect }: {
   const { days, months } = calendarMonths(groups, today);
   const caption = new Intl.DateTimeFormat(locale, { timeZone: "UTC", year: "numeric", month: "long" });
   const weekdays = new Intl.DateTimeFormat(locale, { timeZone: "UTC", weekday: "narrow" });
+  const names = new Intl.ListFormat(locale, { style: "narrow", type: "unit" });
 
   return <aside className={styles.aside}>
     {resume.length > 0 && <section className={styles.panel} aria-labelledby="event-chooser-resume">
@@ -80,15 +93,26 @@ export default function EventChooserAside({ groups, today, onSelect }: {
         </li>)}
       </ul>
     </section>}
-    {/* The list states every date in full; the calendar only lets them be seen together. */}
-    <section className={styles.panel} aria-hidden="true">
+    {/* Only event days are read out and pressable: each names its date and
+        events, and leads to that event's row in the list. */}
+    <section className={styles.panel}>
       {months.map((month) => {
         const [year, number] = month.split("-").map(Number);
         return <div key={month} className={styles.month}>
           <h2>{caption.format(new Date(Date.UTC(year, number - 1, 1)))}</h2>
           <div className={styles.days}>
-            {Array.from({ length: 7 }, (_, index) => <span key={`w${index}`} className={styles.weekday}>{weekdays.format(new Date(Date.UTC(2026, 10, 1 + index)))}</span>)}
-            {monthCells(year, number).map((date, index) => <span key={date ?? `b${index}`} data-today={date === today || undefined} data-event={date && days.has(date) ? (date < today ? "past" : "current") : undefined}>{date ? Number(date.slice(8)) : ""}</span>)}
+            {Array.from({ length: 7 }, (_, index) => <span key={`w${index}`} className={styles.weekday} aria-hidden="true">{weekdays.format(new Date(Date.UTC(2026, 10, 1 + index)))}</span>)}
+            {monthCells(year, number).map((date, index) => {
+              const held = date ? days.get(date) : undefined;
+              if (!date || !held) return <span key={date ?? `b${index}`} data-today={date === today || undefined} aria-hidden="true">{date ? Number(date.slice(8)) : ""}</span>;
+              const label = dayDateLabel(date, locale);
+              const column = index % 7;
+              return <button key={date} type="button" data-today={date === today || undefined} data-event={date < today ? "past" : "current"} data-align={column < 2 ? "start" : column > 4 ? "end" : undefined}
+                aria-label={`${label} ${names.format(held.map((event) => event.name))}`} onClick={() => revealEvent(held[0].id)}>
+                {Number(date.slice(8))}
+                <span className={styles.tip} aria-hidden="true"><b>{label}</b>{held.map((event) => <span key={event.id}>{event.name}</span>)}</span>
+              </button>;
+            })}
           </div>
         </div>;
       })}
