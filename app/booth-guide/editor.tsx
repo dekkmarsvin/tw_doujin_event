@@ -160,4 +160,3 @@ export default function BoothGuideEditor({ event, day, venueId, layout, placemen
     <div ref={mapSource} className="map-source" aria-hidden="true" inert style={{ width: layout.width, height: layout.height }}><AccessibleEventMapRenderer eventName={event.name} layout={layout} slots={{}} onSelect={() => undefined} /></div>
   </div>;
 }
-
