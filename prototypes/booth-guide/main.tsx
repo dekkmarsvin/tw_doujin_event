@@ -91,7 +91,12 @@ function Editor({ event, day, venueId, layout, placement, name, choose }: { even
   }));
   const [mapImage, setMapImage] = useState<HTMLImageElement | null>(null);
   const [picture, setPicture] = useState<HTMLImageElement | null>(null);
-  const [qr, setQr] = useState<HTMLImageElement | null>(null);
+  const qr = useMemo(() => {
+    const code = qrcode(0, "M");
+    const url = new URL(PUBLIC_ORIGIN); url.search = new URLSearchParams({ event: event.id, day: String(day), venueSpaceId: venueId, selectedCircle: placement.circleId, selectedBooth: placement.boothCode }).toString();
+    code.addData(url.href); code.make();
+    return Array.from({ length: code.getModuleCount() }, (_, row) => Array.from({ length: code.getModuleCount() }, (_, col) => code.isDark(row, col)));
+  }, [event.id, day, venueId, placement.circleId, placement.boothCode]);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState<number | null>(null);
   const [pictureBusy, setPictureBusy] = useState(false);
@@ -103,10 +108,6 @@ function Editor({ event, day, venueId, layout, placement, name, choose }: { even
     let active = true;
     const svg = mapSource.current?.querySelector("svg");
     if (svg) void snapshotMap(svg, layout.width, layout.height).then(image => { if (active) setMapImage(image); }).catch(() => { if (active) setNotice("地圖圖片無法準備，請重新整理。"); });
-    const code = qrcode(0, "M");
-    const url = new URL(PUBLIC_ORIGIN); url.search = new URLSearchParams({ event: event.id, day: String(day), venueSpaceId: venueId, selectedCircle: placement.circleId, selectedBooth: placement.boothCode }).toString();
-    code.addData(url.href); code.make();
-    void loadImage(code.createDataURL(4, 4)).then(image => { if (active) setQr(image); });
     return () => { active = false; };
   }, [layout, event.id, day, venueId, placement.circleId, placement.boothCode]);
   const scene: CardScene | null = mapImage ? { settings: { ...settings, entrance: entrance?.label ?? "指定起點" }, map: mapImage, mapSize: layout, picture, qr, start, target, waypoints, route } : null;

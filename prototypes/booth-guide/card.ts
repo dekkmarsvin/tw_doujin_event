@@ -9,7 +9,7 @@ export type CardSettings = {
 };
 export type CardScene = {
   settings: CardSettings; map: HTMLImageElement; mapSize: { width: number; height: number };
-  picture: HTMLImageElement | null; qr: HTMLImageElement | null;
+  picture: HTMLImageElement | null; qr: boolean[][];
   start: MapPoint | null; target: MapPoint; waypoints: MapPoint[]; route: boolean;
 };
 export const CARD_SIZES = { landscape: [1200, 675], square: [1080, 1080], portrait: [1080, 1350] } as const;
@@ -37,12 +37,13 @@ export function cardGeometry(scene: CardScene) {
   const [width, height] = CARD_SIZES[scene.settings.format];
   const horizontal = scene.settings.format === "landscape";
   const hasPicture = !!scene.picture;
+  const footer = scene.settings.showQr ? (scene.qr.length + 8) * 3 + 28 : 78;
   const picture: MapRect = horizontal
-    ? { x: 38, y: 145, width: 275, height: height - 223 }
+    ? { x: 38, y: 145, width: 275, height: height - 145 - footer }
     : { x: 38, y: 141, width: 250, height: 230 };
   const mapBox: MapRect = horizontal
-    ? { x: hasPicture ? 340 : 38, y: 145, width: width - (hasPicture ? 378 : 76), height: height - 223 }
-    : { x: 38, y: hasPicture ? 400 : 145, width: width - 76, height: height - (hasPicture ? 478 : 223) };
+    ? { x: hasPicture ? 340 : 38, y: 145, width: width - (hasPicture ? 378 : 76), height: height - 145 - footer }
+    : { x: 38, y: hasPicture ? 400 : 145, width: width - 76, height: height - (hasPicture ? 400 : 145) - footer };
   let crop: MapRect = { x: 0, y: 0, ...scene.mapSize };
   if (scene.settings.closeup) {
     const points = [scene.target, ...(scene.start ? [scene.start] : []), ...scene.waypoints];
@@ -134,11 +135,25 @@ export function drawCard(canvas: HTMLCanvasElement, scene: CardScene, progress: 
     ctx.beginPath(); ctx.arc(p.x, p.y, 11, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.fillStyle = "#172e2b";
     ctx.font = "bold 12px sans-serif"; ctx.textAlign = "center"; ctx.fillText(String(i + 1), p.x, p.y + 4); ctx.textAlign = "left";
   });
-  ctx.fillStyle = scene.settings.color; text(ctx, `${scene.settings.booth}  ·  ${scene.settings.account || "在這裡等你"}`, 38, g.height - 32, g.width - 220, 21, 700);
-  if (scene.settings.showQr && scene.qr) ctx.drawImage(scene.qr, g.width - 94, g.height - 70, 60, 60);
+  const footerY = g.mapBox.y + g.mapBox.height + 39;
+  ctx.fillStyle = scene.settings.color; text(ctx, `${scene.settings.booth}  ·  ${scene.settings.account || "在這裡等你"}`, 38, footerY, g.width - 265, 21, 700);
+  drawQr(ctx, scene, g.width, g.height);
   ctx.fillStyle = "#62716b"; ctx.font = "13px sans-serif"; ctx.textAlign = "right";
-  ctx.fillText("場刊 Map", g.width - (scene.settings.showQr ? 111 : 38), g.height - 31); ctx.textAlign = "left";
+  ctx.fillText("場刊 Map", g.width - (scene.settings.showQr ? (scene.qr.length + 8) * 3 + 53 : 38), g.height - 31); ctx.textAlign = "left";
   return g;
+}
+
+/** Four-module quiet zone and integer pixels at the final PNG/GIF resolution. */
+function drawQr(ctx: CanvasRenderingContext2D, scene: CardScene, width: number, height: number, outputScale = 1) {
+  if (!scene.settings.showQr) return;
+  const modules = scene.qr.length, cell = Math.max(2, Math.floor(3 * outputScale));
+  const side = (modules + 8) * cell, right = Math.round(38 * outputScale), bottom = Math.round(14 * outputScale);
+  const x = width - right - side, y = height - bottom - side;
+  // Erase the scaled copy before painting the crisp final-resolution code.
+  const reserved = Math.ceil((modules + 8) * 3 * outputScale);
+  ctx.fillStyle = scene.settings.background; ctx.fillRect(width - right - reserved - 1, height - bottom - reserved - 1, reserved + 2, reserved + 2);
+  ctx.fillStyle = "#fff"; ctx.fillRect(x, y, side, side); ctx.fillStyle = "#000";
+  scene.qr.forEach((row, r) => row.forEach((dark, c) => { if (dark) ctx.fillRect(x + (c + 4) * cell, y + (r + 4) * cell, cell, cell); }));
 }
 
 export function loadImage(url: string): Promise<HTMLImageElement> {
@@ -182,6 +197,7 @@ export async function exportGif(scene: CardScene, report: (percent: number) => v
   for (let i = 0; i < frames; i++) {
     drawCard(full, scene, Math.min(1, i / Math.max(1, (frames - 1) * .8)));
     ctx.drawImage(full, 0, 0, frame.width, frame.height);
+    drawQr(ctx, scene, frame.width, frame.height, ratio);
     const { data } = ctx.getImageData(0, 0, frame.width, frame.height);
     const palette = quantize(data, 256), index = applyPalette(data, palette);
     gif.writeFrame(index, frame.width, frame.height, { palette, delay: i % 3 === 0 ? 90 : 80, repeat: 0 });
