@@ -85,9 +85,9 @@ function Editor({ event, day, venueId, layout, placement, name, choose }: { even
   const [mode, setMode] = useState<"view" | "draw" | "start">("view");
   const [playing, setPlaying] = useState(false);
   const [settings, setSettings] = useState<CardSettings>(() => ({
-    format: "landscape", title: name, subtitle: `${event.name} ｜ ${eventDayCalendarDate(event, day) ? dayDateLabel(eventDayCalendarDate(event, day)!) : event.days.find(item => item.id === day)!.dateLabel} ｜ ${event.venueAssignments.find(item => item.venueSpaceId === venueId)!.venueSpaceName}`,
+    format: "portrait", title: name, subtitle: `${event.name} ｜ ${eventDayCalendarDate(event, day) ? dayDateLabel(eventDayCalendarDate(event, day)!) : event.days.find(item => item.id === day)!.dateLabel} ｜ ${event.venueAssignments.find(item => item.venueSpaceId === venueId)!.venueSpaceName}`,
     account: "", booth: placement.boothCode, entrance: entrance?.label ?? "", color: COLORS[0], background: BACKGROUNDS[0], lineWidth: 4, duration: 4,
-    marker: "dot", showConnector: false, showQr: true, closeup: false, pictureFit: "contain",
+    marker: "dot", showConnector: false, showQr: true, closeup: true, pictureFit: "contain",
   }));
   const [mapImage, setMapImage] = useState<HTMLImageElement | null>(null);
   const [picture, setPicture] = useState<HTMLImageElement | null>(null);
@@ -175,7 +175,7 @@ function Editor({ event, day, venueId, layout, placement, name, choose }: { even
         <label>從哪裡出發<select aria-label="起點" value={entranceId} onChange={e => { setEntranceId(e.target.value); setWaypoints([]); setRoute(false); setPlaying(false); setMode(e.target.value === "custom" ? "start" : "view"); }}>
           {entrances.map(item => <option key={item.id} value={item.id}>{item.label || "入口"}</option>)}<option value="custom">在地圖上指定</option></select></label>
         <div className="button-row"><button className={mode === "draw" ? "active" : ""} onClick={() => { setPlaying(false); setMode(!start ? "start" : mode === "draw" ? "view" : "draw"); }}>{mode === "draw" ? "完成路線" : "畫路線"}</button><button disabled={!waypoints.length} onClick={() => { setWaypoints(current => current.slice(0, -1)); if (waypoints.length <= 1) { setRoute(false); setPlaying(false); } }}>退一步</button><button disabled={!route && !waypoints.length} onClick={() => { setWaypoints([]); setRoute(false); setPlaying(false); }}>清除</button></div>
-        <p className="hint">{mode === "start" ? "在右側地圖點選起點。" : mode === "draw" ? "沿走道點選轉彎處；拖曳圓點可調整位置。" : route ? `${waypoints.length} 個轉彎點，可再次編輯。` : "手動畫出入口到攤位的路線。"}</p>
+        <p className="hint">{mode === "start" ? "在地圖上點選起點。" : mode === "draw" ? "沿走道點選轉彎處；拖曳圓點可調整位置。" : route ? `${waypoints.length} 個轉彎點，可再次編輯。` : "手動畫出入口到攤位的路線。"}</p>
         <label className="check"><input type="checkbox" checked={settings.closeup} onChange={e => update("closeup", e.target.checked)} />放大路線範圍</label>
       </section>
       <section><h2><span>03</span>卡片樣式</h2>
