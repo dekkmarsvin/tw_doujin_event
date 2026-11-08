@@ -108,6 +108,7 @@ beforeEach(async () => {
     turnstileSitekey: () => sitekey(),
     thumbnailStore: {
       url: (key) => `https://media-preview.kotoban.top/${key}`,
+      get: async key => thumbnailObjects.keys.has(key) ? { body: new Uint8Array([0x89, 0x50, 0x4e, 0x47]), contentType: "image/png" } : null,
       list: async (prefix) => [...thumbnailObjects.keys].filter((key) => key.startsWith(prefix)),
       put: async (key, value, contentType) => { thumbnailObjects.keys.add(key); thumbnailObjects.put.push({ key, size: value.byteLength, contentType }); },
       delete: async (keys) => {
@@ -422,6 +423,29 @@ test("login-request audit uses a keyed domain-separated digest", async () => {
   assert.equal(row.subject_id, await emailAuditSubjectId("test-pepper", "audit-email@example.com"));
   const rawSha = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("audit-email@example.com"));
   assert.notEqual(row.subject_id, Buffer.from(rawSha).toString("hex"));
+});
+
+test("guide images read only the owner's saved thumbnail in the selected event", async () => {
+  const cookie = await signIn("guide@owner.example");
+  await handlers.createClaim(post("/api/claims", { circleId: "ff47-domain" }, cookie));
+  const path = "/api/circle/ff47-domain/thumbnail";
+  assert.equal((await handlers.readThumbnail(get(path), "ff47-domain")).status, 401);
+  assert.equal((await handlers.readThumbnail(get(path, await signIn("stranger@example.com")), "ff47-domain")).status, 403);
+  assert.equal((await handlers.readThumbnail(get(path, cookie), "ff47-domain")).status, 404);
+  const upload = await handlers.uploadThumbnail(thumbnailRequest("ff47-domain", cookie, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]), "ff47-domain");
+  const staged = await upload.json();
+  assert.equal((await handlers.readThumbnail(get(path, cookie), "ff47-domain")).status, 404, "an uploaded draft is not the saved image");
+  assert.equal((await handlers.putOverride(post("/api/circle/ff47-domain/overrides", {
+    fields: { thumbnail: staged.thumbnail }, hostedThumbnailKey: staged.uploadKey,
+  }, cookie), "ff47-domain")).status, 200);
+  const image = await handlers.readThumbnail(get(path + "?url=https://unrelated.invalid/private", cookie), "ff47-domain");
+  assert.equal(image.status, 200);
+  assert.equal(image.headers.get("content-type"), "image/png");
+  assert.equal(image.headers.get("cache-control"), "private, no-store");
+  assert.deepEqual([...new Uint8Array(await image.arrayBuffer())], [0x89, 0x50, 0x4e, 0x47]);
+  assert.equal((await handlers.readThumbnail(get("/api/circle/ff47-social/thumbnail", cookie), "ff47-social")).status, 403);
+  const anotherEvent = createCirclePortalHandlers({ ...handlerOptions, config: { ...handlerOptions.config, eventId: "another-event" } });
+  assert.equal((await anotherEvent.readThumbnail(get(path, cookie), "ff47-domain")).status, 403);
 });
 
 test("a circle can delete its account and release its owned circle", async () => {

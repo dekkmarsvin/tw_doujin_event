@@ -2,6 +2,7 @@ import { defineMessages } from "../i18n/messages";
 
 // Complete messages keep word order and interpolation under each language's control.
 const rows: readonly (readonly [string, string, string])[] = [
+  ["製作攤位導引圖", "Create a booth guide", "スペース案内画像を作る"],
   ["已儲存，公開頁面會在一分鐘內更新。", "Saved. The public page will update within a minute.", "保存しました。公開ページは約1分以内に更新されます。"],
   ["目前顯示場刊資料", "Showing event catalog data", "カタログの情報を表示中"],
   ["目前顯示你填寫的內容", "Showing your content", "入力した内容を表示中"],

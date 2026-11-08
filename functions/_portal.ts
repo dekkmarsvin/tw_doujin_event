@@ -270,6 +270,10 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
   const thumbnailOrigin = env.THUMBNAIL_PUBLIC_ORIGIN;
   const thumbnailStore: HostedThumbnailStore | undefined = thumbnailOrigin ? {
     url: (key) => `${thumbnailOrigin.replace(/\/$/, "")}/${key}`,
+    get: async key => {
+      const object = await env.THUMBNAILS.get(key);
+      return object ? { body: object.body, contentType: object.httpMetadata?.contentType } : null;
+    },
     list: (prefix) => listBucketKeys(env.THUMBNAILS, prefix),
     put: async (key, value, contentType) => {
       await env.THUMBNAILS.put(key, value, {

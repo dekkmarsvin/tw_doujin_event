@@ -7,6 +7,8 @@
     "npm": ">=11.19.0 <12"
   },
   "scripts": {
+    "dev:booth-guide": "vite --config vite.pages.config.ts --host 127.0.0.1 --port 4182 --strictPort",
+    "build:booth-guide": "vite build --config prototypes/booth-guide/vite.config.ts",
     "predev:pages": "npm run data:stage -- --fixture",
     "dev:pages": "vite --config vite.pages.config.ts",
     "build": "npm run data:stage -- --fixture && npm run build:staged",
@@ -62,6 +64,7 @@
     "eslint-plugin-jsx-a11y": "6.10.2",
     "eslint-plugin-react": "7.37.5",
     "eslint-plugin-react-hooks": "7.1.1",
+    "gifenc": "1.0.3",
     "globals": "16.4.0",
     "jpeg-js": "0.4.4",
     "miniflare": "5.20260804.0-alpha",

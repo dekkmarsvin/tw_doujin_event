@@ -5,6 +5,8 @@
 **實作**：`app/admin/admin-app.tsx`、`app/admin/admin-navigation.ts`、`app/admin/admin-overview.tsx`
 **實作**：`app/admin/admin-circle-panel.tsx`、`app/admin-circle-detail.ts`
 **實作**：`app/admin/admin-account-panel.tsx`、`app/admin-account-detail.ts`
+**實作**：[`app/booth-guide/`](../../app/booth-guide)
+**測試**：`tests/booth-guide.test.mjs`、`tests/browser/portal-circle-claim.mjs`
 
 參展社團在獨立入口 `/circle` 維護**自己的**公開資料。它**補充**而非取代人工快照發布：主辦提供的攤位與社團身分仍由版本控制的快照決定，社團填寫的內容是疊加其上、可即時撤下的補充層。
 
@@ -198,6 +200,9 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 - 攤位來自編輯器讀取的官方配置。配置尚未取得時不產生文字，「查看公開頁」「複製」與「分享」都停用並顯示正在準備；讀取失敗時說明無法取得攤位資料並提供「重新取得」，不以缺少日期與攤位的文字代替。
 - 社團介紹頁只為在該活動有配置的社團產生（見[資料傳輸與離線契約](./delivery-and-offline.md#公開搜尋介紹頁)）。已認領但本場沒有任何配置的社團沒有公開頁，不顯示分享區塊。
 - 文字同時顯示在唯讀文字框。剪貼簿拒絕時選取整段文字並請作者自行複製；關閉系統分享面板不算失敗，不顯示錯誤。
+- 「製作攤位導引圖」在社團管理內開啟製作器，帶入目前社團的有效日期／場地／攤位與已儲存的代表圖；多攤位時可切換。使用對應日期與場地的公開地圖，沒有地圖位置時不產出錯誤的攤位圖。
+- 導引圖預設 4:5，可手動畫路線、調整圖片與樣式，下載 PNG 或循環 GIF。QR Code 連到公開攤位，並避開路線、入口與排名。製作與下載在瀏覽器完成，不儲存導引圖設定、不更動社團草稿或公開分享縮圖；關閉後回到原編輯狀態。公開活動地圖的入口留待導航功能重作。
+- 導引圖透過既有 `/api/circle/:circleId/thumbnail?event=...` 的 GET 讀取本人在該活動已儲存的代管代表圖，沿用登入與已通過認領的檢查，只讀資料庫保存的物件 key，不接受任意來源網址或未儲存上傳；回應不快取。外部代表圖使用匿名 CORS 載入，來源不允許匯出時提示改選裝置圖片。
 - 「分享縮圖」可選品牌通用圖、目前代表圖或任一張品書，附圖片預覽。選擇是既有表單草稿的一部分，與其他欄位一起「預覽並送出／確認儲存」，還原與草稿恢復也一併處理；未儲存的選擇不改變公開頁。
 - `shareImage` 存入既有 overlay；未設定時使用品牌圖。社團頁 GET 的 `og:image` 由已公開且仍可見的選擇決定，品書重排保留同一張、移除圖片回到品牌圖。其他 metadata 仍使用官方靜態資料，不產生新圖片。規則見 [ADR-0077](../adr/0077-circle-share-images-follow-published-media.md)。
 

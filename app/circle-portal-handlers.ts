@@ -906,6 +906,24 @@ export function createCirclePortalHandlers({
     return json({ ok: true });
   }
 
+  async function readThumbnail(request: Request, circleId: string) {
+    const current = await currentSession(request);
+    if (!current) return json({ error: "尚未登入。", code: errorCode("unauthenticated") }, 401);
+    if (!await repository.ownsCircle(current.accountId, config.eventId, circleId)) {
+      return json({ error: "你尚未通過這個社團的認領。", code: errorCode("claim_not_verified") }, 403);
+    }
+    const key = (await repository.getOverride(config.eventId, circleId))?.hosted_thumbnail_key;
+    if (!key) return new Response(null, { status: 404 });
+    if (!thumbnailStore?.get) return json({ error: "暫時無法使用圖片功能，請稍後再試。", code: errorCode("image_service_unavailable") }, 503);
+    // Read the saved key only: no caller-provided URL or draft object can be fetched.
+    const object = await thumbnailStore.get(key);
+    if (!object) return new Response(null, { status: 404 });
+    return new Response(object.body, { headers: {
+      "content-type": object.contentType ?? "application/octet-stream",
+      "cache-control": "private, no-store", "x-content-type-options": "nosniff",
+    } });
+  }
+
   async function uploadThumbnail(request: Request, circleId: string) {
     const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。", code: errorCode("unauthenticated") }, 401);
@@ -3949,6 +3967,7 @@ export function createCirclePortalHandlers({
     getMyOverride: eventScoped(getMyOverride, true),
     putOverride: eventScoped(putOverride, true),
     uploadThumbnail: eventScoped(uploadThumbnail, true),
+    readThumbnail: eventScoped(readThumbnail, true),
     uploadCatalogImage: eventScoped(uploadCatalogImage, true),
     deleteMyOverride: eventScoped(deleteMyOverride, true),
     previewOverride: eventScoped(previewOverride, true),
