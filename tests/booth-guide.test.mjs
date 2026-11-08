@@ -3,7 +3,8 @@ import test, { after } from "node:test";
 import { createServer } from "vite";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
-const { cardGeometry, cardPointToMap, pointOnRoute, routePoints } = await vite.environments.ssr.runner.import("/prototypes/booth-guide/card.ts");
+const { cardGeometry, cardPointToMap, pointOnRoute, routePoints } = await vite.environments.ssr.runner.import("/app/booth-guide/card.ts");
+const { guidePlacements } = await vite.environments.ssr.runner.import("/app/booth-guide/placements.ts");
 after(() => vite.close());
 
 const layout = {
@@ -18,6 +19,19 @@ const scene = {
 };
 const contains = (r, p) => p.x >= r.x && p.x <= r.x + r.width && p.y >= r.y && p.y <= r.y + r.height;
 const intersects = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+
+test("the portal offers only this circle's active placements in the event's dated venue scopes", () => {
+  const event = { id: "event", days: [{ id: 1 }, { id: 2 }], venueAssignments: [
+    { venueSpaceId: "north-hall", areaIds: ["north"] }, { venueSpaceId: "south-hall", areaIds: ["south"] },
+  ] };
+  const record = (id, changes = {}) => ({ placement: { id, eventId: "event", circleId: "mine", day: 1, area: "north", status: "active", ...changes } });
+  const choices = guidePlacements(event, "mine", [
+    record("day2", { day: 2, area: "south" }), record("day1"), record("cancelled", { status: "cancelled" }),
+    record("moved", { status: "moved" }), record("other-circle", { circleId: "another" }),
+    record("other-event", { eventId: "another" }), record("missing-day", { day: 3 }),
+  ]);
+  assert.deepEqual(choices.map(item => [item.placement.id, item.venue.venueSpaceId]), [["day1", "north-hall"], ["day2", "south-hall"]]);
+});
 
 function assertReferencesVisible(input) {
   const g = cardGeometry(input);

@@ -11,6 +11,9 @@ import type { EventDefinition } from "../event-catalog";
 import type { CircleViewRecord } from "../circle-records";
 import type { CircleOverrideFields } from "../circle-overrides";
 import { circleShareImageOptions, selectedCircleShareImage } from "../circle-share-image";
+import { representativeMedia } from "../circle-records";
+import PortalBoothGuide from "../booth-guide/portal-guide";
+import { guidePlacements } from "../booth-guide/placements";
 import styles from "./portal.module.css";
 
 /**
@@ -53,6 +56,9 @@ export function CirclePageShare({ event, circle, records, failed, onRetry, field
   const id = useId();
   const box = useRef<HTMLTextAreaElement>(null);
   const [result, setResult] = useState("");
+  const [guideOpen, setGuideOpen] = useState(false);
+  const guideChoices = records ? guidePlacements(event, circle.id, records) : [];
+  const guidePicture = savedFields.thumbnail === undefined ? representativeMedia(records?.[0]?.circle.media ?? [])?.url : savedFields.thumbnail?.url;
   const pageUrl = localizedHref(`${window.location.origin}${circlePath(event.id, circle.id)}`, locale);
   // The claim keeps the name as it was when it was made; an organizer can have
   // corrected it since, and the post has to name the circle the page does.
@@ -114,7 +120,9 @@ export function CirclePageShare({ event, circle, records, failed, onRetry, field
         : <button type="button" className={styles.secondaryButton} disabled>{t("查看公開頁")}</button>}
       <button type="button" disabled={!promotion} onClick={copy}>{t("複製宣傳文字與連結")}</button>
       {canShare && <button type="button" className={styles.secondaryButton} disabled={!promotion} onClick={share}>{t("分享")}</button>}
+      <button type="button" className={styles.secondaryButton} disabled={!guideChoices.length} onClick={() => setGuideOpen(true)}>{t("製作攤位導引圖")}</button>
     </div>
     <p className={styles.shareResult} role="status">{t(result)}</p>
+    {guideOpen && guideChoices.length > 0 && <PortalBoothGuide event={event} choices={guideChoices} name={name} pictureUrl={guidePicture} onClose={() => setGuideOpen(false)} />}
   </section>;
 }

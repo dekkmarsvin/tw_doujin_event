@@ -11,6 +11,7 @@ const FORMATS = [
 
 export type HostedThumbnailStore = {
   url(key: string): string;
+  get?(key: string): Promise<{ body: BodyInit; contentType?: string } | null>;
   list(prefix: string): Promise<string[]>;
   put(key: string, value: ArrayBuffer, contentType: string): Promise<void>;
   delete(keys: string | string[]): Promise<void>;

@@ -1,4 +1,4 @@
-import { rowLabelPlacement, type EventMapLayout, type MapPoint, type MapRect } from "../../app/event-map";
+import { rowLabelPlacement, type EventMapLayout, type MapPoint, type MapRect } from "../event-map";
 
 export type CardSettings = {
   format: "landscape" | "square" | "portrait";
@@ -6,6 +6,7 @@ export type CardSettings = {
   color: string; background: string; lineWidth: number; duration: number;
   marker: "dot" | "arrow"; showConnector: boolean; showQr: boolean; closeup: boolean;
   pictureFit: "contain" | "cover";
+  fromEntrance?: string;
 };
 export type CardScene = {
   settings: CardSettings; map: HTMLImageElement; mapSize: EventMapLayout;
@@ -175,7 +176,7 @@ export function drawCard(canvas: HTMLCanvasElement, scene: CardScene, progress: 
   text(ctx, scene.settings.subtitle, titleX, 116, g.width - titleX - 38, 20);
   if (!horizontal) {
     ctx.fillStyle = scene.settings.color; text(ctx, scene.settings.booth, titleX, 192, g.width - titleX - 38, 64, 800);
-    ctx.fillStyle = "#4c625e"; text(ctx, `從${scene.settings.entrance}出發`, titleX, 235, g.width - titleX - 38, 24);
+    ctx.fillStyle = "#4c625e"; text(ctx, scene.settings.fromEntrance ?? `從${scene.settings.entrance}出發`, titleX, 235, g.width - titleX - 38, 24);
     if (scene.picture) text(ctx, scene.settings.account, 38, 296, g.width - 76, 22);
     else text(ctx, scene.settings.account, 310, 188, g.width - 348, 22);
   }
@@ -249,8 +250,17 @@ function drawQr(ctx: CanvasRenderingContext2D, scene: CardScene, box: MapRect | 
   scene.qr.forEach((row, r) => row.forEach((dark, c) => { if (dark) ctx.fillRect(x + (c + 4) * cell, y + (r + 4) * cell, cell, cell); }));
 }
 
-export function loadImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => { const image = new Image(); image.onload = () => resolve(image); image.onerror = () => reject(new Error("圖片無法讀取，請換一張 JPG、PNG 或 WebP。")); image.src = url; });
+export function loadImage(url: string, anonymous = false): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => { const image = new Image(); if (anonymous) image.crossOrigin = "anonymous"; image.onload = () => resolve(image); image.onerror = () => reject(new Error("圖片無法讀取，請換一張 JPG、PNG 或 WebP。")); image.src = url; });
+}
+
+export function readPicture(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error("圖片無法讀取，請換一張 JPG、PNG 或 WebP。"));
+    reader.readAsDataURL(file);
+  });
 }
 
 /** Freeze the actual shared SVG renderer, including its resolved CSS, for canvas export. */
@@ -264,8 +274,8 @@ export async function snapshotMap(svg: SVGSVGElement, width: number, height: num
     clones[i].setAttribute("style", properties.map(property => `${property}:${computed.getPropertyValue(property)}`).join(";"));
   });
   clone.setAttribute("xmlns", "http://www.w3.org/2000/svg"); clone.setAttribute("width", String(width)); clone.setAttribute("height", String(height));
-  const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], { type: "image/svg+xml;charset=utf-8" }));
-  try { return await loadImage(url); } finally { URL.revokeObjectURL(url); }
+  // Portal CSP permits data images. Keep the same policy when rendering SVGs.
+  return loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(clone))}`);
 }
 
 export function downloadBlob(blob: Blob, name: string) {

@@ -17,6 +17,7 @@
 // of those guarded invariants — so this journey signs each account in exactly
 // once and reuses the session rather than logging in again.
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { ADMIN, CIRCLE, clearMail, loginLink, signIn } from "./support/portal.mjs";
 import { base, PICTURE, start } from "./support/journey.mjs";
 import { png } from "./support/png.mjs";
@@ -263,7 +264,7 @@ try {
 
   // The review is full-density content inside a narrow desktop column. Use
   // an external picture fixture: local R2 URLs are deliberately not public.
-  await circle.route(PICTURE, route => route.fulfill({ contentType: "image/png", body: png(300, 1600) }));
+  await circle.route(PICTURE, route => route.fulfill({ contentType: "image/png", headers: { "access-control-allow-origin": "*" }, body: png(300, 1600) }));
   await circle.getByLabel("外部圖片網址", { exact: true }).fill(PICTURE);
   await circle.getByRole("img", { name: "代表圖預覽", exact: true }).evaluate(image => image.decode());
   const shareImage = circle.getByLabel("分享縮圖", { exact: true });
@@ -295,6 +296,49 @@ try {
   await circle.waitForFunction(() => document.querySelector('select[id$="-image"]')?.value === "thumbnail");
   await share.scrollIntoViewIfNeeded();
   await journey.capture(circle, "portal-share-image-saved");
+  // The guide is reached from the saved circle, while an unrelated form edit
+  // remains a draft. Rendering and downloads also run under the portal's CSP.
+  await penField(circle).fill("導引圖開啟時保留的草稿");
+  const guideEntry = share.getByRole("button", { name: "製作攤位導引圖", exact: true });
+  let guideWrites = 0;
+  const countGuideWrites = request => {
+    if (request.method() !== "GET" && new URL(request.url()).pathname.startsWith("/api/circle/")) guideWrites++;
+  };
+  circle.on("request", countGuideWrites);
+  await guideEntry.click();
+  const guide = circle.getByRole("dialog", { name: "製作攤位導引圖", exact: true });
+  await guide.getByRole("button", { name: "下載 PNG", exact: true }).waitFor();
+  assert.equal(await guide.getByRole("textbox", { name: "卡片標題", exact: true }).inputValue(), CIRCLE_NAME);
+  await guide.getByRole("button", { name: "更換社團圖片", exact: true }).waitFor();
+  const guideDay = guide.getByRole("combobox", { name: "日期與攤位", exact: true });
+  assert.equal(await guideDay.locator("option").count(), 2, "only this circle's two placements are offered");
+  await guideDay.selectOption({ index: 1 });
+  await guide.getByRole("button", { name: "更換社團圖片", exact: true }).waitFor();
+  assert.match(await guide.getByRole("textbox", { name: "日期與場地", exact: true }).inputValue(), /9月2日/);
+  const pngDownload = circle.waitForEvent("download");
+  await guide.getByRole("button", { name: "下載 PNG", exact: true }).click();
+  const pngBytes = await readFile(await (await pngDownload).path());
+  assert.deepEqual([pngBytes.readUInt32BE(16), pngBytes.readUInt32BE(20)], [1080, 1350], "the prefilled image remains exportable");
+  // Local replacements use the same allowed image sources as the map snapshot.
+  await guide.locator('input[type="file"]').setInputFiles({ name: "guide.png", mimeType: "image/png", buffer: png(160, 160) });
+  await guide.getByRole("button", { name: "畫路線", exact: true }).click();
+  let guideCanvas = await guide.locator("canvas").boundingBox();
+  await circle.mouse.click(guideCanvas.x + guideCanvas.width * .65, guideCanvas.y + guideCanvas.height * .6);
+  guideCanvas = await guide.locator("canvas").boundingBox();
+  await circle.mouse.click(guideCanvas.x + guideCanvas.width * .65, guideCanvas.y + guideCanvas.height * .5);
+  await guide.getByRole("button", { name: "完成路線", exact: true }).click();
+  const gifDownload = circle.waitForEvent("download");
+  await guide.getByRole("button", { name: /^下載 GIF/ }).click();
+  const gifBytes = await readFile(await (await gifDownload).path());
+  assert.equal(gifBytes.subarray(0, 6).toString(), "GIF89a");
+  assert.deepEqual([gifBytes.readUInt16LE(6), gifBytes.readUInt16LE(8)], [720, 900]);
+  await journey.capture(circle, "portal-booth-guide");
+  await guide.getByRole("button", { name: "返回社團資料", exact: true }).click();
+  circle.off("request", countGuideWrites);
+  assert.equal(guideWrites, 0, "guide editing and downloads never submit the circle form");
+  assert.equal(await penField(circle).inputValue(), "導引圖開啟時保留的草稿");
+  assert.equal(await guideEntry.evaluate(node => node === document.activeElement), true);
+  await circle.getByRole("button", { name: "還原為已儲存的版本", exact: true }).click();
   assert.equal(await share.getByRole("img", { name: "分享縮圖預覽", exact: true }).evaluate(node => getComputedStyle(node).objectFit), "cover",
     "the preview crops like the share card, not the whole image");
   const desktopFrame = await share.getByRole("img", { name: "分享縮圖預覽", exact: true }).boundingBox();
