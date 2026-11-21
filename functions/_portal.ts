@@ -18,6 +18,7 @@ import { createGitHubAppTokenProvider } from "../app/github-app-token";
 import { createPublicationDispatcher } from "../app/publication-dispatch";
 import { createPublishedAmendmentBaselineLoader } from "../app/organizer-amendment-baseline";
 import { createPublicationRecoveryAuditor } from "../app/organizer-publication-recovery";
+import { readEntryJson, readEventIndex, readEventJson } from "./_event-data";
 
 /**
  * Wires the framework-agnostic portal handlers to the Pages runtime: D1, the
@@ -32,24 +33,20 @@ import { createPublicationRecoveryAuditor } from "../app/organizer-publication-r
  */
 const catalogCache = new Map<string, Promise<{ payload: CircleCatalogPayload; event: EventDefinition; index: Map<string, CircleLookup> }>>();
 
-async function catalog(env: PortalEnv, request: Request, eventId: string) {
-  const cached = catalogCache.get(eventId);
+async function catalog(env: PortalEnv, _request: Request, eventId: string) {
+  // Keyed by version: a publication changes the version, so the next request
+  // parses the new catalog instead of serving the isolate's old one.
+  const entry = (await readEventIndex(env)).events.find((item) => item.eventId === eventId);
+  if (!entry) throw new Error(`活動 ${eventId} 尚未發布。`);
+  const key = `${eventId}@${entry.version}`;
+  const cached = catalogCache.get(key);
   if (cached) return cached;
 
   const pending = (async () => {
-    const base = `/data/events/${encodeURIComponent(eventId)}`;
-    const [response, eventResponse, referencesResponse] = await Promise.all([
-      env.ASSETS.fetch(new Request(new URL(`${base}/circles.json`, request.url).toString())),
-      env.ASSETS.fetch(new Request(new URL(`${base}/event.json`, request.url).toString())),
-      env.ASSETS.fetch(new Request(new URL(`${base}/reference-records.json`, request.url).toString())),
-    ]);
-    if (!response.ok || !eventResponse.ok || !referencesResponse.ok) {
-      throw new Error(`無法讀取活動資料（catalog=${response.status}, event=${eventResponse.status}, references=${referencesResponse.status}）。`);
-    }
-    const [value, eventValue, referencesValue]: [unknown, unknown, unknown] = await Promise.all([
-      response.json(),
-      eventResponse.json(),
-      referencesResponse.json(),
+    const [value, eventValue, referencesValue] = await Promise.all([
+      readEntryJson(env, entry, "circles.json"),
+      readEntryJson(env, entry, "event.json"),
+      readEntryJson(env, entry, "reference-records.json"),
     ]);
     if (!isCircleCatalogPayload(value) || value.eventId !== eventId) throw new Error(`活動 ${eventId} 的靜態社團資料格式或 identity 無效。`);
     const event = parseEventDefinition(eventValue, referencesValue);
@@ -64,11 +61,12 @@ async function catalog(env: PortalEnv, request: Request, eventId: string) {
     } satisfies CircleLookup]));
     return { payload, event, index };
   })().catch((error: unknown) => {
-    catalogCache.delete(eventId);
+    catalogCache.delete(key);
     throw error;
   });
 
-  catalogCache.set(eventId, pending);
+  for (const stale of catalogCache.keys()) if (stale.startsWith(`${eventId}@`)) catalogCache.delete(stale);
+  catalogCache.set(key, pending);
   return pending;
 }
 
@@ -298,13 +296,8 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     list: (prefix) => listBucketKeys(env.MAP_CONTRIBUTIONS!, prefix),
   } : undefined;
   const readPublishedEventMap = async (targetPath: string) => {
-    const response = await env.ASSETS.fetch(new Request(new URL(
-      `/data/events/${encodeURIComponent(eventId)}/${targetPath}`,
-      request.url,
-    ).toString()));
-    if (response.status === 404) return null;
-    if (!response.ok) throw new Error(`Published map read failed (${response.status}).`);
-    const value: unknown = await response.json();
+    const value = await readEventJson(env, eventId, targetPath);
+    if (value === null) return null;
     return isPublishedEventMap(value) && value.eventId === eventId ? value : null;
   };
   const githubInstallationProbe = createGitHubInstallationProbe({

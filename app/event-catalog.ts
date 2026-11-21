@@ -273,16 +273,30 @@ export function parseEventDefinition(value: unknown, references: unknown): Event
   };
 }
 
-const injectedEvents = typeof __PUBLISHED_EVENTS__ === "undefined"
-  ? [{ definition: sampleDefinition, references: sampleReferences }]
-  : __PUBLISHED_EVENTS__;
+type InjectedEvent = { definition: unknown; references: unknown };
 
 /**
- * Exactly the events this build serves, in the order a reader is offered them.
- * The set comes from the staged data, so adding an event is a data change: no
- * event is named in code, and nothing here is a per-event constant.
+ * In a deployed page the server writes the published events into a JSON data
+ * block (`functions/_published-events-html.ts`), so publishing needs no
+ * rebuild. The dev server and fixture builds still bake staged events in with
+ * Vite's `define`. Outside a browser (tests, Functions) the sample fixture
+ * stands in, as it always has.
  */
-export const PUBLISHED_EVENTS: readonly EventDefinition[] = injectedEvents
+function injectedEvents(): readonly InjectedEvent[] {
+  if (typeof document !== "undefined") {
+    const block = document.getElementById("published-events");
+    if (block?.textContent) return JSON.parse(block.textContent) as InjectedEvent[];
+  }
+  if (typeof __PUBLISHED_EVENTS__ !== "undefined") return __PUBLISHED_EVENTS__;
+  return typeof document === "undefined" ? [{ definition: sampleDefinition, references: sampleReferences }] : [];
+}
+
+/**
+ * Exactly the events this site serves, in the order a reader is offered them.
+ * The set comes from the published data, so adding an event is a data change:
+ * no event is named in code, and nothing here is a per-event constant.
+ */
+export const PUBLISHED_EVENTS: readonly EventDefinition[] = injectedEvents()
   .map(({ definition, references }) => parseEventDefinition(definition, references));
 
 const PUBLISHED_IDS = new Set(PUBLISHED_EVENTS.map((event) => event.id));

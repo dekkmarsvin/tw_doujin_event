@@ -17,9 +17,13 @@ test("ships an offline shell covering the venue-critical artifact", async () => 
   assert.match(version[1], /^[0-9a-f]{12}$/);
 
   const manifest = JSON.parse(worker.match(/const PRECACHE_MANIFEST = (\[[^\]]*\]);/)[1]);
-  for (const required of ["/index.html", "/manifest.webmanifest", "/data/events/sample/circles.json", "/data/events/sample/map.json", "/app-icon.svg"]) {
+  for (const required of ["/index.html", "/manifest.webmanifest", "/app-icon.svg"]) {
     assert.ok(manifest.includes(required), `precache manifest is missing ${required}`);
   }
+  // Event data changes without a deploy (#546): the worker precaches what the
+  // server's event index lists at install time instead.
+  assert.ok(!manifest.some((path) => path.startsWith("/data/events/")), "event data is not part of the build");
+  assert.match(worker, /fetch\("\/data\/events\/index\.json"/);
   assert.ok(manifest.some((path) => /^\/assets\/index-.+\.js$/.test(path)), "the application script must be precached");
   assert.ok(manifest.some((path) => /^\/assets\/index-.+\.css$/.test(path)), "the application stylesheet must be precached");
   assert.ok(manifest.some((path) => path.startsWith("/fonts/")), "self-hosted fonts must be precached");

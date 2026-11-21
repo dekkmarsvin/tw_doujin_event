@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -14,6 +14,14 @@ const wrangler = fileURLToPath(new URL(
   JSON.parse(await readFile(manifest, "utf8")).bin.wrangler,
   pathToFileURL(manifest),
 ));
+// Pages Functions serve event data from R2 (#546), so the staged fixture goes
+// into the portal's local bucket before the server starts.
+const seed = spawnSync(process.execPath, [fileURLToPath(new URL("./upload-event-data.mjs", import.meta.url)), "--local", "--persist-to", ".wrangler/local-portal"], {
+  cwd: fileURLToPath(new URL("..", import.meta.url)),
+  stdio: "inherit",
+});
+if (seed.status !== 0) throw new Error("local portal: could not load the staged events into the local event data bucket.");
+
 const child = spawn(process.execPath, [wrangler, ...localPortalWranglerArgs(values)], {
   cwd: fileURLToPath(new URL("..", import.meta.url)),
   stdio: "inherit",

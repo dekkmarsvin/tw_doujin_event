@@ -1,10 +1,11 @@
 import { createPlanningShareHandlers } from "../app/planning-share-handlers";
 import { parseEventDefinition } from "../app/event-catalog";
 import { createPlanningShareRepository } from "../db/planning-share-repository";
+import { readEventJson } from "./_event-data";
 
 const repositories = new WeakMap<D1Database, ReturnType<typeof createPlanningShareRepository>>();
 
-export function planningShareHandlers({ env, request }: { env: PortalEnv; request: Request }) {
+export function planningShareHandlers({ env }: { env: PortalEnv; request: Request }) {
   let repository = repositories.get(env.DB);
   if (!repository) {
     repository = createPlanningShareRepository(env.DB);
@@ -18,14 +19,12 @@ export function planningShareHandlers({ env, request }: { env: PortalEnv; reques
     },
     publishedEvent: async (eventId) => {
       if (!/^[a-z0-9][a-z0-9-]*$/.test(eventId)) return null;
-      const base = `/data/events/${encodeURIComponent(eventId)}`;
       const [definition, references] = await Promise.all([
-        env.ASSETS.fetch(new Request(new URL(`${base}/event.json`, request.url))),
-        env.ASSETS.fetch(new Request(new URL(`${base}/reference-records.json`, request.url))),
+        readEventJson(env, eventId, "event.json"),
+        readEventJson(env, eventId, "reference-records.json"),
       ]);
-      if (definition.status === 404 || references.status === 404) return null;
-      if (!definition.ok || !references.ok) throw new Error("Published event assets unavailable.");
-      const event = parseEventDefinition(await definition.json(), await references.json());
+      if (definition === null || references === null) return null;
+      const event = parseEventDefinition(definition, references);
       return event.id === eventId ? event : null;
     },
   });

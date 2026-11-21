@@ -1,5 +1,5 @@
 /**
- * Public offline shell for the staged event Pages site.
+ * Public offline shell for the event Pages site.
  *
  * The venue is a dense hall on congested mobile networks, so a reload there
  * must not cost the user their map. `scripts/build-service-worker.mjs` injects
@@ -42,11 +42,27 @@ function isStorable(response) {
   return response.ok && !response.redirected && response.type === "basic";
 }
 
+/**
+ * The published events change without a deploy (#546), so their files are not
+ * in the build's manifest. The server's index lists each event's current files.
+ */
+async function publishedEventFiles() {
+  try {
+    const response = await fetch("/data/events/index.json", { cache: "reload" });
+    if (!isStorable(response) || !isJson(response)) return [];
+    const index = await response.json();
+    return (index.events ?? []).flatMap(({ eventId, files }) => (files ?? []).map((file) => `/data/events/${eventId}/${file}`));
+  } catch {
+    return [];
+  }
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
+    const urls = [...PRECACHE_MANIFEST, ...await publishedEventFiles()];
     // Fetch explicitly so one unavailable entry cannot fail the whole install.
-    await Promise.all(PRECACHE_MANIFEST.map(async (url) => {
+    await Promise.all(urls.map(async (url) => {
       try {
         const response = await fetch(url, { cache: "reload" });
         if (isStorable(response)) await cache.put(url, response);

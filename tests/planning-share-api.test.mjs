@@ -37,6 +37,13 @@ const create = async (value = snapshot, headers = {}) => {
   return response.json();
 };
 const rows = async () => (await database.prepare("SELECT * FROM planning_shares").all()).results;
+/** An event data bucket (#546) publishing the given files for one event. */
+const eventData = (eventId, files) => ({ get: async (key) => {
+  const value = key === "index.json"
+    ? { schema: "event-index/1", events: [{ eventId, version: "1", files: Object.keys(files), definition: files["event.json"], references: files["reference-records.json"] }] }
+    : key.startsWith(`events/${eventId}/1/`) ? files[key.split("/").at(-1)] : undefined;
+  return value === undefined ? null : { text: async () => JSON.stringify(value) };
+} });
 beforeEach(async () => { clock = NOW; await identity.clearPreviewData(); });
 
 test("create/read round trip stores only ordered ids/days, expiry and peppered IP", async () => {
@@ -207,7 +214,7 @@ test("/s serves escaped dynamic metadata, brand image and refresh through nonce 
   const specialName = `活動 <script>alert("x")</script> & '名稱'`;
   const pageHandlers = createPlanningShareHandlers({ repository, publishedEvent: async () => ({ ...event, name: specialName, image: { url: "https://event.example.test/event.png", width: 100, height: 100 } }), hashPepper: () => "unused", now: () => clock });
   const pageRequest = new Request(created.url);
-  const response = await onRequest({ request: pageRequest, next: forwarded => pageHandlers.page(forwarded, created.shareId) });
+  const response = await onRequest({ request: pageRequest, env: { EVENT_DATA: eventData("sample", {}) }, next: forwarded => pageHandlers.page(forwarded, created.shareId) });
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-security-policy"), /'nonce-[^']+'/);
   assert.equal(response.headers.get("cache-control"), "private, no-store");
@@ -231,12 +238,7 @@ test("Pages route wiring uses deployed events rather than the browser fixture fa
   const files = {};
   for (const name of ["event.json", "reference-records.json"]) files[name] = JSON.parse(await readFile(new URL(`../fixtures/events/sample-two/${name}`, import.meta.url), "utf8"));
   files["event.json"].eventEndsAt = "2099-10-04T00:00:00Z";
-  const env = { DB: database, HASH_PEPPER: "test-pepper", ASSETS: { fetch: async assetRequest => {
-    const path = new URL(assetRequest.url).pathname;
-    const name = path.split("/").at(-1);
-    return path.startsWith("/data/events/sample-two/") && files[name]
-      ? Response.json(files[name]) : new Response("not found", { status: 404 });
-  } } };
+  const env = { DB: database, HASH_PEPPER: "test-pepper", EVENT_DATA: eventData("sample-two", files) };
   const value = { version: 1, eventId: "sample-two", items: [{ circleId: "c-8", day: "thu" }] };
   const invoke = (req, route, id) => onRequest({ request: req, env, next: forwarded => route({ request: forwarded ?? req, env, params: { shareId: id } }) });
   const response = await invoke(request(value), onRequestPost);

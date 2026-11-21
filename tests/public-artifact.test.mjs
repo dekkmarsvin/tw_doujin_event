@@ -6,7 +6,8 @@
 // behaviour; the bundle is what a reader actually downloads.
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
-import test from "node:test";
+import test, { after } from "node:test";
+import { closePublishedSite, readPublished } from "./support/published-site.mjs";
 
 async function readTextAssets(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -19,12 +20,15 @@ async function readTextAssets(directory) {
   return contents.flat();
 }
 
+after(closePublishedSite);
+
 const assetsIn = (html) => [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map((match) => match[1]);
 
 test("builds the staged application as a Cloudflare Pages SPA", async () => {
   const html = await readFile(new URL("../dist/index.html", import.meta.url), "utf8");
   assert.match(html, /<title>場刊 Map｜同人展逛攤地圖<\/title>/i);
-  assert.match(html, /<div id="root"><header class="site-header">[\s\S]*?<\/header><main class="discovery-summary">/);
+  // The event summary inside #root is added per request with the published list (#546).
+  assert.match(await readPublished("index.html"), /<div id="root"><header class="site-header">[\s\S]*?<\/header><main class="discovery-summary">/);
   assert.match(html, /\/assets\/index-[^"']+\.js/);
 
   const publicAssets = (await readTextAssets(new URL("../dist/", import.meta.url))).join("\n");
@@ -105,9 +109,9 @@ test("keeps the reader separate from the control surfaces but linked to them", a
  */
 test("the circle page script is its own public entry, outside the offline shell", async () => {
   const dist = (path) => new URL(`../dist/${path}`, import.meta.url);
-  const sitemap = await readFile(dist("sitemap.xml"), "utf8");
+  const sitemap = await readPublished("sitemap.xml");
   const circlePage = new URL([...sitemap.matchAll(/<loc>(.*?)<\/loc>/g)].map(([, loc]) => loc).find((loc) => loc.includes("/circles/"))).pathname;
-  const pageAssets = assetsIn(await readFile(dist(`${circlePage.slice(1)}index.html`), "utf8"));
+  const pageAssets = assetsIn(await readPublished(`${circlePage.slice(1)}index.html`));
   const readerAssets = assetsIn(await readFile(dist("index.html"), "utf8"));
   const own = pageAssets.filter((asset) => !readerAssets.includes(asset));
   assert.ok(own.some((asset) => /\/circlePage-[\w-]+\.js$/.test(asset)), "the page has its own entry chunk");
@@ -130,8 +134,7 @@ test("the circle page script is its own public entry, outside the offline shell"
  * so showing it asks the server nothing.
  */
 test("every public entry page opens with one header whose 登入 keeps the page's context", async () => {
-  const dist = (path) => new URL(`../dist/${path}`, import.meta.url);
-  const sitemap = await readFile(dist("sitemap.xml"), "utf8");
+  const sitemap = await readPublished("sitemap.xml");
   const paths = [...sitemap.matchAll(/<loc>(.*?)<\/loc>/g)].map(([, loc]) => new URL(loc).pathname);
   const eventPage = paths.find((path) => /^\/events\/[^/]+\/$/.test(path));
   const circlePage = paths.find((path) => path.startsWith(`${eventPage}circles/`));
@@ -139,7 +142,7 @@ test("every public entry page opens with one header whose 登入 keeps the page'
   const circleId = circlePage.split("/")[4];
   const attribute = (value) => value.replace(/&/g, "&amp;").replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
   for (const [path, login] of [["/", "/circle"], [eventPage, `/circle?event=${eventId}`], [circlePage, `/circle?event=${eventId}&circle=${circleId}`]]) {
-    const html = await readFile(dist(path === "/" ? "index.html" : `${path.slice(1)}index.html`), "utf8");
+    const html = await readPublished(path === "/" ? "index.html" : `${path.slice(1)}index.html`);
     const headers = [...html.matchAll(/<header class="site-header">([\s\S]*?)<\/header>/g)].map(([, inner]) => inner);
     assert.equal(headers.length, 1, `${path} has one public header`);
     assert.match(headers[0], /<a class="site-header-brand" href="\/">/, `${path}: the brand leads home`);

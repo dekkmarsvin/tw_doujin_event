@@ -10,6 +10,7 @@
 
 import { isHtmlRoute, secureHtmlResponse, unconditionalHtmlRequest } from "./_html-security";
 import { applyCircleShareImage } from "./_circle-share-image";
+import { withPublishedEvents } from "./_published-events-html";
 import { API_ERROR_CODES, type ApiErrorCode } from "../app/i18n/api-error-codes";
 
 const SAFE_METHODS = new Set(["GET", "HEAD"]);
@@ -63,5 +64,7 @@ export const onRequest: PagesFunction<PortalEnv> = async (context) => {
     headers.set("x-content-type-options", "nosniff");
     return new Response(response.body, { status: response.status, headers });
   }
-  return html ? secureHtmlResponse(await applyCircleShareImage(context, response), url.pathname) : response;
+  if (!html) return response;
+  const shared = await applyCircleShareImage(context, response);
+  return secureHtmlResponse(request.method === "GET" ? await withPublishedEvents(context.env, url.pathname, shared) : shared, url.pathname);
 };
