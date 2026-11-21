@@ -104,6 +104,8 @@ test("without a published index, pages say the data is unavailable instead of se
   const response = await withPublishedEvents(env, "/", new Response("<head></head><script></script>", { headers: { "content-type": "text/html" } }));
   assert.equal(response.status, 503);
   assert.match(await response.text(), /暫時無法載入活動資料/);
+  const page = await discoveryResponse({ ...env, ASSETS: assets }, new Request("https://example.com/events/sample/"));
+  assert.equal(page.status, 503);
 });
 
 test("event and circle introductions and the sitemap are built from the published version", async () => {

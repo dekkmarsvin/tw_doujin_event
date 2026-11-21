@@ -53,6 +53,12 @@ async function jsonFiles(directory, prefix = "") {
   return found.sort();
 }
 
+// A version readers switch to must be complete: run the same staged-data check
+// the build uses (every map the event needs, manifest coverage, identities)
+// before anything is uploaded.
+const check = spawnSync(process.execPath, [path.join(root, "scripts", "check-staged-event-data.mjs")], { cwd: root, stdio: "inherit" });
+if (check.status !== 0) throw new Error("The staged events failed their check; nothing was uploaded.");
+
 const stage = JSON.parse(await readFile(path.join(root, ".event-data-stage.json"), "utf8"));
 const eventIds = (stage.events ?? [{ eventId: stage.eventId }]).map(({ eventId }) => eventId);
 // A sortable timestamp: later uploads always carry a later version.

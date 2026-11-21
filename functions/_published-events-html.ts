@@ -5,6 +5,15 @@ import { publishedEventDefinitions, readEventIndex } from "./_event-data";
 /** The element `app/event-catalog.ts` reads the published events from. */
 export const PUBLISHED_EVENTS_ELEMENT_ID = "published-events";
 
+/** The page shown while the published event data cannot be read. */
+export function eventDataUnavailable(error: unknown) {
+  console.error(JSON.stringify({ event: "event_index.unavailable", message: error instanceof Error ? error.message : String(error) }));
+  return new Response("<!doctype html><meta charset=\"utf-8\"><title>暫時無法使用</title><p>暫時無法載入活動資料，請稍後再試。</p>", {
+    status: 503,
+    headers: { "content-type": "text/html; charset=utf-8", "retry-after": "60" },
+  });
+}
+
 /**
  * Gives every HTML page the published events it is built around (#546).
  *
@@ -22,11 +31,7 @@ export async function withPublishedEvents(env: Pick<PortalEnv, "EVENT_DATA">, pa
   try {
     definitions = publishedEventDefinitions(await readEventIndex(env));
   } catch (error) {
-    console.error(JSON.stringify({ event: "event_index.unavailable", message: error instanceof Error ? error.message : String(error) }));
-    return new Response("<!doctype html><meta charset=\"utf-8\"><title>暫時無法使用</title><p>暫時無法載入活動資料，請稍後再試。</p>", {
-      status: 503,
-      headers: { "content-type": "text/html; charset=utf-8", "retry-after": "60" },
-    });
+    return eventDataUnavailable(error);
   }
   const block = `<script type="application/json" id="${PUBLISHED_EVENTS_ELEMENT_ID}">${JSON.stringify(definitions).replace(/</g, "\\u003c")}</script>`;
   html = html.includes("</head>") ? html.replace("</head>", `${block}</head>`) : block + html;

@@ -2,6 +2,7 @@ import { isCircleCatalogPayload } from "../app/circle-records";
 import { parseEventDefinition } from "../app/event-catalog";
 import { discoveryPages, PORTAL_INTRO_PATH, sitemapHtml } from "../app/static-discovery";
 import { readEntryJson, readEventIndex, type EventIndexEntry } from "./_event-data";
+import { eventDataUnavailable } from "./_published-events-html";
 
 type Assets = { circlePageAssets: string; pageAssets: string };
 
@@ -47,9 +48,14 @@ export async function discoveryResponse(env: Pick<PortalEnv, "ASSETS" | "EVENT_D
   const url = new URL(request.url);
   const path = url.pathname.replace(/index\.html$/, "");
   const eventId = path.split("/")[2] ?? "";
-  const entry = (await readEventIndex(env)).events.find((item) => item.eventId === eventId);
-  if (!entry) return notFound(env, request);
-  const pages = await eventPages(env, request, entry);
+  let pages: Map<string, string>;
+  try {
+    const entry = (await readEventIndex(env)).events.find((item) => item.eventId === eventId);
+    if (!entry) return notFound(env, request);
+    pages = await eventPages(env, request, entry);
+  } catch (error) {
+    return eventDataUnavailable(error);
+  }
   const page = pages.get(path);
   if (page !== undefined) return new Response(request.method === "HEAD" ? null : page, { headers: { "content-type": "text/html; charset=utf-8" } });
   if (!path.endsWith("/") && pages.has(`${path}/`)) return Response.redirect(new URL(`${path}/${url.search}`, url).toString(), 308);
