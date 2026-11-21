@@ -9,6 +9,7 @@
 | 色彩、字體、層級 | [`DESIGN.md`](../DESIGN.md)、[元件與介面規格](./design/components.md) |
 | 介面上該寫什麼字 | [對外文案](./design/copy.md) |
 | 前端現在的行為 | 下方「現行契約」 |
+| 後端要提供哪些 API、重寫後各自保留或刪除 | [後端 API](./api.md) |
 | 怎麼做某件事 | 下方「流程」 |
 | 對使用者承諾了什麼 | [隱私權與個人資料蒐集告知](./policy/privacy-notice.md) |
 | Issue 怎麼開、標籤怎麼用 | [`agents/`](./agents) |
@@ -31,7 +32,7 @@
 
 ## 凍結的後端契約
 
-舊後端的規格，在 #546 中隨對應程式一起刪除。只用來理解現況，不作為新需求的依據。
+舊後端的規格，在 #546 中隨對應程式一起刪除。只用來理解現況，不作為新需求的依據；後端的現行規格是[後端 API](./api.md)。
 
 - [社團自助控制面](./contracts/circle-portal.md)
 - [主辦單位工作區](./contracts/organizer-workspace.md)
