@@ -1,5 +1,7 @@
 # 社團自助控制面契約
 
+> **凍結（2026-11-21）**：描述舊後端，後端依 [#546](https://github.com/dekkmarsvin/tw_doujin_event/issues/546) 重寫後隨對應程式刪除。只用來理解現況，不作為新需求的依據。
+
 **實作**：`app/admin/admin-panels.tsx`
 **實作**：`app/admin/use-admin-review-queue.ts`
 **實作**：`app/admin/admin-app.tsx`、`app/admin/admin-navigation.ts`、`app/admin/admin-overview.tsx`

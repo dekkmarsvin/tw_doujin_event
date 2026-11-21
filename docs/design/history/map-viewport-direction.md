@@ -1,6 +1,6 @@
 # 地圖視域改進方向
 
-> **凍結的歷史設計紀錄（2026-09-23 移入）。** 本文保存當時的提案與取捨，不再更新，也不是現行規格；文中連到其他文件的連結固定在移入當時的版本。現行行為以[契約](../../contracts/INDEX.md)為準，視覺規格見 [`DESIGN.md`](../../../DESIGN.md) 與[元件與介面規格](../components.md)。
+> **凍結的歷史設計紀錄（2026-09-23 移入）。** 本文保存當時的提案與取捨，不再更新，也不是現行規格；文中連到其他文件的連結固定在移入當時的版本。現行行為以[文件索引](../../README.md)列出的契約為準，視覺規格見 [`DESIGN.md`](../../../DESIGN.md) 與[元件與介面規格](../components.md)。
 
 - 狀態：**歷史提案；後續規格已實作。** 本文原估算保留，不是現況。現況以[活動地圖契約](https://github.com/dekkmarsvin/tw_doujin_event/blob/4704e27ebd0ff88a6680356204b4306cf5314af8/docs/contracts/event-map.md)、[`DESIGN.md`](https://github.com/dekkmarsvin/tw_doujin_event/blob/4704e27ebd0ff88a6680356204b4306cf5314af8/DESIGN.md) 與[元件與介面規格](https://github.com/dekkmarsvin/tw_doujin_event/blob/4704e27ebd0ff88a6680356204b4306cf5314af8/docs/design/components.md)為準。
 - **後續技術規格**：[地圖新介面技術落地規格](./map-viewport-implementation.md)。已確認首次開啟維持 fit，取代本文軸線 A 的固定可讀倍率；桌機採左欄探索／行程切換與條件式詳情覆蓋。本文保留為歷史提案，實作目標以新規格為準。

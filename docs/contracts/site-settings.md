@@ -1,5 +1,7 @@
 # 網站營運設定
 
+> **凍結（2026-11-21）**：描述舊後端，後端依 [#546](https://github.com/dekkmarsvin/tw_doujin_event/issues/546) 重寫後隨對應程式刪除。只用來理解現況，不作為新需求的依據。
+
 **實作**：`app/site-settings.ts`、`app/site-service-check.ts`、`app/admin/admin-site-settings-panel.tsx`、`app/workspace-nav.tsx`、`db/site-settings-repository.ts`、`db/identity-runtime-schema.ts`、`functions/api/admin/site-settings.ts`、`functions/api/admin/service-check.ts`、`workers/publication-dispatch/index.ts`
 **測試**：`tests/site-settings.test.mjs`、`tests/organizer-applications.test.mjs`、`tests/account-notifications.test.mjs`、`tests/review-notifications.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/browser/portal-admin-entry.mjs`、`tests/browser/portal-organizer-amendment-publication.mjs`
 **實作**：`app/admin/use-admin-site-status.ts`、`app/admin/admin-service-status.tsx`

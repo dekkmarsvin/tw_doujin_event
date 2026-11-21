@@ -1,60 +1,34 @@
 # AGENTS.md
 
-Guidance for coding agents working in this repository.
+給在這個 repo 工作的代理人。本專案由一人維護：不處理金流、只保存必要的少量個資。規則只有這一頁。
 
-## 交付原則
+## 原則
 
-本專案是不處理金流、僅保存必要少量個資的同人活動網站。優先交付可用功能、簡單操作與低維護成本，不追求所有例外都自動恢復。
+- **簡單優先，能刪就刪。** 用最小的變更完成已接受的任務。不為假想情境、假想規模或「最佳實務」新增機制；新增防禦前要說得出誰、做什麼操作、會造成什麼實際影響。說不出來就不做。
+- **必要邊界只有這些：** 登入與 session 時效、社團／活動層級授權、撤下立即生效、資料刪除請求、私人資料不進公開產物、secrets 不進版控、只有核准過的內容才會公開。其他保護是否值得，依維護成本判斷。
+- **後端重寫中（[#546](https://github.com/dekkmarsvin/tw_doujin_event/issues/546)）。** 新工作以 #546 的設計為準。舊後端的契約與 ADR 已凍結，只描述現況，不是新需求的依據；與 #546 衝突時以 #546 為準。
+- **使用者操作：** 沿用已知資料與合理預設值，減少填寫與確認；草稿可以不完整，送審／發布時才檢查必要欄位；只有使用者必須做決定時才請使用者選擇。
 
-### 實作範圍
+## 測試
 
-- 完成已接受的使用者任務，採用足以解決問題的最小變更。
-- 不為尚未支援的情境、假想規模或單純最佳實務新增機制。新增防禦須指出目前支援環境中，誰做什麼操作、經哪條可到達路徑造成什麼影響、既有機制為何不足，以及最小修正；不必等事故發生，但回答不出來就不實作。「安全」「一致性」「資料完整性」不是免除舉證的理由。
-- 維持登入、授權、活動／社團資料隔離、私人資料、公開／刪除與發布正確性的必要邊界；正常使用會遇到的登入逾時、儲存失敗、匯入錯誤及更新衝突，以最小且可理解的方式處理。
-- 外部輸入在適當邊界驗證；已建立的內部型別與不變條件不在每層重複防禦。不同信任邊界、授權檢查與資料庫原子性需求仍須處理。
-- 沿用既有驗證與恢復機制，不建立第二套，也不在一般 UI 任務中順帶拆除既有發布保護。
-- 既有文件不是新增需求的授權；與本次已接受決策衝突時，說明衝突並同步修正受影響的現行文件，不自行擴大產品保證或改寫歷史決策。
+- 測使用者看得到的行為與上列必要邊界，不測函式名稱、JSX 寫法或樣式細節。
+- 純文案、樣式與不改行為的整理不加測試。過時或重複的測試直接刪。
+- 本機只跑受影響的測試（指令見[本機開發](docs/runbooks/local-development.md)），完整套件交給 CI。沒跑過的不說通過。
 
-### 測試
+## Review
 
-- 測試保護使用者行為與必要資料邊界，不保護函式名稱、JSX 寫法或精確樣式。
-- 純文案、樣式與非行為性整理，預設不新增測試。優先修改既有測試；額外測試層須涵蓋不同的失敗類型，不預設同時補 unit、integration 與 browser。
-- 低價值、重複或過時斷言可直接刪除，不要求一對一補測；有價值的行為保護須確認另一層已涵蓋或以適當行為測試承接。
-- 本機預設只跑受影響驗證；完整 CI 的適用範圍依既有配置，未執行的驗證不得宣稱通過。具體測試選擇依 `docs/runbooks/local-development.md`。
+- 預設自查。改到授權、資料刪除或發布時，找一位沒參與實作的 reviewer 看那一塊。
+- Finding 只處理「會壞」的：說得出輸入、路徑與錯誤結果。風格、完整性、「更一致」不擋 PR，也不另開 issue。
+- 兩輪修正後還沒收斂，就停下來把剩下的問題交給維護者決定。
 
-### 使用者操作
+## 證據與文件
 
-- 優先沿用已知資料、合理預設值與原地完成操作，減少填寫、切換、重複登入與不必要確認。
-- 草稿可未完成；正式送審／發布才套用必要完整性要求。可逆且局部的操作不預設新增確認步驟。
-- 只有使用者必須作出決定時才要求選擇，不把內部模型轉成填寫負擔。
-- UI 完成須有從入口、操作到結果的實際操作證據，不以原始碼斷言代替；依受影響任務選取驗收，不要求每次重做全站流程。
+- UI 變更附從入口、操作到結果的截圖，貼在 PR 或 issue。不要提交驗收報告或證據圖到 repo；暫存在 PR 分支 `.evidence/` 的圖，合併前要刪掉。含個資的畫面不上傳。
+- 決策寫在 GitHub issue，不再新增 ADR。`docs/adr/` 與 `docs/design/history/` 只是歷史。
+- 改了前端行為，同一個 commit 更新對應的現行契約（清單見[文件索引](docs/README.md)）。
 
-Review 的風險分級、finding 處置及結束條件統一依 `docs/agents/review-loop.md`，不另建平行稽核流程。
+## 參考
 
-## Agent skills
-
-### Project workflow
-
-When triaging issues, choosing the next task, scheduling review follow-ups, or accepting a milestone, read `docs/runbooks/project-workflow.md` for goal-based classification, readiness, and completion evidence. Its section 7 holds the Cloudflare cost baseline, the complexity budget, and the expansion threshold — read it before proposing a cost-motivated change, a new Cloudflare product, or a new scheduled role.
-
-Acceptance evidence — screenshots, measurements, dated verification or audit notes — goes on the issue or pull request, never into a new repository document. Section 6 of the same runbook says how to attach screenshots without leaving them on `main`. `docs/design/` holds current specs only, and `docs/design/history/` is frozen.
-
-### Issue tracker
-
-Issues live as GitHub issues in `dekkmarsvin/tw_doujin_event`, driven by the `gh` CLI. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-The five canonical triage roles, each label string equal to its name. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Domain vocabulary, architecture decisions, and behavioral contracts are located through `docs/agents/domain.md`.
-
-### Interface copy
-
-Before changing user-facing interface text, read `docs/design/copy.md`. Apply its audience and task boundary to the surface being changed, and keep actions and states consistent with what the user can actually do. Limit copy work to the affected surface; do not expand a copy change into a site-wide rewrite, a new copy framework, or an extra audit process unless the task explicitly requires it.
-
-### Review-fix loop
-
-For implementation review, finding disposition, reviewer assignment, verification, and review completion, follow `docs/agents/review-loop.md` as the single rule source.
+- **Issue**：GitHub `dekkmarsvin/tw_doujin_event`，用 `gh` 操作，見 [issue-tracker](docs/agents/issue-tracker.md)；分類標籤見 [triage-labels](docs/agents/triage-labels.md)。
+- **詞彙**：領域用詞以 [CONTEXT.md](CONTEXT.md) 為準。
+- **介面文案**：改使用者看得到的文字前，先讀 [docs/design/copy.md](docs/design/copy.md)，只改受影響的畫面。

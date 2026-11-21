@@ -78,8 +78,6 @@ npx wrangler r2 bucket domain list tw-doujin-event-thumbnails
 npx wrangler r2 bucket domain list tw-doujin-event-thumbnails-preview
 ```
 
-容量與操作量的營運監控見 [Cloudflare 容量與耗用監控](./cloudflare-usage-monitoring.md)，不屬於縮圖請求路徑。
-
 ### 3.2 建立私人地圖來源 bucket
 
 production 與 preview 分開，且不得設定 custom domain 或開啟 `r2.dev`：

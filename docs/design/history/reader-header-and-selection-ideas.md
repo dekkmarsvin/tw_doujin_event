@@ -1,6 +1,6 @@
 # 活動閱讀頁：頂部資訊、工具與取消選取
 
-> **凍結的歷史設計紀錄（2026-09-23 移入）。** 本文保存當時的提案與取捨，不再更新，也不是現行規格；文中連到其他文件的連結固定在移入當時的版本。現行行為以[契約](../../contracts/INDEX.md)為準，視覺規格見 [`DESIGN.md`](../../../DESIGN.md) 與[元件與介面規格](../components.md)。
+> **凍結的歷史設計紀錄（2026-09-23 移入）。** 本文保存當時的提案與取捨，不再更新，也不是現行規格；文中連到其他文件的連結固定在移入當時的版本。現行行為以[文件索引](../../README.md)列出的契約為準，視覺規格見 [`DESIGN.md`](../../../DESIGN.md) 與[元件與介面規格](../components.md)。
 
 記錄日期：2026-09-15。來源為本次使用者提出的五項觀察與四張截圖，並對照公開頁及本機 `22daf8f`。本文件保留實作前的設計討論；使用者隨後已指示實作並開立 PR。實作行為以 [ADR-0063](https://github.com/dekkmarsvin/tw_doujin_event/blob/4704e27ebd0ff88a6680356204b4306cf5314af8/docs/adr/0063-reader-dismissal-clears-selection.md) 與對應契約為準，驗收證據見 [design-qa.md](https://github.com/dekkmarsvin/tw_doujin_event/blob/4704e27ebd0ff88a6680356204b4306cf5314af8/design-qa.md)。
 

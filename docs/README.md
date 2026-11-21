@@ -1,95 +1,58 @@
 # 文件索引
 
-文件依**職責**歸檔，不依主題。找東西時先問「我要的是哪一種答案」：
+後端重寫中（[#546](https://github.com/dekkmarsvin/tw_doujin_event/issues/546)）：新工作以 #546 為準，標為**凍結**的文件只描述舊實作，不再更新。
 
 | 我想知道… | 去哪裡 |
 |---|---|
-| 產品要解決什麼、給誰用、邊界在哪 | [`PRODUCT.md`](../PRODUCT.md) |
-| 使用者、P0／P1／P2 與 MVP 完成定義 | [`PRODUCT.md`](../PRODUCT.md#scope) |
-| 色彩、字體、層級、圓角 | [`DESIGN.md`](../DESIGN.md) |
-| 過去的設計提案與取捨（凍結，非現行規格） | [`design/history/`](./design/history) |
-| **介面上該寫什麼字、不該寫什麼字** | [對外文案](./design/copy.md) |
-| 某個介面表面的元件長什麼樣 | [元件與介面規格](./design/components.md) |
+| 產品要解決什麼、給誰用 | [`PRODUCT.md`](../PRODUCT.md) |
 | 這個詞在本專案是什麼意思 | [`CONTEXT.md`](../CONTEXT.md) |
-| **我要改這個檔案，是哪份契約在管它** | [契約索引](./contracts/INDEX.md) |
-| **某個模組現在的行為是什麼、怎麼驗收** | [`contracts/`](#契約) |
-| **怎麼做某件事** | [`runbooks/`](#流程) |
-| **為什麼當初這樣決定** | [`adr/`](#決策紀錄) |
-| 外部產品實際長什麼樣 | [`research/`](#研究) |
-| **對外承諾了什麼** | [`policy/`](#對外文件) |
-| 代理人的 issue tracker、標籤設定與 review-fix 迴圈守則 | [`agents/`](./agents) |
-| 某次驗收的截圖、量測與結果 | 主 issue 或 PR（[專案工作流程第 6 節](./runbooks/project-workflow.md#6-留下完整驗收證據)） |
+| 色彩、字體、層級 | [`DESIGN.md`](../DESIGN.md)、[元件與介面規格](./design/components.md) |
+| 介面上該寫什麼字 | [對外文案](./design/copy.md) |
+| 前端現在的行為 | 下方「現行契約」 |
+| 怎麼做某件事 | 下方「流程」 |
+| 對使用者承諾了什麼 | [隱私權與個人資料蒐集告知](./policy/privacy-notice.md) |
+| Issue 怎麼開、標籤怎麼用 | [`agents/`](./agents) |
 
-## 契約
+## 現行契約
 
-描述**現況**，可驗收。實作與契約不一致時，兩者之一是錯的——不是「文件比較舊」。
+描述前端現在的行為，可驗收。改了行為就在同一個 commit 更新。
 
 | 文件 | 涵蓋 |
 |---|---|
-| [社團目錄](./contracts/circle-catalog.md) | 社團身分、資料權威、領域模型、模板匹配、三種資訊密度、來源標示 |
-| [活動地圖](./contracts/event-map.md) | layout 不變量、renderer 邊界、互動與縮放、使用者流程 |
-| [收藏與走訪規劃](./contracts/planning.md) | 收藏／群組／行程模型、儲存與遷移、跨介面同步、完整備份與復原、短網址分享 |
-| [品書瀏覽](./contracts/catalog-browse.md) | 品書入口、公開搜尋、日期與場地範圍、地圖切換與瀏覽位置恢復 |
-| [搜尋、篩選與顯示設定](./contracts/search.md) | 三組條件的責任切分、詳細搜尋互動、多主題與排除、命中原因 |
-| [URL 檢視狀態](./contracts/url-state.md) | 查詢參數、恢復規則、不寫入 URL 的狀態 |
-| [社團自助控制面](./contracts/circle-portal.md) | 身分、認領、可編輯範圍、預覽、活動後退出、管理者、媒體安全 |
-| [主辦單位工作區](./contracts/organizer-workspace.md) | 活動申請與邀請、候選活動、攤位匯入、地圖、驗證、送審、發布與更正 |
-| [網站營運設定](./contracts/site-settings.md) | 申請開關、聯絡方式、通知、發布與服務檢查 |
-| [地圖編輯器](./contracts/map-editor.md) | 主辦工作區與地圖貢獻共用的畫布：放置、排段、選取與批次、輔助線與吸附、描摹顯示、復原 |
-| [地圖貢獻控制面](./contracts/map-contributions.md) | contributor 授權、私人 revision、官方來源檔、審閱狀態機、留言與局部修改請求、候選匯出與保存期限 |
-| [資料傳輸與離線](./contracts/delivery-and-offline.md) | payload 邊界、載入行為、Service Worker、快取標頭 |
-| [資料匯入範圍](./contracts/data-import.md) | 現行匯入入口與對應契約、未開放範圍及歷史提案 |
-| [資料 inventory](./contracts/data-inventory.md) | 實際持有的資料、欄位、有效期與第三方；保存期限、到期處置與清除機制 |
-| [共享 reference 選擇](./contracts/reference-selection.md) | 主辦／分類／場館資料的 stable ID selection 與 fail-closed 驗證邊界 |
+| [社團目錄](./contracts/circle-catalog.md) | 社團身分、領域模型、資訊密度、來源標示 |
+| [活動地圖](./contracts/event-map.md) | layout 不變量、renderer 邊界、互動與縮放 |
+| [收藏與走訪規劃](./contracts/planning.md) | 收藏／群組／行程、備份與復原、短網址分享 |
+| [品書瀏覽](./contracts/catalog-browse.md) | 品書入口、日期與場地範圍、瀏覽位置恢復 |
+| [搜尋、篩選與顯示設定](./contracts/search.md) | 三組條件的責任切分、詳細搜尋 |
+| [URL 檢視狀態](./contracts/url-state.md) | 查詢參數與恢復規則 |
+| [地圖編輯器](./contracts/map-editor.md) | 主辦工作區的地圖畫布操作 |
+| [資料匯入範圍](./contracts/data-import.md) | 收藏與行程備份的匯入入口 |
+| [資料傳輸與離線](./contracts/delivery-and-offline.md) | 載入行為、Service Worker、快取標頭（#546 階段 3 會改寫） |
+
+## 凍結的後端契約
+
+舊後端的規格，在 #546 中隨對應程式一起刪除。只用來理解現況，不作為新需求的依據。
+
+- [社團自助控制面](./contracts/circle-portal.md)
+- [主辦單位工作區](./contracts/organizer-workspace.md)
+- [網站營運設定](./contracts/site-settings.md)
+- [地圖貢獻控制面](./contracts/map-contributions.md)
+- [資料 inventory](./contracts/data-inventory.md)
+- [共享 reference 選擇](./contracts/reference-selection.md)
 
 ## 流程
 
 | 文件 | 何時用 |
 |---|---|
-| [本機開發與驗證](./runbooks/local-development.md) | 啟動、跑 gate、交付前檢查 |
-| [專案工作流程](./runbooks/project-workflow.md) | issue 分類、挑選工作、驗收證據與成本／複雜度邊界 |
-| [社團資料更新](./runbooks/catalog-data-update.md) | 主辦活動資料或 data pin 有變動時 |
-| [地圖 authoring](./runbooks/map-authoring.md) | 要更新地圖靜態快照時 |
-| [部署](./runbooks/deployment.md) | 改密鑰、看 CI 行為、發布前 gate、回滾 |
-| [首次啟用](./runbooks/first-time-setup.md) | 從零建 Cloudflare 資源；一個專案只做一次 |
+| [本機開發與驗證](./runbooks/local-development.md) | 啟動、跑測試 |
+| [社團資料更新](./runbooks/catalog-data-update.md) | 活動資料或 data pin 有變動時 |
+| [地圖 authoring](./runbooks/map-authoring.md) | 更新地圖時 |
+| [部署](./runbooks/deployment.md) | 密鑰、CI 行為、回滾 |
+| [首次啟用](./runbooks/first-time-setup.md) | 從零建 Cloudflare 資源 |
 | [排程清除 Worker](./runbooks/retention-purge-worker.md) | 部署或驗證保存期限清除 |
-| [Cloudflare 容量與耗用監控](./runbooks/cloudflare-usage-monitoring.md) | R2 每日容量、操作量與月底趨勢 |
 
-## 決策紀錄
+## 歷史（不再更新）
 
-已定案且**推翻需要代價**的取捨。每份寫明脈絡、決策與後果。
-
-**[ADR 索引](./adr/INDEX.md)** 依區域列出要讀哪幾份，並標明每一份是生效、部分被取代、已取代還是草案。要動某個區域時只讀那一列指到的 ADR，不必從頭掃過整個目錄。
-
-
-## 對外文件
-
-使用者看得到的承諾。**描述的必須是實際行為**，行為改了就在同一個 commit 更新。
-
-| 文件 | 涵蓋 |
-|---|---|
-| [隱私權與個人資料蒐集告知](./policy/privacy-notice.md) | 蒐集的資料類別、目的與利用方式、個人資料權利、聯絡窗口（**已上線**） |
-
-## 研究
-
-外部產品的實地觀察紀錄，**唯讀**。它們記的是觀察當下的狀態，不是本專案的現況；結論已轉入上面的 ADR 與契約。
-
-- [Comike WebCatalog：地圖功能](./research/comike-webcatalog-map.md)
-- [Comike WebCatalog：資訊介面、收藏與資料串接](./research/comike-webcatalog-information-and-favorites.md)
-- [Comike WebCatalog：社團自助編輯](./research/comike-webcatalog-circle-editing.md)
-- [日本同人／コミケ周邊服務功能盤點](./research/doujin-service-landscape.md)（**二手檢索，未實地操作**——可信度低於上面三份）
-- [性質相近的服務與開源專案如何公開自己的資料收集](./research/data-collection-policies-in-comparable-projects.md)（17 個對象，全部原文已讀；為 [#30](https://github.com/dekkmarsvin/tw_doujin_event/issues/30) 的基礎研究）
-- [台灣同人展主辦官方攤位頁面盤點](./research/taiwan-organizer-booth-pages.md)（新活動 onboarding 與地圖 authoring 的輸入研究）
-
-## 維護規則
-
-README 是使用與開發入口；PRODUCT 定義產品；CONTEXT 定義詞彙；DESIGN 與 `design/components.md` 管視覺規格，`design/copy.md` 管對外文案；contracts 管現行行為；runbooks 管操作；`agents/` 管 issue tracker、標籤與 review-fix loop。Issue／PR 管即時進度與驗收證據，不在這些文件再複製佇列、逐票完成紀錄或日期化驗收。
-
-`design/` 只放現行規格：`components.md` 與 `copy.md`。[`design/history/`](./design/history) 是凍結的歷史設計提案，保存當時的取捨，不再修改也不再新增；後續行為以對應契約為準。日期化的驗收、驗證與視覺檢查紀錄不進 repo，依[專案工作流程第 6 節](./runbooks/project-workflow.md#6-留下完整驗收證據)留在主 issue 或 PR。
-
-- **一個契約只有一個家。** 同一條規則不得同時寫在兩份文件裡；需要交叉引用時放連結，不複製內容。
-- **改行為就改契約，同一個 commit。** 契約落後於實作，下一個人就會拿它當真相。
-- 契約裡的型別必須與 `app/` 的實際型別同步；欄位名稱不一致是 bug，不是措辭差異。
-- **研究文件不改寫觀察內容。** 觀察結果是歷史，要更新就重新觀察並註明日期；事後的說明只以日期化註記附加在該段開頭。
-- **對外文件不得落後於行為。** `policy/` 裡的每一句都是對使用者的承諾；改行為卻沒改它，是做了做不到的承諾，不是文件過期。
-- **ADR 的決策不改寫，只新增。** 推翻舊決策時寫新的 ADR，並在舊的那份標註被取代。ADR 內文只允許三種修改：狀態列的取代或暫緩標註；被連結的文件搬移或移出 repo 時，把連結改向新路徑或固定 commit 的永久連結；維護者明確要求的日期化補充段。
+- [ADR](./adr/INDEX.md)：到 2026-11-21 為止的架構決策。之後的決策寫在 GitHub issue。
+- [`design/history/`](./design/history)：過去的設計提案。
+- [`research/`](./research)：外部產品的觀察紀錄。

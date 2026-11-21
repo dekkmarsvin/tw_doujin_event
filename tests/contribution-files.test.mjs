@@ -3,7 +3,6 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const read = (relative) => readFile(path.join(ROOT, relative), "utf8");
@@ -72,27 +71,4 @@ test("every relative link between documents resolves, anchors included", async (
     }
   }
   assert.deepEqual(broken, [], `broken document links:\n${broken.join("\n")}`);
-});
-
-test("the ADR index accounts for every ADR", async () => {
-  const files = (await readdir(path.join(ROOT, "docs/adr")))
-    .filter((name) => /^\d{4}-.*\.md$/.test(name)).sort();
-  const index = await read("docs/adr/INDEX.md");
-  const missing = files.filter((name) => !index.includes(name));
-  assert.deepEqual(missing, [], `ADRs absent from docs/adr/INDEX.md: ${missing.join(", ")}`);
-
-  // Every ADR carries one of the four statuses the index defines.
-  const rows = index.split(/\r?\n/).filter((line) => /^\| \[\d{4}\]/.test(line));
-  assert.equal(rows.length, files.length);
-  for (const row of rows) {
-    assert.match(row, /生效|部分被取代|已取代|草案/, `row states no status: ${row}`);
-  }
-});
-
-test("every contract declares the code it governs, and that code exists", async () => {
-  // scripts/check-doc-map.mjs owns this rule and generates the reverse index
-  // from it; running it in --check mode keeps the rule in one place, and also
-  // fails when the generated index has drifted from its inputs.
-  const result = spawnSync(process.execPath, ["scripts/check-doc-map.mjs", "--check"], { cwd: ROOT, encoding: "utf8" });
-  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
 });
