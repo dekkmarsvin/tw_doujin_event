@@ -39,6 +39,14 @@ interface R2PutOptions {
   customMetadata?: Record<string, string>;
 }
 
+interface R2ObjectBody {
+  body: ReadableStream;
+  httpMetadata?: { contentType?: string };
+  /** Quoted ETag, ready for an `ETag` header. */
+  httpEtag: string;
+  text(): Promise<string>;
+}
+
 interface R2Bucket {
   list(options?: { prefix?: string; cursor?: string; limit?: number }): Promise<{
     objects: Array<{ key: string }>;
@@ -46,7 +54,7 @@ interface R2Bucket {
     cursor?: string;
   }>;
   put(key: string, value: ArrayBuffer | ArrayBufferView | ReadableStream, options?: R2PutOptions): Promise<unknown>;
-  get(key: string): Promise<{ body: ReadableStream; httpMetadata?: { contentType?: string } } | null>;
+  get(key: string): Promise<R2ObjectBody | null>;
   delete(keys: string | string[]): Promise<void>;
 }
 
@@ -78,6 +86,8 @@ interface PortalEnv {
   EVENT_ID: string;
   DB: D1Database;
   THUMBNAILS: R2Bucket;
+  /** Published event data (#546): `index.json` names each event's current version; files live under `events/<id>/<version>/`. */
+  EVENT_DATA: R2Bucket;
   /** Private evidence bucket. It has no public domain and is read only through authenticated Functions. */
   MAP_CONTRIBUTIONS?: R2Bucket;
   THUMBNAIL_PUBLIC_ORIGIN?: string;

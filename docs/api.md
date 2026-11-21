@@ -32,8 +32,8 @@
 | 方法 | 路徑 | 權限 | 呼叫端 | #546 |
 |---|---|---|---|---|
 | GET | `/data/events/:eventId/overrides.json` | 匿名 | Reader（`static-circle-overrides-client.ts`） | 保留。社團補充資料，撤下後立即消失，帶 ETag |
-| GET | `/data/events/:eventId/*.json` | 匿名 | Reader（`static-circle-catalog-client.ts`、`static-event-map-client.ts`） | **新增於階段 3**：目前是靜態檔，改由 Function 依 D1 指標從 R2 讀出，路徑不變 |
-| GET | `/data/events/index.json` | 匿名 | Reader、社團入口、管理頁 | **新增於階段 3**：已發布活動清單，取代 build 時寫入的 `PUBLISHED_EVENTS` |
+| GET | `/data/events/:eventId/*.json` | 匿名 | Reader（`static-circle-catalog-client.ts`、`static-event-map-client.ts`） | 階段 3 起由 Function 依 R2 的 `index.json` 讀出目前版本，路徑不變 |
+| GET | `/data/events/index.json` | 匿名 | Reader、社團入口、管理頁 | 階段 3 新增：已發布活動與目前版本，供 Service Worker 快取。頁面另由 middleware 在 HTML 內嵌同一份清單 |
 | POST | `/api/shares` | 匿名 | `planning-share-client.ts` `createShortLink` | 保留。有速率限制 |
 | GET | `/api/shares/:shareId` | 匿名 | `planning-share-client.ts` `readShortLink` | 保留 |
 | GET | `/s/:shareId` | 匿名 | 短網址頁 | 保留 |

@@ -28,7 +28,7 @@
 | [URL 檢視狀態](./contracts/url-state.md) | 查詢參數與恢復規則 |
 | [地圖編輯器](./contracts/map-editor.md) | 主辦工作區的地圖畫布操作 |
 | [資料匯入範圍](./contracts/data-import.md) | 收藏與行程備份的匯入入口 |
-| [資料傳輸與離線](./contracts/delivery-and-offline.md) | 載入行為、Service Worker、快取標頭（#546 階段 3 會改寫） |
+| [資料傳輸與離線](./contracts/delivery-and-offline.md) | 活動資料的版本與載入、Service Worker、快取標頭 |
 
 ## 凍結的後端契約
 

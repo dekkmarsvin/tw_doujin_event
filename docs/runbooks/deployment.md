@@ -203,7 +203,7 @@ Browser 驗證由 `.github/workflows/browser.yml` 在 PR 與手動 dispatch 執�
 
 main 的非完整候選、以及 PR 的 `publication-data` 候選，另比較最近成功 main push 的部署 SHA→目前版本，避免未交付的程式差異被跳過。基準須為比較範圍的 ancestor，來自同一 workflow，整個 run 及唯一的 `Verify and deploy` job 都成功；非產品 run 的 skipped deploy 不算基準。只查最近 20 個成功 run，找不到、API／歷史不可驗證或遇到手動部署時保守執行完整 gate；兩個 workflow 的分類 job 需要 `actions: read`。
 
-`publication-data` 保留 `Verify and deploy`、`Full preview portal E2E`、`Browser acceptance` 的實際成功 gate 與同 head 檢查。它重新 fetch／驗證每個已發布 pin、identity grouping、reference、schema、map/day/venue coverage，建置正式成品，再核對完整發布集合、placement 的日期與場地、staging 與 dist bytes、HTML/JS 入口及 deployment manifest hashes。只有未變動程式的完整 Node suite、lint、type-check、Worker rebuild 不適用。Browser 在正式 build 上開啟所有已發布活動的日期／場地、桌面／手機、社團選取及 warm reload，不再為純資料更新重跑 fixture portal journeys。預覽 portal E2E、Access 與正式 smoke 保留，必要 check 不以空 job 或 skipped 代替。
+`publication-data` 目前與完整 gate 跑相同的 build 與 browser 檢查。活動資料改由 R2 提供後（[#546](https://github.com/dekkmarsvin/tw_doujin_event/issues/546)），pin 變更不再影響部署內容，這個 profile 會在 #546 階段 4 隨 CI 重整移除。
 
 Browser job 使用與 Playwright lockfile 版本相符的官方容器，內含 browser 與 Linux libraries，避免每次執行 apt。更新 Playwright 時同步更新 image tag；容器拉取時間算進整個 job 耗時，不只比較安裝 step。
 
@@ -232,6 +232,40 @@ Browser job 使用與 Playwright lockfile 版本相符的官方容器，內含 b
 - Runner 強制終止或網路持續失敗仍可能留下該 run 的資料；下一個 run 開始時會清除，log 會列出被清除的 runId。不得用整庫 reset 解決。七天 artifact 只供診斷，必要驗收摘要貼回 issue／PR。
 - **preview 與 production 使用不同的 D1 資料庫**，見下節。設定 preview secrets **之前**必須先確認這件事已經生效——順序顛倒會讓 PR 上的測試寫進正式資料。
 
+## 活動資料（R2）
+
+已發布活動存在 R2 bucket `tw-doujin-event-data`（preview：`tw-doujin-event-data-preview`），由 Pages Functions 以原本的 `/data/events/…` 路徑提供（#546）。bucket 不開公開網域。
+
+- `index.json`：已發布活動與讀者看到的順序，每場記錄目前版本、檔案清單、活動定義與 reference records。這是唯一的版本指標。
+- `events/<eventId>/<version>/<file>`：各版本的檔案，寫入後不再修改，舊版本保留。
+
+讀不到 `index.json` 時所有 HTML 頁回 503，所以**部署讀 R2 的程式之前，production 與 preview 的 bucket 都要先有資料**。
+
+### 從 data repository 上傳
+
+在核准即發布（#546 階段 4）完成前，活動資料仍從 data repository 的 pin 產生，再整批上傳成一個新版本：
+
+```bash
+npm run data:fetch -- --published
+npm run data:stage -- --published
+npm run event-data:upload -- --remote --preview
+npm run event-data:upload -- --remote
+```
+
+需要已登入、可寫入該帳號 R2 的 Wrangler。上傳先寫完所有檔案，最後才寫 `index.json`；中途失敗時讀者仍看到上一版，重跑即可。
+
+### 回滾
+
+舊版本的檔案都還在。從 bucket 下載上一份 `index.json` 的內容，或把目前 `index.json` 裡各活動的 `version` 改回上一個版本後重新上傳 `index.json`：
+
+```bash
+npx wrangler r2 object put tw-doujin-event-data/index.json --file index.json --content-type application/json --remote
+```
+
+### 發布暫停
+
+舊的發布流程寫入 data repository，已不會影響讀者看到的內容，因此 `wrangler.jsonc` 把 `ORGANIZER_PUBLICATION_MODE` 設為 `disabled`：核准與重試回「發布暫停」。#546 階段 4 改為核准時直接寫入 R2 後再恢復。
+
 ## 首次啟用
 
 建立 Pages project、D1、R2、secrets、token、Access 與 Turnstile 的完整步驟見[首次啟用](./first-time-setup.md)。一個專案只做一次。
@@ -255,7 +289,7 @@ Pages 完整 CI 另執行 `node scripts/worker-delivery.mjs --build-only`：使�
 與[本機共同 gate](./local-development.md#共同-gate) 相同，CI 會重跑一次。另需確認：
 
 - `dist/index.html`、`dist/_headers`、`dist/_routes.json` 存在，HTML nonce 例外之外的靜態資產／場刊請求不經 Functions。
-- `npm run build:production` 已依 `data/published-events.json` 重建**每一個已發布活動**的產物，且每一份地圖 artifact 都通過該活動 template 的 layout 驗證（FF47：988 格、28 根柱子、5 個出入口）。
+- 部署的 `dist` 由 `npm run build:deploy` 產生，不含 `data/events/`；活動資料見[活動資料（R2）](#活動資料r2)。
 - `dist/_worker.js` 與 `dist/server/index.js` 不存在。
 - 閱讀端 bundle 不包含寫入端點（`/api/auth/`、`/api/claims`、`/api/admin/`、`/api/organizer/`）或登入與認領文案，由 `tests/public-artifact.test.mjs` 檢查。
 

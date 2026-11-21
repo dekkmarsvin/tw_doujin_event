@@ -3,7 +3,7 @@
   "include": [
     "/", "/index.html", "/404.html",
     "/circle*", "/organizer*", "/admin*", "/privacy*", "/portal", "/portal/", "/portal/index.html", "/events/*", "/s/*",
-    "/api/*", "/data/events/*/overrides.json"
+    "/api/*", "/data/events/*", "/sitemap.xml"
   ],
   "exclude": []
 }

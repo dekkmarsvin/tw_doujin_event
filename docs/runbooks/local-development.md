@@ -64,10 +64,11 @@ npm run portal:login-link -- --email=local-circle@example.test --audience=circle
 npm run data:fetch -- ff47
 npm run data:stage -- ff47
 npm run event-data:check
-npm run build:production
 ```
 
-`data:fetch` 只接受 `data/event-data-pins/ff47.json` 的完整 commit SHA，逐檔核對 SHA-256 後原子替換 `.event-data/ff47/`。`build:production` 會再次執行 fetch、生成 official-only catalog 並建立 production `dist`。
+`data:fetch` 只接受 `data/event-data-pins/ff47.json` 的完整 commit SHA，逐檔核對 SHA-256 後原子替換 `.event-data/ff47/`。部署的站台從 R2 讀活動資料，上傳方式見[部署 runbook](./deployment.md#活動資料r2)。
+
+`npm run dev:portal` 啟動前會把 staged 的 fixture 寫進本機的活動資料 bucket（`.wrangler/local-portal`），讓 Functions 與正式環境一樣從 R2 讀取。
 
 `.event-data/`、`.event-data-stage.json` 與 `public/data/events/` 都是本機／CI 產物，不進版控。
 
@@ -137,7 +138,7 @@ node scripts/run-tests.mjs module cli --concurrency=2
 
 CI 的 `Browser acceptance` 位於獨立 `Browser verification` workflow，只在 PR 與手動 dispatch 執行；main 不重跑全套，也不讓 browser 的完成時間占住正式部署佇列。活動發布 PR 仍須取得同 head SHA 的成功結果才能自動合併。
 
-純發布資料由 `publication-data` profile 驗證：先核對成功 main 部署基準與完整累積差異，再保留 production build、成品完整性、preview E2E 與 deployment smoke。Browser 以 `npm run build:production` 後執行 `node scripts/test-published-reader.mjs`，對所有實際發布 pins 開啟桌面／手機日期與場地組合及 warm reload。此 profile 不重跑未變動程式的完整 suite／lint／type-check／Worker rebuild；未知、混合或無可靠基準仍完整執行。CI 使用 Playwright 官方固定版本容器，本機仍可用既有安裝指令。
+`publication-data` profile 目前與完整 gate 跑相同的 browser journeys；#546 階段 4 會移除它。CI 使用 Playwright 官方固定版本容器，本機仍可用既有安裝指令。
 
 新增或補強 UI 行為驗收時，優先修改既有 journey，不為同一流程新增另一套。核對附近的 JSX／CSS／原始碼斷言：有價值的行為保護，確認另一層已涵蓋或改成適當行為測試後移除；低價值、重複、過時或只鎖定實作的斷言，可直接刪除，不要求一對一補測。PR 用一句話說明新增／刪除的保護與原因即可，不建立測試清冊或新 gate。
 
@@ -228,7 +229,7 @@ npm run test:browser:install
 
 | 命令 | 何時執行 |
 |---|---|
-| `npm run build:production` | 更新 pin、release 或部署前；需要 GitHub 網路 |
+| `npm run build:deploy` | 檢查部署用的 build（不含活動資料） |
 | `npm run purge:dev` | 手動觸發 retention purge |
 
 ## 人工瀏覽器實測

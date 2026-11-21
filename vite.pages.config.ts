@@ -6,13 +6,16 @@ import { defineConfig } from "vite";
 type StagedEvent = { eventId: string };
 type Stage = { eventId: string; events?: readonly StagedEvent[] };
 
+// Only the dev server and fixture builds stage events. A deploy build stages
+// nothing: deployed pages get the published events from the server (#546), so
+// no event is baked into the bundle.
 const stagePath = resolve(import.meta.dirname, ".event-data-stage.json");
-const staged: Stage = existsSync(stagePath)
+const staged: Stage | null = existsSync(stagePath)
   ? JSON.parse(readFileSync(stagePath, "utf8")) as Stage
-  : { eventId: "sample" };
+  : null;
 // The manifest carries the whole staged set; `eventId` alone is the pre-#119
 // shape and still means "the one event", so it reads as a set of one.
-const stagedEvents = staged.events ?? [{ eventId: staged.eventId }];
+const stagedEvents = staged ? staged.events ?? [{ eventId: staged.eventId }] : [];
 
 const fixture = (eventId: string, file: string) => resolve(import.meta.dirname, "fixtures", "events", eventId, file);
 const stagedFile = (eventId: string, file: string) => resolve(import.meta.dirname, "public", "data", "events", eventId, file);
@@ -31,9 +34,7 @@ const publishedEvents = stagedEvents.map(({ eventId }) => ({
 
 export default defineConfig({
   plugins: [react()],
-  define: {
-    __PUBLISHED_EVENTS__: JSON.stringify(publishedEvents),
-  },
+  define: staged ? { __PUBLISHED_EVENTS__: JSON.stringify(publishedEvents) } : {},
   build: {
     outDir: "dist",
     emptyOutDir: true,

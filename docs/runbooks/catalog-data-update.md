@@ -159,10 +159,9 @@ npm run event:onboard -- <eventId> <40-char-data-commit>
 npm run data:fetch -- <event>
 npm run data:stage -- <event>
 npm run event-data:check
-npm run build:production
 ```
 
-單一活動的 `data:fetch`／`data:stage` 用來檢查你正在處理的那一場。`build:production` 則走 `--published`：它依 [`data/published-events.json`](../../data/published-events.json) 逐一取得並 staging **每一個已發布活動**，因此驗證的是實際會部署的整組資料。
+單一活動的 `data:fetch`／`data:stage` 用來檢查你正在處理的那一場。要更新讀者看到的資料，改用 `--published`：它依 [`data/published-events.json`](../../data/published-events.json) 逐一取得並 staging **每一個已發布活動**，再以 `npm run event-data:upload -- --remote` 整組上傳成新版本，步驟見[部署 runbook](./deployment.md#活動資料r2)。
 
 `data:fetch` 把該 commit 下 pin 列出的所有檔案下載到暫存位置並核對 SHA-256，驗證 reference selection 後才把 `.event-data/<event>/` 換入；rename 失敗會復原舊 tree。活動自身檔案落在該目錄根層，`references/` 保留 repository 路徑。`data:stage` 先以 pinned grouping 對 identity registry 執行 no-op check，再驗證 selection 與 relationships，由官方 booth + identity evidence 生成 `circle-catalog/3`，並把該活動的 `event.json`、`reference-records.json`、`circles.json` 與地圖 artifacts（`map.json`，或 `map-manifest.json` 與其指向的每一份 `maps/**`）staging 到忽略版控的 `public/data/events/<event>/`。
 
@@ -170,7 +169,7 @@ npm run build:production
 
 ### 首次發布一個新活動
 
-pin 存在不等於已發布。活動要對讀者出現，必須把它的 id 加進 `data/published-events.json`；未列入的活動即使已有 pin 也不會進入 build。這條界線對應 [ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md) 的草稿／已發布分界，也是[社團目錄契約](../contracts/circle-catalog.md)所說「首次公開發布」的實際開關。
+pin 存在不等於已發布。活動要對讀者出現，必須把它的 id 加進 `data/published-events.json` 並重新上傳；未列入的活動即使已有 pin 也不會被上傳。這條界線對應 [ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md) 的草稿／已發布分界，也是[社團目錄契約](../contracts/circle-catalog.md)所說「首次公開發布」的實際開關。
 
 以下任一情形會 fail closed：
 
@@ -188,7 +187,7 @@ pin 存在不等於已發布。活動要對讀者出現，必須把它的 id 加
 
 見[本機開發與驗證](./local-development.md#共同-gate)。
 
-`npm test` 固定使用 fictional fixture，不需要網路；`build:production` 是真實資料的額外發行 gate。Review 時同時檢查 data repo commit、pin hash、identity registry 差異與生成摘要。
+`npm test` 固定使用 fictional fixture，不需要網路；`--published` 的 fetch、stage 與 `event-data:check` 是真實資料的額外檢查。Review 時同時檢查 data repo commit、pin hash、identity registry 差異與生成摘要。
 
 ## 本機 fixture
 

@@ -11,9 +11,9 @@
 
 「逛品書」使用 Reader 原有 publication，一次載入同活動 base 與 overlay，沒有逐卡查詢或新增輪詢。卡片以既有 preview URL 延遲載入，完整圖片只在社團出展頁讀取；不新增懶載入路由、Service Worker 策略或 precache 名單特例。返回時可重取 overlay，分享結果隨現行公開內容更新；驗收邊界見[品書瀏覽契約](./catalog-browse.md)。
 
-`scripts/build-discovery-pages.mjs` 在同一次已驗證 staging／Vite build 後產生活動及社團介紹 HTML、首頁未執行 JS 的活動摘要與 sitemap。HTML 僅投影 reviewed base 的社團名稱、配置及活動 reference；不讀取或靜態保存社團 overlay、圖片、聯絡資料、收藏或行程。新增／移除已發布活動由整份 build 產物反映，不增加每活動人工操作。
+活動及社團介紹 HTML、首頁未執行 JS 的活動摘要與 sitemap 由 Function 依目前發布的版本即時產生（[`functions/_discovery.ts`](../../functions/_discovery.ts)、[`functions/_published-events-html.ts`](../../functions/_published-events-html.ts)，#546），每個版本在同一個 isolate 只產生一次；build 只記錄頁面腳本的資產標籤（`discovery-assets.json`）。HTML 僅投影 reviewed base 的社團名稱、配置及活動 reference；不讀取或靜態保存社團 overlay、圖片、聯絡資料、收藏或行程。新增或更正已發布活動只換發布版本，不需要重新 build。
 
-介紹頁仍在 build 產生；HTML 經既有 Function 加上每次回應的 CSP nonce（ADR-0074）。社團頁另依 [ADR-0077](../adr/0077-circle-share-images-follow-published-media.md) 唯讀取得分享縮圖，不重建 overlay 或寫入資料。Event JSON-LD 僅使用可解析的活動日日期與既有場館／主辦名稱、網址，活動有別稱時以 `alternateName` 列出；`image` 使用活動圖片（[ADR-0070](../adr/0070-event-images-are-published-by-approval-under-their-hash.md)），沒有時使用下段的品牌分享圖。pinned 場館記錄有地址時，`location[].address` 輸出 `PostalAddress`：從官方地址文字拆出郵遞區號、縣市（`addressRegion`）、鄉鎮市區（`addressLocality`）與其餘街道（`streetAddress`），`addressCountry` 為 `TW`，拆不出縣市時整段作為 `streetAddress`。地址只出現在 JSON-LD，不加到頁面文字。沒有地址的舊 pin 省略地址；售票、表演者、活動狀態與開場時間沒有資料，一律省略，不保證 rich result 資格。
+介紹頁 HTML 經既有 Function 加上每次回應的 CSP nonce（ADR-0074）。社團頁另依 [ADR-0077](../adr/0077-circle-share-images-follow-published-media.md) 唯讀取得分享縮圖，不重建 overlay 或寫入資料。Event JSON-LD 僅使用可解析的活動日日期與既有場館／主辦名稱、網址，活動有別稱時以 `alternateName` 列出；`image` 使用活動圖片（[ADR-0070](../adr/0070-event-images-are-published-by-approval-under-their-hash.md)），沒有時使用下段的品牌分享圖。pinned 場館記錄有地址時，`location[].address` 輸出 `PostalAddress`：從官方地址文字拆出郵遞區號、縣市（`addressRegion`）、鄉鎮市區（`addressLocality`）與其餘街道（`streetAddress`），`addressCountry` 為 `TW`，拆不出縣市時整段作為 `streetAddress`。地址只出現在 JSON-LD，不加到頁面文字。沒有地址的舊 pin 省略地址；售票、表演者、活動狀態與開場時間沒有資料，一律省略，不保證 rich result 資格。
 
 FF47 的舊資料沒有 Organizer 候選及身分分組檔。除原始固定 pin 外，僅允許 #395 的固定地址補齊 pin `44c437efc9133e1a37a68b93f3ed3e49175684e2` 省略分組檔；其七份非場館檔案 bytes 與原 pin 相同，場館只補上已公開的地址及出處。其他新 commit／活動仍須提供分組檔；本次不建立候選、不變更既有身分、攤位或歷史核准紀錄。
 
@@ -42,10 +42,11 @@ FF47 的舊資料沒有 Organizer 候選及身分分組檔。除原始固定 pin
 
 ## Payload 邊界
 
-- **場刊與地圖是版本化靜態快照**（`circles.json`，加上 `map.json` 或 `map-manifest.json` + `maps/<periodKey>/<venueSpaceId>.json`），隨 build 發布，**不打包進 JS bundle**。
+- **場刊與地圖是版本化快照**（`circles.json`，加上 `map.json` 或 `map-manifest.json` + `maps/<periodKey>/<venueSpaceId>.json`），存在活動資料 bucket，由 [`functions/_event-data.ts`](../../functions/_event-data.ts) 依 `index.json` 指向的版本以原路徑 `/data/events/<eventId>/…` 提供，**不打包進 JS bundle**。`index.json` 是唯一的版本指標：發布先寫完新版本的所有檔案，最後才改 `index.json`，讀者只會看到舊版或新版。
+- **已發布活動清單**（每場的活動定義與 reference records）由 middleware 以 `<script type="application/json" id="published-events">` 資料區塊寫進每個會執行程式的 HTML；`app/event-catalog.ts` 同步讀取。部署的 bundle 不內含任何活動；開發伺服器與 fixture build 仍以 Vite `define` 帶入 staged 活動。讀不到 `index.json` 時 HTML 回 503，不以空清單或 fixture 冒充。
 - 公開 bundle 只承載介面與投影邏輯。**場刊資料字面值不得回流到 bundle**，由測試把關。
 - 公開產物不得包含 `_worker.js` 或 server bundle。理由與整體取捨見 [ADR-0008](../adr/0008-static-public-reading-path.md)。
-- 社團補充資料由 `/data/events/:eventId/overrides.json` 這個 Pages Function 提供，疊加在靜態快照之上。
+- 社團補充資料由 `/data/events/:eventId/overrides.json` 這個 Pages Function 提供，疊加在快照之上。
 - request、base payload、overlay payload 與 event config 的 `eventId` 必須一致；任何 mismatch fail closed。store、listener、in-flight request 與 server catalog cache 都按 event 分區。
 
 ## 載入行為
@@ -66,12 +67,12 @@ FF47 的舊資料沒有 Organizer 候選及身分分組檔。除原始固定 pin
 |---|---|
 | 閱讀端導覽（`/`、`/index.html`） | network-first，回退已快取 shell |
 | 其他導覽（`/circle`、`/organizer`、`/privacy`） | network-only；不讀也不寫 shell 快取 |
-| static `/data/events/*`（`circles.json`、地圖 artifacts） | stale-while-revalidate |
+| `/data/events/*`（`circles.json`、地圖 artifacts） | stale-while-revalidate |
 | Function `/data/events/:eventId/overrides.json` | network-only；失敗時 publication module 使用 reviewed base |
 | 公開頁首樣式 `/site-header.css` | stale-while-revalidate；只儲存 CSS 回應 |
 | 雜湊資產 | cache-first |
 
-- precache 清單由 build 時產生，**只涵蓋 `index.html` 實際載入的資源**，不含社團入口。
+- precache 清單由 build 時產生，**只涵蓋 `index.html` 實際載入的資源**，不含社團入口。活動資料不在 build 裡：Service Worker 安裝時讀 `/data/events/index.json`，另外快取其中每個活動目前版本的檔案；之後的更新由 stale-while-revalidate 帶入。
 - **只有閱讀端自己的路徑可以更新 shell 快取。** `/circle`、`/organizer` 與 `/privacy` 是各自獨立的文件，其資產刻意不進 precache；若把它們的回應寫進 shell，下一次離線啟動閱讀端就會拿到入口文件而不是地圖，且缺少從未快取的資產。閱讀端狀態全部放在 query parameter，因此閱讀端就是這兩條路徑。
 - **絕不把被重新導向的回應當成 shell 或場刊快取。**
 - 展場離線可重新載入並繼續使用已下載的場刊、地圖、字型與介面。只發布單一 `map.json` 的分日活動，離線時 manifest 請求在網路層失敗，與 404 相同改讀 `map.json`。
@@ -91,7 +92,7 @@ FF47 的舊資料沒有 Organizer 候選及身分分組檔。除原始固定 pin
 | 路徑 | Cache-Control |
 |---|---|
 | `/assets/*` | `public, max-age=31536000, immutable`（檔名含 content hash） |
-| static `/data/events/*` | `public, max-age=300, must-revalidate` |
+| `/data/events/*` | `public, max-age=60, must-revalidate` + R2 ETag |
 | Function `/data/events/:eventId/overrides.json` | `public, max-age=60, must-revalidate` + strong ETag（Function response 明確覆寫 static `_headers` 規則） |
 | R2 代管縮圖 | `public, max-age=31536000, immutable`（URL 含內容 SHA-256） |
 | `/sw.js` | `no-cache`（另帶 `Service-Worker-Allowed: /`） |
@@ -129,10 +130,11 @@ Service Worker 只攔截同源請求，`challenges.cloudflare.com` 直接落到�
 ## 驗收條件
 
 - `dist/index.html` 存在；`dist/_worker.js` 與 `dist/server/index.js` 不存在。
-- 每個已發布活動的 `dist/data/events/<event>/event.json`、`circles.json` 與地圖 artifacts 的 event ID 一致，且每一份 map 都通過該活動 template 的完整 layout 驗證；多場地活動的 manifest 必須恰好覆蓋每個活動日 × 場地一次。
+- 部署的 `dist` 不含 `data/events/`，bundle 不內含已發布活動。
+- `/data/events/<event>/<file>` 只提供 `index.json` 列出的目前版本檔案；未列出的檔案、未發布的活動與路徑穿越一律 404。
 - 主 bundle 不含場刊資料字面值。
 - 公開 bundle 不包含 `/api/events/`、地圖管理匯入器或管理發布文案。
-- `dist/sw.js` 的 precache 清單涵蓋所有離線必要檔案：**每一個**已發布活動的 `circles.json` 與其全部地圖 artifacts。選了第二場活動再離線的讀者不得拿到空殼。
-- `dist/_headers` 與 `dist/_routes.json` 存在；Functions 僅涵蓋 HTML、既有 API 與 overlay，其他靜態資料／資產直送。
-- 全新瀏覽器工作階段不需圖片或 D1 即可取得同一份場刊與地圖；HTML 僅經輕量 nonce middleware。
+- Service Worker 安裝時快取 `index.json` 列出的**每一個**已發布活動的全部檔案。選了第二場活動再離線的讀者不得拿到空殼。
+- `dist/_headers` 與 `dist/_routes.json` 存在；Functions 涵蓋 HTML、API、`/data/events/*` 與 `/sitemap.xml`，資產與字型直送。
+- 全新瀏覽器工作階段不需圖片或 D1 即可取得同一份場刊與地圖。
 - 離線重新載入後，已下載的場刊、地圖、字型與介面仍可運作；縮圖不可用時維持文字卡。

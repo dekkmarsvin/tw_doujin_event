@@ -73,14 +73,7 @@ jobs:
       # Turnstile and mail captured in D1 — that the signed-in journeys need.
       # Nothing here reaches a remote binding or sends mail.
       - name: Run representative browser journeys
-        if: needs.scope.outputs.profile == 'full'
         run: npm run test:browser
-
-      - name: Build and exercise all published Readers
-        if: needs.scope.outputs.profile == 'publication-data'
-        run: |
-          npm run build:production
-          node scripts/test-published-reader.mjs
 
       - name: Upload browser reports, server diagnostics and screenshots
         if: always()
