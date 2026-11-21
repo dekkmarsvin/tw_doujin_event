@@ -109,18 +109,19 @@ export function projectEventWorkspace(input: ProjectionInput) {
   const navigationTargetRecord = navigationTargetEntry ? dayRecordsByCircleId.get(navigationTargetEntry.circleId) ?? null : null;
   const visitedCount = dayPlan.filter((entry) => entry.status === "visited").length;
   const sharedRecords = selected ? eventRecords.filter((record) => record.day === selected.day && record.code === selected.code) : [];
-  const filtered = eventRecords.filter((record) => {
+  const matchesResultFilters = (record: CircleViewRecord) => {
     const favorite = favorites.find((item) => item.circleId === record.circle.id);
     const plan = plansById.get(record.circle.id);
     const groupMatches = planningDisplay.favoriteGroupId === "ALL"
       || (planningDisplay.favoriteGroupId === "UNGROUPED" ? !!favorite && !favorite.groupId : favorite?.groupId === planningDisplay.favoriteGroupId);
     const visitMatches = planningDisplay.visitStatus === "ALL"
       || (planningDisplay.visitStatus === "not-planned" ? !plan : plan?.status === planningDisplay.visitStatus);
-    return matchesPublicScope(record, event, { day, venueSpaceId })
-      && matchesPublicSearch(record, event, { genre, query, advancedSearch })
+    return matchesPublicSearch(record, event, { genre, query, advancedSearch })
       && (!favoriteOnly || favoriteIds.has(record.circle.id))
       && groupMatches && visitMatches;
-  }).sort((left, right) => {
+  };
+  const filtered = eventRecords.filter((record) => matchesPublicScope(record, event, { day, venueSpaceId })
+    && matchesResultFilters(record)).sort((left, right) => {
     if (planningDisplay.sort === "name") return left.name.localeCompare(right.name, "zh-Hant");
     if (planningDisplay.sort === "updated") {
       const updated = (record: CircleViewRecord) => favorites.find((item) => item.circleId === record.circle.id)?.updatedAt
@@ -195,10 +196,48 @@ export function projectEventWorkspace(input: ProjectionInput) {
     ...(planningDisplay.favoriteGroupId !== "ALL" ? [{ id: "favorite-group", kind: "favorite-group" as const, label: planningDisplay.favoriteGroupId === "UNGROUPED" ? t("ungroupedFavorites") : groups.get(planningDisplay.favoriteGroupId) ?? t("favoriteGroup") }] : []),
     ...(planningDisplay.visitStatus !== "ALL" ? [{ id: "visit", kind: "visit" as const, label: t(({ planned: "planned", next: "next", visited: "visited", "not-planned": "notPlanned" } as const)[planningDisplay.visitStatus]) }] : []),
   ];
+  const venueSpaceSummaries: Array<{
+    venueSpaceId: string;
+    circleCount: number;
+    matchCount: number | null;
+    favoriteCount: number;
+    remainingPlanCount: number;
+  }> = [];
+  if (event.venueAssignments.length > 1) {
+    const hasResultFilter = filters.length > 0 || query.trim().length > 0;
+    const spaces = event.venueAssignments.map((assignment) => ({
+      venueSpaceId: assignment.venueSpaceId,
+      circleIds: new Set<string>(), matchIds: new Set<string>(), favoriteIds: new Set<string>(),
+      remainingPlanCount: 0,
+    }));
+    const spaceByArea = new Map(event.venueAssignments.flatMap((assignment, index) =>
+      assignment.areaIds.map((area) => [area, spaces[index]] as const)));
+    for (const record of eventRecords) {
+      if (record.day !== day) continue;
+      const space = spaceByArea.get(record.hall);
+      if (!space) continue;
+      space.circleIds.add(record.circle.id);
+      if (hasResultFilter && matchesResultFilters(record)) space.matchIds.add(record.circle.id);
+      if (favoriteIds.has(record.circle.id)) space.favoriteIds.add(record.circle.id);
+    }
+    for (const entry of dayPlan) {
+      if (entry.status === "visited") continue;
+      const record = dayRecordsByCircleId.get(entry.circleId);
+      const space = record && spaceByArea.get(record.hall);
+      if (space) space.remainingPlanCount += 1;
+    }
+    venueSpaceSummaries.push(...spaces.map((space) => ({
+      venueSpaceId: space.venueSpaceId,
+      circleCount: space.circleIds.size,
+      matchCount: hasResultFilter ? space.matchIds.size : null,
+      favoriteCount: space.favoriteIds.size,
+      remainingPlanCount: space.remainingPlanCount,
+    })));
+  }
   return {
     favorites, favoriteIds, favoriteGroupLabels, dayPlan, plansById, dayRecordsByCircleId,
     selected, selectedFavorite, selectedPlan, selectedMovedDestination, nextEntry, nextRecord, navigationTargetRecord,
     visitedCount, sharedRecords, filtered, resultCircleCount, mapRecords, workTopicSuggestions, matchReasonsByRecordId, genreCounts,
-    markers, markersByCode, slots, activeFilterDescriptors: filters,
+    markers, markersByCode, slots, activeFilterDescriptors: filters, venueSpaceSummaries,
   };
 }

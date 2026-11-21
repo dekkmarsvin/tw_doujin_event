@@ -455,8 +455,22 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     favorites, favoriteIds, favoriteGroupLabels, dayPlan, plansById, dayRecordsByCircleId,
     selected, selectedFavorite, selectedPlan, selectedMovedDestination, nextRecord, navigationTargetRecord,
     visitedCount, sharedRecords, filtered, resultCircleCount, workTopicSuggestions, matchReasonsByRecordId, genreCounts, markersByCode, slots,
-    activeFilterDescriptors,
+    activeFilterDescriptors, venueSpaceSummaries,
   } = workspace;
+  // Each hall's option says, for the chosen day, how many circles it holds (or
+  // match the current search) and where the reader's favorites and remaining
+  // stops are, so the switcher doubles as the overview of every hall.
+  const venueOptionLabel = (assignment: (typeof event.venueAssignments)[number]) => {
+    const name = `${assignment.venueName} · ${assignment.venueSpaceName}`;
+    const summary = catalogReady ? venueSpaceSummaries.find((item) => item.venueSpaceId === assignment.venueSpaceId) : undefined;
+    if (!summary) return name;
+    const counts = [
+      summary.matchCount === null ? t("venueCircles", { count: summary.circleCount }) : t("venueMatches", { count: summary.matchCount }),
+      summary.favoriteCount > 0 ? t("venueFavorites", { count: summary.favoriteCount }) : "",
+      summary.remainingPlanCount > 0 ? t("venueToVisit", { count: summary.remainingPlanCount }) : "",
+    ].filter(Boolean).join(t("venueCountSeparator"));
+    return t("venueOption", { name, counts });
+  };
   // The same title and description as the circle's static page: both are
   // built from the circle's reviewed placements.
   const selectedPlacements = selected ? circleRecordsByCircleId.get(selected.circle.id) : undefined;
@@ -839,7 +853,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
         (keyEvent.currentTarget.parentElement?.children[target] as HTMLButtonElement)?.focus();
       }}><b>{eventDay.label}</b><span>{dayDate(event, eventDay, locale)}</span></button>)}</div>
       <label className={styles.dateSelect}>{t("date")}<span className={styles.mobileDateLabel} aria-hidden="true">{event.days.find((item) => item.id === day)?.label}{event.days.length > 1 && <UiIcon name="chevron-down" className={styles.mobileDateChevron} />}<small>{(() => { const current = event.days.find((item) => item.id === day); return current ? dayDate(event, current, locale) : null; })()}</small></span><select aria-label={t("eventDays")} value={day} onChange={(change) => changeDay(event.days.find((item) => String(item.id) === change.target.value)!.id)}>{event.days.map((item) => <option key={item.id} value={item.id}>{item.label} · {dayDate(event, item, locale)}</option>)}</select></label>
-      {event.venueAssignments.length > 1 ? <label>{t("venue")}<select value={venueAssignment.venueSpaceId} onChange={(change) => changeVenueSpace(change.target.value)}>{event.venueAssignments.map((item) => <option key={item.venueSpaceId} value={item.venueSpaceId}>{item.venueName} · {item.venueSpaceName}</option>)}</select></label> : <span className={styles.venueName}>{event.venue}</span>}
+      {event.venueAssignments.length > 1 ? <label>{t("venue")}<select value={venueAssignment.venueSpaceId} onChange={(change) => changeVenueSpace(change.target.value)}>{event.venueAssignments.map((item) => <option key={item.venueSpaceId} value={item.venueSpaceId}>{venueOptionLabel(item)}</option>)}</select></label> : <span className={styles.venueName}>{event.venue}</span>}
 
     </div>
     {navigationMode && <div className={styles.navigationBanner} role="status"><span><UiIcon name="locate" /></span><div><b>{t("navigationTitle", { day: String(day) })}</b><small>{t("navigationProgress", { visited: visitedCount, left: Math.max(0, dayPlan.length - visitedCount) })}{navigationTarget ? t("navigationTarget", { code: navigationTarget.code }) : ""}</small></div>{!desktop && <button onClick={toggleNavigationMode}>{t("exit")}</button>}</div>}

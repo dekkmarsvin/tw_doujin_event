@@ -22,8 +22,8 @@ function record(eventId, id, code, options = {}) {
   };
   const recordId = `${eventId}-${code}-${options.suffix ?? 0}`;
   return {
-    id: `${eventId}-${code}`, recordId, code, name: circle.name, pen: "", genre: options.genre ?? "原創", tags: [], day: options.day ?? 1, hall: "A", x: 0, y: 0, tone: "coral", work: "", note: "", sources: [], circle,
-    placement: { id: recordId, eventId, circleId: id, day: options.day ?? 1, area: "A", boothCode: code, status: options.status ?? "active", x: 0, y: 0, tone: "coral" },
+    id: `${eventId}-${code}`, recordId, code, name: circle.name, pen: "", genre: options.genre ?? "原創", tags: [], day: options.day ?? 1, hall: options.hall ?? "A", x: 0, y: 0, tone: "coral", work: "", note: "", sources: [], circle,
+    placement: { id: recordId, eventId, circleId: id, day: options.day ?? 1, area: options.hall ?? "A", boothCode: code, status: options.status ?? "active", x: 0, y: 0, tone: "coral" },
   };
 }
 
@@ -191,6 +191,54 @@ test("retired and shared-booth results still count distinct circles", () => {
   assert.equal(projected.resultCircleCount, 5);
   assert.equal(projected.filtered.length, 6, "the moved circle retains both locations");
   assert.equal(projected.genreCounts.get("全部類別"), 5);
+});
+
+test("venue space summaries count distinct day circles, matches, favorites and remaining resolved stops", () => {
+  const multiEvent = {
+    ...event("event-a"),
+    venueAssignments: [{ venueSpaceId: "east", areaIds: ["A"] }, { venueSpaceId: "west", areaIds: ["B"] }],
+  };
+  const all = [
+    record("event-a", "c-a", "A01", { name: "Alpha" }),
+    record("event-a", "c-a", "A02", { name: "Alpha" }),
+    record("event-a", "c-b", "A03", { name: "Beta" }),
+    record("event-a", "c-moved", "A04", { name: "Alpha moved", status: "moved" }),
+    record("event-a", "c-moved", "B01", { name: "Alpha moved", hall: "B" }),
+    record("event-a", "c-shared", "B01", { name: "Gamma", hall: "B", suffix: 1, status: "cancelled" }),
+    record("event-a", "c-later", "B02", { day: 2, hall: "B" }),
+    record("event-b", "c-other", "B03", { hall: "B" }),
+  ];
+  const byCircle = new Map();
+  all.forEach((item) => byCircle.set(item.circle.id, [...(byCircle.get(item.circle.id) ?? []), item]));
+  const input = {
+    event: multiEvent, records: all,
+    recordsById: new Map(all.map((item) => [item.recordId, item])), recordsByCircleId: byCircle,
+    planning: {
+      ...planning,
+      favorites: [...planning.favorites,
+        { ...planning.favorites[0], circleId: "c-shared" },
+        { ...planning.favorites[0], eventId: "event-b", circleId: "c-b" },
+      ],
+      visitPlans: [
+        { ...planning.visitPlans[0], circleId: "c-a", status: "planned" },
+        { ...planning.visitPlans[0], circleId: "c-b", status: "visited", routeOrder: 1 },
+        { ...planning.visitPlans[0], circleId: "c-moved", routeOrder: 2 },
+        { ...planning.visitPlans[0], circleId: "c-later", routeOrder: 3 },
+      ],
+    },
+    ...defaults, venueSpaceId: "east",
+  };
+  const summaries = [
+    { venueSpaceId: "east", circleCount: 3, matchCount: null, favoriteCount: 1, remainingPlanCount: 1 },
+    { venueSpaceId: "west", circleCount: 2, matchCount: null, favoriteCount: 1, remainingPlanCount: 1 },
+  ];
+  assert.deepEqual(projectEventWorkspace(input).venueSpaceSummaries, summaries);
+  const searched = projectEventWorkspace({ ...input, query: "Alpha" });
+  assert.deepEqual(searched.venueSpaceSummaries, summaries.map((space, index) => ({ ...space, matchCount: index === 0 ? 2 : 1 })));
+  assert.deepEqual(searched.filtered.map((item) => item.code), ["A01", "A02", "A04"]);
+  const favorites = projectEventWorkspace({ ...input, favoriteOnly: true });
+  assert.deepEqual(favorites.venueSpaceSummaries, summaries.map((space) => ({ ...space, matchCount: 1 })));
+  assert.deepEqual(projectEventWorkspace({ ...input, event: event("event-a") }).venueSpaceSummaries, []);
 });
 
 
