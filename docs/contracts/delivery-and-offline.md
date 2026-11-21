@@ -108,7 +108,7 @@ overlay 文件最外層可帶選填的 `notice`（`kind`：`info`／`important`�
 
 **overlay 的每一次 revalidation 都是一次 Function 呼叫，包含回 304 的那些。** strong ETag 省的是頻寬，不是請求數：304 的分支在 Function 內部，且在算出 ETag 之前已經讀過一次 D1。Cloudflare 的邊緣不會在 Function 之前擋下這些請求——Workers Cache 是 `wrangler.jsonc` 的 `cache.enabled` 選項，目前沒有開；zone 層的預設快取副檔名清單也不含 `.json`。
 
-計費方案與用量基準只維護於[專案工作流程第 7 節](../runbooks/project-workflow.md)及 [ADR-0065](../adr/0065-cost-reasoning-uses-the-workers-paid-basis.md)，不在此複製費率或從快取有效期推算活躍讀者數。
+計費方案的歷史判斷見 [ADR-0065](../adr/0065-cost-reasoning-uses-the-workers-paid-basis.md)，不在此複製費率或從快取有效期推算活躍讀者數。
 
 Cloudflare 沒有提供降低帳號用量上限或模擬 Error 1027 的測試介面，也不以受控實驗消耗正式帳號用量。部署流程以 Pages project API 驗證並設定 production／preview 的 `fail_open: true`；這是可重複驗收的配置契約，與方案層級無關，維持有效。
 

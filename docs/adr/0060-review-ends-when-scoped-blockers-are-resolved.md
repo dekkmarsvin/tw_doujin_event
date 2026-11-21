@@ -10,7 +10,7 @@
 
 ## 決策與取代範圍
 
-可執行規則唯一保存在 [review-fix loop](../agents/review-loop.md)。ADR-0040 決策 2–3 的必要修正之外，允許可選的局部改善；超範圍不再直接要求另開 Issue。決策 4 的「修正新增檔案即停止」改由需求是否擴張判斷，三輪熔斷按同一工作累計，不因換 PR 或 reviewer 重置。其餘編成、證據與 Done 條件由該流程定義。
+可執行規則唯一保存在 [review-fix loop](https://github.com/dekkmarsvin/tw_doujin_event/blob/77d73a5/docs/agents/review-loop.md)。ADR-0040 決策 2–3 的必要修正之外，允許可選的局部改善；超範圍不再直接要求另開 Issue。決策 4 的「修正新增檔案即停止」改由需求是否擴張判斷，三輪熔斷按同一工作累計，不因換 PR 或 reviewer 重置。其餘編成、證據與 Done 條件由該流程定義。
 
 本決策不改 ADR-0040 決策 1 的適用範圍，也不把它延伸至網路 publication。既有 required CI checks、發布安全邊界、產品驗收及 #104 的發布後更正範圍不變。
 

@@ -77,7 +77,7 @@ npm run build:production
 
 ## 共同 gate
 
-產品程式、建置輸入、依賴與 CI／測試基礎設施的完整 gate 由 CI 執行以下指令。本機預設只跑本次重現與受影響回歸；需要診斷環境差異、CI 無法提供有效結果或改動跨越多個邊界時，才補跑完整 gate，並記錄理由。未改變的有效結果依 [review-fix loop](../agents/review-loop.md#相稱的驗證)沿用，純文件變更見[下一節](#純文件變更)。
+產品程式、建置輸入、依賴與 CI／測試基礎設施的完整 gate 由 CI 執行以下指令。本機預設只跑受影響的測試；需要診斷環境差異或 CI 無法提供有效結果時，才補跑完整 gate。純文件變更見[下一節](#純文件變更)。
 
 ```bash
 npm ci
@@ -102,7 +102,7 @@ npx tsc --noEmit --incremental false
 node --test tests/contribution-files.test.mjs
 ```
 
-這項測試檢查相對連結與錨點、ADR 索引、`docs/design/` 的檔案範圍，並已執行 `check-doc-map --check` 核對契約清單與[契約索引](../contracts/INDEX.md)，不需再跑一次。改了契約的實作或測試清單時，先跑不帶 `--check` 的 `node scripts/check-doc-map.mjs` 重新產生索引。
+這項測試檢查文件之間的相對連結與錨點，以及 issue 表單的 triage 標籤。
 
 CI 以 [ci-scope.mjs](../../scripts/ci-scope.mjs) 的保守 allowlist 分類：內部文件、證據與已列出的開發工具跑文件檢查；開發工具另查 Claude 設定 JSON、hook shell 語法與非遠端模式。這些變更不部署，也不執行產品 Node／browser／remote preview E2E。未知路徑、混合產品變更、測試／CI 基礎設施、公開文件、依賴或無法核對的比較歷史都走完整 gate；手動 dispatch 同樣完整執行。精確 CI 行為見[部署 runbook](./deployment.md#ci-行為)。
 

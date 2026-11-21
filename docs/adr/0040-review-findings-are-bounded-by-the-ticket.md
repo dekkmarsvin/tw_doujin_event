@@ -5,7 +5,7 @@
 - 延續：[ADR-0039](./0039-one-data-repo-for-events-and-references.md) 的 single-maintainer 前提
 - 相關 issue：[#116](https://github.com/dekkmarsvin/tw_doujin_event/issues/116)、[#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104)
 - 相關 PR：[#128](https://github.com/dekkmarsvin/tw_doujin_event/pull/128)（未合併關閉）、[#129](https://github.com/dekkmarsvin/tw_doujin_event/pull/129)（已合併）
-- 相關流程：[review-fix 迴圈守則](../agents/review-loop.md)
+- 相關流程：[review-fix 迴圈守則](https://github.com/dekkmarsvin/tw_doujin_event/blob/77d73a5/docs/agents/review-loop.md)
 
 ## 問題
 
@@ -34,7 +34,7 @@
 
 ### 2. review finding 的處置以 ticket 為界
 
-任何 review finding 在修補前必須先通過範圍關卡，判準與流程見 [review-fix 迴圈守則](../agents/review-loop.md)。落在威脅模型之外的 finding 不是 bug，處置是記錄與拒絕，不是修補。
+任何 review finding 在修補前必須先通過範圍關卡，判準與流程見 [review-fix 迴圈守則](https://github.com/dekkmarsvin/tw_doujin_event/blob/77d73a5/docs/agents/review-loop.md)。落在威脅模型之外的 finding 不是 bug，處置是記錄與拒絕，不是修補。
 
 ### 3. review 觸發的修補不得超出原驗收條件
 
@@ -42,7 +42,7 @@
 
 ### 4. 迴圈有熔斷條件
 
-每張 PR 最多 3 輪 review-fix；另外，只要某輪 finding 指向的檔案是在 review 開始之後、由某次修補產生的，立即停止——那代表迴圈在審查自己的產物。判準不是「檔案不在 `main` 上」：ticket 本來就可能合法新增檔案，對這種檔案的第一條 finding 是正常的範圍內 review。判定方式見 [review-fix 迴圈守則](../agents/review-loop.md)。任一條件觸發時交回維護者裁定，不得自動續跑。
+每張 PR 最多 3 輪 review-fix；另外，只要某輪 finding 指向的檔案是在 review 開始之後、由某次修補產生的，立即停止——那代表迴圈在審查自己的產物。判準不是「檔案不在 `main` 上」：ticket 本來就可能合法新增檔案，對這種檔案的第一條 finding 是正常的範圍內 review。判定方式見 [review-fix 迴圈守則](https://github.com/dekkmarsvin/tw_doujin_event/blob/77d73a5/docs/agents/review-loop.md)。任一條件觸發時交回維護者裁定，不得自動續跑。
 
 ### 5.「不修」是合法且必須留下紀錄的結果
 

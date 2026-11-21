@@ -109,7 +109,7 @@ CircleParticipation = Circle + Event + EventDay + Space
 
 ## Scope
 
-以下是產品優先級，不是功能實作狀態表；現行行為與驗收條件見[契約索引](docs/contracts/INDEX.md)，待辦與進度由 GitHub issues 維護。
+以下是產品優先級，不是功能實作狀態表；現行行為與驗收條件見[文件索引](docs/README.md)，待辦與進度由 GitHub issues 維護。
 
 ### P0 — Core Scope
 
@@ -145,7 +145,7 @@ P0 穩定後才優先考慮：
 | Circle | 找到自己的官方條目 → 認領 → 修改代表圖與簡介、加入連結及 Tag → 在公開頁看見更新。 |
 | Organizer | 登入 → 建立活動 → 選擇既有 Venue → 設定日期 → 匯入社團資料 → 修正錯誤 → 預覽互動地圖 → 發布。 |
 
-Organizer 的完成目標是正常新增一場活動時，不需要任何人工技術操作；逐項清單、統計區間與證據要求見[專案工作流程](docs/runbooks/project-workflow.md#6-留下完整驗收證據)。內部系統可使用 repository、pin、CI 與 review，但不得要求主辦手動操作它們。
+Organizer 的完成目標是正常新增一場活動時，不需要任何人工技術操作。內部系統可使用 repository、pin、CI 與 review，但不得要求主辦手動操作它們。
 
 ## Explicit Non-Goals
 

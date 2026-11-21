@@ -31,8 +31,6 @@
     "data:fetch": "node scripts/fetch-event-data.mjs",
     "data:stage": "node scripts/stage-event-data.mjs",
     "event-data:check": "node scripts/check-staged-event-data.mjs",
-    "usage:collect": "node scripts/collect-cloudflare-usage.mjs",
-    "usage:report": "node scripts/collect-cloudflare-usage.mjs --report-only",
     "test": "npm run build && node scripts/run-tests.mjs --all --spec",
     "test:module": "node scripts/run-tests.mjs module",
     "test:d1": "node scripts/run-tests.mjs d1",

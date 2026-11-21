@@ -1,6 +1,6 @@
 # 地圖視域：驗證與初步視覺概念
 
-> **凍結的歷史設計紀錄（2026-09-23 移入）。** 本文保存當時的提案與取捨，不再更新，也不是現行規格；文中連到其他文件的連結固定在移入當時的版本。現行行為以[契約](../../contracts/INDEX.md)為準，視覺規格見 [`DESIGN.md`](../../../DESIGN.md) 與[元件與介面規格](../components.md)。
+> **凍結的歷史設計紀錄（2026-09-23 移入）。** 本文保存當時的提案與取捨，不再更新，也不是現行規格；文中連到其他文件的連結固定在移入當時的版本。現行行為以[文件索引](../../README.md)列出的契約為準，視覺規格見 [`DESIGN.md`](../../../DESIGN.md) 與[元件與介面規格](../components.md)。
 
 > 歷史範圍註記（2026-09-12）：本文記錄桌機改版當時的設計與驗收。所有「手機保留四頁籤／沿用原規則／原關閉語意」敘述已由 [ADR-0056](https://github.com/dekkmarsvin/tw_doujin_event/blob/4704e27ebd0ff88a6680356204b4306cf5314af8/docs/adr/0056-mobile-map-uses-workspace-and-selection-summary.md) 取代；現行手機為探索／行程兩入口、獨立摘要與收合預留矩形 fit，驗收見 [手機方案 B](https://github.com/dekkmarsvin/tw_doujin_event/blob/4704e27ebd0ff88a6680356204b4306cf5314af8/design-qa.md)。歷史測試數字不作為本次手機驗收。
 2026-09-09 · 歷史概念驗證（後續實作證據見技術規格第 10 節）· 核對基準：工作目錄程式碼，HEAD `9680719`。
