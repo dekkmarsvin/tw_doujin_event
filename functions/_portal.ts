@@ -19,6 +19,7 @@ import { createPublicationDispatcher } from "../app/publication-dispatch";
 import { createPublishedAmendmentBaselineLoader } from "../app/organizer-amendment-baseline";
 import { createPublicationRecoveryAuditor } from "../app/organizer-publication-recovery";
 import { readEntryJson, readEventIndex, readEventJson } from "./_event-data";
+import { createR2AmendmentBaselineLoader } from "../app/event-data-publisher";
 
 /**
  * Wires the framework-agnostic portal handlers to the Pages runtime: D1, the
@@ -262,7 +263,7 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     } catch { return null; }
   };
   const dispatchOrganizerPublication = createPublicationDispatcher({
-    repository, mode: env.ORGANIZER_PUBLICATION_MODE ?? "disabled", allowFake: env.PREVIEW_MAIL_SINK === "d1",
+    repository, mode: env.ORGANIZER_PUBLICATION_MODE ?? "disabled", allowFake: env.PREVIEW_MAIL_SINK === "d1", eventData: env.EVENT_DATA,
     eventExists: async (id) => Boolean(await publishedEvent(id)),
   });
   const thumbnailOrigin = env.THUMBNAIL_PUBLIC_ORIGIN;
@@ -323,7 +324,8 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
         privateKey: env.GITHUB_APP_PRIVATE_KEY ?? "", repositories: GITHUB_PUBLICATION_REPOSITORIES,
         permissions: { contents: "read", pull_requests: "read", checks: "read", metadata: "read" }, now: () => Date.now() }),
     }) : undefined,
-    loadPublishedAmendmentBaseline: env.ORGANIZER_PUBLICATION_MODE === "github" ? createPublishedAmendmentBaselineLoader({
+    loadPublishedAmendmentBaseline: env.ORGANIZER_PUBLICATION_MODE === "r2" ? createR2AmendmentBaselineLoader(env.EVENT_DATA)
+      : env.ORGANIZER_PUBLICATION_MODE === "github" ? createPublishedAmendmentBaselineLoader({
       onUnavailable: (diagnostic) => console.warn(JSON.stringify({ event: "organizer.amendment.baseline_unavailable", ...diagnostic })),
       tokenProvider: createGitHubAppTokenProvider({ appId: env.GITHUB_APP_ID ?? "", installationId: env.GITHUB_APP_INSTALLATION_ID ?? "",
         privateKey: env.GITHUB_APP_PRIVATE_KEY ?? "", repositories: GITHUB_PUBLICATION_REPOSITORIES,

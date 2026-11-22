@@ -117,10 +117,10 @@
 
 | 方法 | 路徑 | 權限 | 呼叫端 | #546 |
 |---|---|---|---|---|
-| POST | `/api/admin/organizer/events/:candidateId/review` | 管理者 | 主辦 `reviewOrganizerEvent` | 修改：核准時在同一個請求內產生產物、寫入 R2 新版本、切換 D1 指標。成功回應即代表已公開；失敗不切換指標，可直接重送 |
-| POST | `/api/organizer/events/:candidateId/amendments` | 活動成員 | 主辦 `startOrganizerAmendment` | 修改：從目前已發布版本建立新候選，之後走一般編輯、檢查、送審、核准 |
-| GET／PUT | `/api/organizer/events/:candidateId/amendment` | 活動成員 | 主辦 `readOrganizerAmendment`、`saveOrganizerAmendment` | **刪除**：不再有宣告式更正，新候選直接編輯 |
-| POST | `/api/organizer/publications/:jobId/retry` | 活動成員 | 主辦 `retryOrganizerPublication` | **刪除**：沒有背景 job |
+| POST | `/api/admin/organizer/events/:candidateId/review` | 管理者 | 主辦 `reviewOrganizerEvent` | 修改（階段 4a 起）：核准時在同一個請求內產生公開檔、寫入 R2 新版本與社團配號表，最後改寫 `index.json`。成功回應即代表已公開；失敗不改動公開內容，可重試 |
+| POST | `/api/organizer/events/:candidateId/amendments` | 活動成員 | 主辦 `startOrganizerAmendment` | 修改（階段 4a 起）：保留名單異動宣告，基準改從 R2 讀取並與公開的 `circles.json` 核對 |
+| GET／PUT | `/api/organizer/events/:candidateId/amendment` | 活動成員 | 主辦 `readOrganizerAmendment`、`saveOrganizerAmendment` | 保留：維護者 2026-11-22 決定保留宣告，以免社團 ID 變動使讀者收藏失效 |
+| POST | `/api/organizer/publications/:jobId/retry` | 活動成員 | 主辦 `retryOrganizerPublication` | 階段 4b 刪除：R2 發布在核准請求內完成；4a 期間仍用來重試可重試的失敗 |
 | POST | `/api/admin/organizer/publications/:jobId/retry` | 管理者 | 前端未使用 | **刪除** |
 | POST | `/api/organizer/events/:candidateId/reopen` | 活動成員 | 主辦 `reopenOrganizerEvent` | **刪除** |
 | POST | `/api/admin/organizer/events/:candidateId/abandon` | 管理者 | 主辦 `abandonOrganizerAmendment` | **刪除** |

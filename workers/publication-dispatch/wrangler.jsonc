@@ -36,7 +36,9 @@
     "NOTIFICATION_ORIGIN": "https://map.kotoban.top",
     "MAILGUN_DOMAIN": "verify.kotoban.top",
     "MAILGUN_SENDER": "場刊 Map <noreply@verify.kotoban.top>",
-    "ORGANIZER_PUBLICATION_MODE": "github",
+    // Pages publishes to the event data bucket within the approving request
+    // (#546); this Worker no longer advances publications.
+    "ORGANIZER_PUBLICATION_MODE": "r2",
     "GITHUB_APP_ID": "4931208",
     "GITHUB_APP_INSTALLATION_ID": "161391064"
   },

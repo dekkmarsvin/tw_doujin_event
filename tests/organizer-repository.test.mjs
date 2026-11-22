@@ -385,10 +385,11 @@ test("a cron overlapping webhook and another tick has one leased mutation and ke
   assert.equal(job.pending_attempts, 0);
 });
 
-test("scheduled Worker entry ignores disabled environments and advances only a preview-gated fake", async (t) => {
+test("scheduled Worker entry ignores disabled and r2 environments and advances only a preview-gated fake", async (t) => {
   const { jobId } = await publicationFixture();
   t.mock.method(Date, "now", () => NOW + 10);
-  for (const env of [{}, { ORGANIZER_PUBLICATION_MODE: "fake" }]) {
+  // In r2 mode Pages publishes within the approving request (#546); the Worker never advances a job.
+  for (const env of [{}, { ORGANIZER_PUBLICATION_MODE: "fake" }, { ORGANIZER_PUBLICATION_MODE: "r2" }]) {
     await scheduledWorker.scheduled({}, { ...env, DB: database });
     assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "queued");
   }
@@ -409,7 +410,7 @@ test("scheduled Worker entry ignores disabled environments and advances only a p
   const config = unstable_readConfig({ config: configFile });
   const preview = unstable_readConfig({ config: configFile, env: "preview" });
   assert.deepEqual(config.triggers.crons, [PUBLICATION_CRON]);
-  assert.equal(config.vars.ORGANIZER_PUBLICATION_MODE, "github");
+  assert.equal(config.vars.ORGANIZER_PUBLICATION_MODE, "r2");
   assert.equal(preview.vars.ORGANIZER_PUBLICATION_MODE, "disabled");
 });
 
@@ -480,6 +481,22 @@ test("Pages github dispatch preserves its durable job for the Worker; fake remai
   assert.equal(job.remote_write_intent_at, null, "fake makes no remote publication claim");
   await dispatch(jobId);
   assert.deepEqual(await repository.getOrganizerPublicationJob(jobId), job);
+});
+
+test("r2 dispatch runs within the request and fails closed without touching the published index", async () => {
+  const { jobId } = await publicationFixture("-r2");
+  const index = JSON.stringify({ schema: "event-index/1", registry: "r0", events: [] });
+  const writes = [];
+  const eventData = { get: async (key) => key === "index.json" ? { text: async () => index, etag: "e1" } : null,
+    put: async (key) => { writes.push(key); return {}; } };
+  assert.equal(createPublicationDispatcher({ repository, eventExists: async () => false, mode: "r2", allowFake: false }), undefined, "r2 needs the event data bucket");
+  await createPublicationDispatcher({ repository, eventExists: async () => false, mode: "r2", allowFake: false, eventData, now: () => NOW + 10 })(jobId);
+  const job = await repository.getOrganizerPublicationJob(jobId);
+  // This fixture's snapshot cannot become reader files; publication stops there.
+  assert.equal(job.status, "failed");
+  assert.equal(job.step, "preparing_data");
+  assert.equal(job.retryable, 0);
+  assert.deepEqual(writes, []);
 });
 
 test("expired publication lease records a retryable failure without losing its step", async () => {

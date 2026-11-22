@@ -161,7 +161,7 @@ npm run data:stage -- <event>
 npm run event-data:check
 ```
 
-單一活動的 `data:fetch`／`data:stage` 用來檢查你正在處理的那一場。要更新讀者看到的資料，改用 `--published`：它依 [`data/published-events.json`](../../data/published-events.json) 逐一取得並 staging **每一個已發布活動**，再以 `npm run event-data:upload -- --remote` 整組上傳成新版本，步驟見[部署 runbook](./deployment.md#活動資料r2)。
+單一活動的 `data:fetch`／`data:stage` 用來檢查你正在處理的那一場。讀者看到的資料由主辦工作區核准後直接發布（#546）。`--published` 會依 [`data/published-events.json`](../../data/published-events.json) 逐一取得並 staging **每一個已發布活動**；只有在活動資料 bucket 還沒有任何經核准發布的活動時，才能再以 `npm run event-data:upload -- --remote` 整組上傳，見[部署 runbook](./deployment.md#從-data-repository-上傳一次性)。
 
 `data:fetch` 把該 commit 下 pin 列出的所有檔案下載到暫存位置並核對 SHA-256，驗證 reference selection 後才把 `.event-data/<event>/` 換入；rename 失敗會復原舊 tree。活動自身檔案落在該目錄根層，`references/` 保留 repository 路徑。`data:stage` 先以 pinned grouping 對 identity registry 執行 no-op check，再驗證 selection 與 relationships，由官方 booth + identity evidence 生成 `circle-catalog/3`，並把該活動的 `event.json`、`reference-records.json`、`circles.json` 與地圖 artifacts（`map.json`，或 `map-manifest.json` 與其指向的每一份 `maps/**`）staging 到忽略版控的 `public/data/events/<event>/`。
 
