@@ -80,9 +80,9 @@ test("approval publishes the reader files and registry the Git pipeline produced
 test("a repeated approval changes nothing, and a first publication never overwrites a published event", async () => {
   const fixture = await amendmentFixture(runner);
   const store = seeded();
-  const { version } = await publishApprovedSnapshot(store, published(fixture), tick);
+  await publishApprovedSnapshot(store, published(fixture), tick);
   const before = store.store.get("index.json").text;
-  assert.deepEqual(await publishApprovedSnapshot(store, published(fixture), tick), { version, alreadyPublished: true });
+  assert.deepEqual(await publishApprovedSnapshot(store, published(fixture), tick), { alreadyPublished: true });
   assert.equal(store.store.get("index.json").text, before);
   const other = await amendmentFixture(runner, (snapshot) => { snapshot.candidateId = "other"; });
   await assert.rejects(publishApprovedSnapshot(store, { ...published(other), candidateId: "other" }, tick), { code: "event_id_collision" });
@@ -92,12 +92,15 @@ test("a repeated approval changes nothing, and a first publication never overwri
 test("an index replaced during publication is kept, and the publication asks to be retried", async () => {
   const fixture = await amendmentFixture(runner);
   const store = seeded();
-  const get = store.get.bind(store);
-  store.get = async (key) => {
-    const object = await get(key);
-    // Another publication finishes right after this one read the index.
-    if (key === "index.json") store.store.set("index.json", { text: JSON.stringify({ schema: "event-index/1", registry: "r0", events: [] }), etag: "other" });
-    return object;
+  const put = store.put.bind(store);
+  let raced = false;
+  store.put = async (key, value, options) => {
+    // Another publication finishes while this one is writing its version.
+    if (!raced && key.startsWith("registry/")) {
+      raced = true;
+      store.store.set("index.json", { text: JSON.stringify({ schema: "event-index/1", registry: "r0", events: [] }), etag: "other" });
+    }
+    return put(key, value, options);
   };
   await assert.rejects(publishApprovedSnapshot(store, published(fixture), tick), (error) => error.code === "event_index_changed" && error.retryable === true);
   assert.equal(store.store.get("index.json").etag, "other");
@@ -135,4 +138,68 @@ test("a correction based on a superseded version is refused, and a mismatched so
   assert.equal(store.store.get("index.json").text, published2);
   // The index now names amendment-one, so the original source no longer describes what readers see.
   await assert.rejects(createR2AmendmentBaselineLoader(store)({ ...fixture.source }), { code: "amendment_baseline_changed" });
+});
+
+const { createR2PublicationDriver } = await runner.import("/app/publication-dispatch.ts");
+const job = (fixture) => ({ approval_hash: fixture.source.approvalHash, candidate_id: "source", candidate_version: 1 });
+const run = (driver, fixture, step, beginRemoteWrite = async () => {}) => driver.run({ job: job(fixture), step, snapshotJson: fixture.source.snapshotJson, beginRemoteWrite });
+
+test("every published index is kept whole for rollback, and an index without an ETag is never overwritten", async () => {
+  const fixture = await amendmentFixture(runner);
+  const store = seeded();
+  const { version } = await publishApprovedSnapshot(store, published(fixture), tick);
+  assert.equal(store.store.get(`history/index-${version}.json`).text, store.store.get("index.json").text);
+  const unversioned = seeded();
+  const get = unversioned.get.bind(unversioned);
+  unversioned.get = async (key) => { const object = await get(key); return object && key === "index.json" ? { text: object.text } : object; };
+  await assert.rejects(publishApprovedSnapshot(unversioned, published(fixture), tick), { code: "event_index_unversioned" });
+});
+
+test("a retried first publication recognises its own approval instead of reporting a collision", async () => {
+  const fixture = await amendmentFixture(runner);
+  const store = seeded();
+  const driver = createR2PublicationDriver(store);
+  await run(driver, fixture, "preparing_data");
+  const index = store.store.get("index.json").text;
+  // The request ended after the index was written; the executor retries the first step.
+  assert.equal(await driver.eventExists("event-alpha"), false, "collisions are decided by the publisher");
+  let intent = 0;
+  await run(driver, fixture, "preparing_data", async () => { intent++; });
+  assert.equal(store.store.get("index.json").text, index);
+  assert.equal(intent, 0, "nothing new is written, so no new remote-write intent");
+});
+
+test("a job retried from its last step publishes if readers do not see it yet", async () => {
+  const fixture = await amendmentFixture(runner);
+  const store = seeded();
+  const result = await run(createR2PublicationDriver(store), fixture, "verifying_production");
+  assert.equal(result.productionVerified, true);
+  assert.equal(store.read("index.json").events[0].source.approvalHash, fixture.source.approvalHash);
+});
+
+test("a correction cannot start from a version whose maps differ from its source snapshot", async () => {
+  const fixture = await amendmentFixture(runner);
+  const store = seeded();
+  await publishApprovedSnapshot(store, published(fixture), tick);
+  const index = store.read("index.json");
+  delete index.events[0].source; // as uploaded from the data repository
+  const key = `events/event-alpha/${index.events[0].version}/map.json`;
+  const map = store.read(key);
+  map.layout.rows[0].slots[0].rect.x += 5; // a map fix uploaded after the approval
+  store.store.set(key, { text: JSON.stringify(map), etag: "m" });
+  store.store.set("index.json", { text: JSON.stringify(index), etag: "i" });
+  await assert.rejects(createR2AmendmentBaselineLoader(store)({ ...fixture.source }), { code: "amendment_baseline_changed" });
+});
+
+test("a correction begun before the switch is refused before anything is written", async () => {
+  const fixture = await amendmentFixture(runner);
+  const store = seeded();
+  await publishApprovedSnapshot(store, published(fixture), tick);
+  const before = new Map(store.store);
+  let wrote = false;
+  // fixture.baseline is the Git-era `/1` form.
+  await assert.rejects(publishApprovedSnapshot(store, amendmentSnapshot(fixture.baseline, [], "legacy"), tick, async () => { wrote = true; }),
+    { code: "amendment_baseline_legacy" });
+  assert.equal(wrote, false, "no remote-write intent, so the candidate can still be sent back");
+  assert.deepEqual(new Map(store.store), before);
 });

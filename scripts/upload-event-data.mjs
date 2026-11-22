@@ -73,6 +73,9 @@ if (check.status !== 0) throw new Error("The staged events failed their check; n
       const current = JSON.parse(await readFile(target, "utf8"));
       const approved = (current.events ?? []).filter((entry) => entry.source).map((entry) => entry.eventId);
       if (approved.length) throw new Error(`${bucket} already holds events published by approval (${approved.join(", ")}); uploading from the data repository would remove them. Nothing was uploaded.`);
+    } else if (!/specified key does not exist/i.test(`${read.stdout}${read.stderr}`)) {
+      // Only a confirmed absence means there is nothing to protect.
+      throw new Error(`Could not read the current index of ${bucket}; nothing was uploaded.\n${read.stderr}`);
     }
   } finally {
     await rm(temporary, { recursive: true, force: true });
@@ -117,6 +120,8 @@ const temporary = await mkdtemp(path.join(tmpdir(), "event-index-"));
 try {
   const indexFile = path.join(temporary, "index.json");
   await writeFile(indexFile, `${JSON.stringify(index)}\n`);
+  // Kept whole, like every published index, so a rollback restores all of it.
+  put(`history/index-${version}.json`, indexFile);
   put("index.json", indexFile);
 } finally {
   await rm(temporary, { recursive: true, force: true });

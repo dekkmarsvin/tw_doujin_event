@@ -10,6 +10,7 @@
  *   events/<eventId>/<version>/source/<file>   publication inputs, never served
  *   registry/<version>/allocations.json        circle identity registry
  *   registry/<version>/evidence.json
+ *   history/index-<version>.json               every published index, for rollback
  *
  * Versions are written once. A publication writes every new object first and
  * `index.json` last, so readers and the next publication see the old state or
@@ -49,6 +50,7 @@ export const isSafeEventFile = (value: string) => SAFE_FILE.test(value) && !valu
 export const eventFileKey = (eventId: string, version: string, file: string) => `events/${eventId}/${version}/${file}`;
 export const eventSourceKey = (eventId: string, version: string, file: string) => `events/${eventId}/${version}/source/${file}`;
 export const registryKey = (version: string, file: "allocations.json" | "evidence.json") => `registry/${version}/${file}`;
+export const indexHistoryKey = (version: string) => `history/index-${version}.json`;
 
 /** A sortable timestamp: a later publication always carries a later version. */
 export function newEventDataVersion(now: number) {

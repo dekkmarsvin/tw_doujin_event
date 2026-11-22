@@ -7,7 +7,7 @@ import { buildOfficialCatalogPayload } from "../scripts/official-catalog-core.mj
 import { PublicationFailure } from "./organizer-publication";
 import { AmendmentBaselineError, type AmendmentPublishedSource, type OrganizerAmendmentBaseline } from "./organizer-amendment-baseline";
 import {
-  EVENT_INDEX_KEY, EVENT_INDEX_SCHEMA, eventFileKey, eventSourceKey, newEventDataVersion, readBucketJson, readEventIndexObject, registryKey,
+  EVENT_INDEX_KEY, EVENT_INDEX_SCHEMA, eventFileKey, eventSourceKey, indexHistoryKey, newEventDataVersion, readBucketJson, readEventIndexObject, registryKey,
   type EventDataBucket, type EventIndex, type EventIndexEntry,
 } from "./event-data-store";
 
@@ -32,48 +32,12 @@ function eventEvidence(registry: unknown, eventId: string) {
     .filter((entry) => [...entry.sources, ...(entry.retiredSources ?? [])].some((source) => source.eventId === eventId));
 }
 
-/**
- * Publishes an approved snapshot as a new version in the event data bucket
- * (#546): the reader files, the publication inputs a later correction starts
- * from, and the updated circle identity registry, then `index.json` last.
- *
- * Re-running for the same approval is a no-op once the index names it, so an
- * interrupted request can simply be retried.
- */
-export async function publishApprovedSnapshot(bucket: EventDataBucket, source: ApprovedArtifactSource & { candidateId: string; candidateVersion: number },
-  now = Date.now) {
-  const artifacts = await buildApprovedPublicationArtifacts(source);
-  const { snapshot, official, grouping } = artifacts;
+type Artifacts = Awaited<ReturnType<typeof buildApprovedPublicationArtifacts>>;
+
+/** Reader files and publication inputs, byte for byte what the data-repository staging produced. */
+function publishedFiles(artifacts: Artifacts, evidence: unknown) {
+  const { snapshot, official } = artifacts;
   const eventId = snapshot.eventId;
-  const current = await readEventIndexObject(bucket);
-  if (!current) return fail("event_index_unavailable", "活動資料尚未上傳，無法發布。", true);
-  const { index, etag } = current;
-  const existing = index.events.find((entry) => entry.eventId === eventId);
-  if (existing?.source?.approvalHash === source.approvalHash) return { version: existing.version, alreadyPublished: true };
-
-  const today = () => snapshot.contentUpdatedAt.slice(0, 10);
-  const { allocations, evidence } = await readRegistry(bucket, index);
-  let registry: { allocations: unknown; evidence: unknown };
-  if (artifacts.amendment) {
-    const baseline = artifacts.amendment.baseline;
-    if (baseline.schema !== "organizer-amendment-baseline/3" || !existing || existing.version !== baseline.version) {
-      fail("amendment_base_conflict", "這場活動在修正期間已有新的發布，請從目前的公開版本重新開始修正。");
-    }
-    // Other events may allocate ids while this candidate is being edited.
-    // Accept that growth, but never silently rebind the reviewed old circles.
-    const before = planOrganizerAmendment({ ...baseline, changes: [], today });
-    const latest = planOrganizerAmendment({ ...baseline, allocations, evidence, changes: [], today });
-    if (semantic(before.summary.groups) !== semantic(latest.summary.groups)
-      || semantic(eventEvidence(before.evidence, eventId)) !== semantic(eventEvidence(latest.evidence, eventId))) {
-      fail("amendment_baseline_changed", "修正來源的公開社團身分或退出歷史已變更。");
-    }
-    registry = planOrganizerAmendment({ ...baseline, allocations, evidence, changes: artifacts.amendment.changes, today });
-  } else {
-    if (existing) fail("event_id_collision", "活動已公開，首次發布不能覆寫。");
-    registry = planCircleIdentityRegistryUpdate({ eventId, official, grouping, allocations, evidence, today });
-  }
-
-  // Reader files, byte for byte what the data-repository staging produced.
   const prefix = `events/${eventId}/`;
   const reader = new Map<string, string>();
   const sources = new Map<string, string>();
@@ -88,11 +52,70 @@ export async function publishApprovedSnapshot(bucket: EventDataBucket, source: A
   const verified = verifyReferenceFiles(snapshot.references.selection, referenceFiles, eventId);
   const references = selectEventReferenceRecords(snapshot.references.selection, verified.records, definition);
   reader.set("reference-records.json", `${JSON.stringify(references, null, 2)}\n`);
-  const catalog = buildOfficialCatalogPayload({ eventId, event: definition, official: parseOfficialBoothData(official, definition), evidence: registry.evidence });
+  const catalog = buildOfficialCatalogPayload({ eventId, event: definition, official: parseOfficialBoothData(official, definition), evidence });
   reader.set("circles.json", `${JSON.stringify(catalog)}\n`);
+  return { reader, sources, definition, references };
+}
 
-  const version = newEventDataVersion(now());
-  if (version === existing?.version || version === index.registry) fail("version_collision", "發布太頻繁，請稍後再試。", true);
+/** Whether the index already serves this approval; cheap enough to ask on every step. */
+export async function isApprovalPublished(bucket: Pick<EventDataBucket, "get">, snapshotJson: string, approvalHash: string) {
+  const eventId = (JSON.parse(snapshotJson) as { eventId?: unknown }).eventId;
+  const current = await readEventIndexObject(bucket);
+  return current?.index.events.some((entry) => entry.eventId === eventId && entry.source?.approvalHash === approvalHash) ?? false;
+}
+
+/** Unique even when two publications start in the same second, and still sortable. */
+function uniqueVersion(now: number) {
+  const suffix = [...crypto.getRandomValues(new Uint8Array(3))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${newEventDataVersion(now)}-${suffix}`;
+}
+
+/**
+ * Publishes an approved snapshot as a new version in the event data bucket
+ * (#546): the reader files, the publication inputs a later correction starts
+ * from, and the updated circle identity registry, then `index.json` last.
+ *
+ * Re-running for the same approval is a no-op once the index names it, so an
+ * interrupted request can simply be retried. Every refusal happens before
+ * `beforeWrite`, which callers use to record that remote writes began.
+ */
+export async function publishApprovedSnapshot(bucket: EventDataBucket, source: ApprovedArtifactSource & { candidateId: string; candidateVersion: number },
+  now = Date.now, beforeWrite: () => Promise<void> = async () => {}) {
+  if (await isApprovalPublished(bucket, source.snapshotJson, source.approvalHash)) return { alreadyPublished: true };
+  const artifacts = await buildApprovedPublicationArtifacts(source);
+  const { snapshot, official, grouping } = artifacts;
+  const eventId = snapshot.eventId;
+  const current = await readEventIndexObject(bucket);
+  if (!current) return fail("event_index_unavailable", "活動資料尚未上傳，無法發布。", true);
+  const { index, etag } = current;
+  if (!etag) fail("event_index_unversioned", "活動資料索引缺少版本標記，無法安全發布。", true);
+  const existing = index.events.find((entry) => entry.eventId === eventId);
+  if (existing?.source?.approvalHash === source.approvalHash) return { alreadyPublished: true };
+
+  const today = () => snapshot.contentUpdatedAt.slice(0, 10);
+  const { allocations, evidence } = await readRegistry(bucket, index);
+  let registry: { allocations: unknown; evidence: unknown };
+  if (artifacts.amendment) {
+    const baseline = artifacts.amendment.baseline;
+    if (baseline.schema !== "organizer-amendment-baseline/3") fail("amendment_baseline_legacy", "這筆修正是在改用新發布方式前開始的，請從目前的公開版本重新開始修正。");
+    if (!existing || existing.version !== baseline.version) fail("amendment_base_conflict", "這場活動在修正期間已有新的發布，請從目前的公開版本重新開始修正。");
+    // Other events may allocate ids while this candidate is being edited.
+    // Accept that growth, but never silently rebind the reviewed old circles.
+    const before = planOrganizerAmendment({ ...baseline, changes: [], today });
+    const latest = planOrganizerAmendment({ ...baseline, allocations, evidence, changes: [], today });
+    if (semantic(before.summary.groups) !== semantic(latest.summary.groups)
+      || semantic(eventEvidence(before.evidence, eventId)) !== semantic(eventEvidence(latest.evidence, eventId))) {
+      fail("amendment_baseline_changed", "修正來源的公開社團身分或退出歷史已變更。");
+    }
+    registry = planOrganizerAmendment({ ...baseline, allocations, evidence, changes: artifacts.amendment.changes, today });
+  } else {
+    if (existing) fail("event_id_collision", "活動已公開，首次發布不能覆寫。");
+    registry = planCircleIdentityRegistryUpdate({ eventId, official, grouping, allocations, evidence, today });
+  }
+  const { reader, sources, definition, references } = publishedFiles(artifacts, registry.evidence);
+
+  await beforeWrite();
+  const version = uniqueVersion(now());
   await Promise.all([
     ...[...reader].map(([file, text]) => bucket.put(eventFileKey(eventId, version, file), text, JSON_TYPE)),
     ...[...sources].map(([file, text]) => bucket.put(eventSourceKey(eventId, version, file), text, JSON_TYPE)),
@@ -108,9 +131,12 @@ export async function publishApprovedSnapshot(bucket: EventDataBucket, source: A
     schema: EVENT_INDEX_SCHEMA, registry: version,
     events: existing ? index.events.map((item) => item.eventId === eventId ? entry : item) : [...index.events, entry],
   };
+  const text = `${JSON.stringify(next)}\n`;
+  // Every index stays restorable as a whole: a rollback copies one back.
+  await bucket.put(indexHistoryKey(version), text, JSON_TYPE);
   // Only the index read above may be replaced: another publication that
   // finished in between keeps its version, and this one is retried.
-  const written = await bucket.put(EVENT_INDEX_KEY, `${JSON.stringify(next)}\n`, { ...JSON_TYPE, ...(etag ? { onlyIf: { etagMatches: etag } } : {}) });
+  const written = await bucket.put(EVENT_INDEX_KEY, text, { ...JSON_TYPE, onlyIf: { etagMatches: etag! } });
   if (written === null) fail("event_index_changed", "另一筆發布剛完成，請重試。", true);
   return { version, alreadyPublished: false };
 }
@@ -139,8 +165,14 @@ export function createR2AmendmentBaselineLoader(bucket: EventDataBucket) {
         : artifacts.grouping;
       const today = () => artifacts.snapshot.contentUpdatedAt.slice(0, 10);
       const plan = planOrganizerAmendment({ event: artifacts.event, official: artifacts.official, grouping, allocations, evidence, changes: [], today });
-      const projected = buildOfficialCatalogPayload({ eventId, event: artifacts.event, official: plan.official, evidence: plan.evidence });
-      if (semantic(projected) !== semantic(await readBucketJson(bucket, eventFileKey(eventId, entry.version, "circles.json")))) throw changed();
+      // Every reader file must be what the source snapshot produces: a map or
+      // event change uploaded since would otherwise be undone by the correction.
+      const { reader } = publishedFiles(artifacts, plan.evidence);
+      if (reader.size !== entry.files.length || entry.files.some((file) => !reader.has(file))) throw changed();
+      for (const [file, text] of reader) {
+        const served = await readBucketJson(bucket, eventFileKey(eventId, entry.version, file));
+        if (semantic(served) !== semantic(JSON.parse(text))) throw changed();
+      }
       const { snapshotJson: _snapshotJson, ...identity } = source;
       void _snapshotJson;
       return {

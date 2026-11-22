@@ -1,7 +1,7 @@
 import type { IdentityRepository } from "../db/identity-repository";
 import { createOrganizerPublicationExecutor, type PublicationDriver, type PublicationMetadata } from "./organizer-publication";
 import { publishApprovedSnapshot } from "./event-data-publisher";
-import { readEventIndexObject, type EventDataBucket } from "./event-data-store";
+import type { EventDataBucket } from "./event-data-store";
 
 /** The checkpoints the shared executor requires after each Git-era step. */
 const PLACEHOLDER_CHECKPOINTS: Record<string, PublicationMetadata> = {
@@ -20,19 +20,22 @@ export function createFakePublicationDriver(eventExists: PublicationDriver["even
 }
 
 /**
- * Publishes to the event data bucket (#546). The whole publication happens in
- * the first step; the remaining steps only satisfy the shared executor, which
+ * Publishes to the event data bucket (#546). The publication happens in the
+ * first step; the remaining steps only satisfy the shared executor, which
  * #546 phase 4b removes together with the Git pipeline.
+ *
+ * The last step publishes too unless the index already serves this approval,
+ * so a Git-era job retried from a later step is never marked published without
+ * readers seeing it. Whether a first publication collides is the publisher's
+ * call: it recognises its own approval after an interrupted request.
  */
 export function createR2PublicationDriver(bucket: EventDataBucket): PublicationDriver {
   return {
-    async eventExists(eventId) {
-      return (await readEventIndexObject(bucket))?.index.events.some((entry) => entry.eventId === eventId) ?? false;
-    },
+    async eventExists() { return false; },
     async run({ job, step, snapshotJson, beginRemoteWrite }) {
-      if (step === "preparing_data") {
-        await beginRemoteWrite();
-        await publishApprovedSnapshot(bucket, { snapshotJson, approvalHash: job.approval_hash, candidateId: job.candidate_id, candidateVersion: job.candidate_version });
+      if (step === "preparing_data" || step === "verifying_production") {
+        await publishApprovedSnapshot(bucket, { snapshotJson, approvalHash: job.approval_hash, candidateId: job.candidate_id, candidateVersion: job.candidate_version },
+          Date.now, beginRemoteWrite);
       }
       return { metadata: PLACEHOLDER_CHECKPOINTS[step], productionVerified: step === "verifying_production" };
     },

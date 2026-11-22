@@ -388,7 +388,7 @@ test("a cron overlapping webhook and another tick has one leased mutation and ke
 test("scheduled Worker entry ignores disabled and r2 environments and advances only a preview-gated fake", async (t) => {
   const { jobId } = await publicationFixture();
   t.mock.method(Date, "now", () => NOW + 10);
-  // In r2 mode Pages publishes within the approving request (#546); the Worker never advances a job.
+  // In r2 mode the Worker needs the event data bucket to finish anything (#546).
   for (const env of [{}, { ORGANIZER_PUBLICATION_MODE: "fake" }, { ORGANIZER_PUBLICATION_MODE: "r2" }]) {
     await scheduledWorker.scheduled({}, { ...env, DB: database });
     assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "queued");
@@ -411,7 +411,9 @@ test("scheduled Worker entry ignores disabled and r2 environments and advances o
   const preview = unstable_readConfig({ config: configFile, env: "preview" });
   assert.deepEqual(config.triggers.crons, [PUBLICATION_CRON]);
   assert.equal(config.vars.ORGANIZER_PUBLICATION_MODE, "r2");
-  assert.equal(preview.vars.ORGANIZER_PUBLICATION_MODE, "disabled");
+  assert.equal(preview.vars.ORGANIZER_PUBLICATION_MODE, "r2");
+  assert.deepEqual(config.r2_buckets.map((bucket) => bucket.bucket_name), ["tw-doujin-event-data"]);
+  assert.deepEqual(preview.r2_buckets.map((bucket) => bucket.bucket_name), ["tw-doujin-event-data-preview"]);
 });
 
 test("Pages runtime exposes publication by mode and a fake retry finishes through real D1", async (t) => {
