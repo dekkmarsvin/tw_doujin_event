@@ -225,7 +225,7 @@ Site Key 公開是它的用途，所以它屬於版本控制，不屬於 dashboa
 改完**必須重新部署**：Pages 的變數與密鑰都是在建立 deployment 時綁定的。
 
 ```bash
-gh workflow run deploy-pages.yml --ref main
+gh workflow run ci.yml --ref main
 ```
 
 ### 這件事只能用瀏覽器驗

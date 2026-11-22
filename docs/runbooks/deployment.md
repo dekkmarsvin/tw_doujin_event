@@ -81,7 +81,7 @@ production 的六個 runtime secret 以 `wrangler pages secret put` 設定。**�
 
 `ORGANIZER_PUBLICATION_MODE=r2` 時，核准在同一個請求內寫入活動資料 bucket，見[核准即發布](#核准即發布)。未設定時預設 disabled，核准與重試回 503；編輯、匯入、地圖、驗證、預覽與送審仍可使用。設定同時寫在根目錄 `wrangler.jsonc` 與 `workers/publication-dispatch/wrangler.jsonc`，不以 dashboard 臨時改值代替。
 
-獨立 `tw-catalog-publication-dispatch` Worker 綁同一個 production identity D1 與活動資料 bucket，每分鐘執行，沒有 HTTP 入口。它只接手核准請求中斷後留下的工作，並送出通知信。用 `npx wrangler deploy --config workers/publication-dispatch/wrangler.jsonc` 部署（preview 加 `--env preview`），與 Pages 部署分開。
+獨立 `tw-catalog-publication-dispatch` Worker 綁同一個 production identity D1 與活動資料 bucket，每分鐘執行，沒有 HTTP 入口。它只接手核准請求中斷後留下的工作，並送出通知信。用 `npm run publication:deploy`（preview：`publication:deploy:preview`）部署，與 Pages 部署分開。
 
 Worker 的 `preview_urls: false` 與 observability 也納入設定，保留既有 Dashboard 的入口／日誌狀態，避免 Wrangler 預設值在部署時覆寫。`tw-catalog-publication-dispatch` 與 `tw-catalog-retention-purge` 兩個 Worker 都開啟 Workers Logs 與 Workers Traces（`head_sampling_rate: 1`、`invocation_logs: true`、`persist: true`），因為兩者都只有 cron 入口，沒有使用者會替它們回報失敗；`observability` 是可繼承欄位，`env.preview` 不必重寫。
 
@@ -147,7 +147,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))" |
 
 三件必須知道的事：
 
-- **新增或修改密鑰後必須重新部署。** Pages 的密鑰是在建立 deployment 時綁定的，既有 deployment 不會追溯取得新密鑰。症狀是所有 `/api/*` 回 503「服務尚未設定完成」，而 `wrangler pages secret list` 明明列得出來。用 `gh workflow run deploy-pages.yml --ref main` 重跑即可。
+- **新增或修改密鑰後必須重新部署。** Pages 的密鑰是在建立 deployment 時綁定的，既有 deployment 不會追溯取得新密鑰。症狀是所有 `/api/*` 回 503「服務尚未設定完成」，而 `wrangler pages secret list` 明明列得出來。用 `gh workflow run ci.yml --ref main` 重跑即可。
 - **`SESSION_SECRET` 一旦上線就不要更換。** 它簽署 session cookie，更換等同讓所有已登入的社團同時被登出。
 - **`ADMIN_EMAILS` 只在管理者名單為空時作為種子。** 名單存在 D1 的 `admins` 表，之後從 `/admin` 增減，立即生效、不需重新部署。見[社團自助控制面契約](../contracts/circle-portal.md#管理者)。
 
@@ -181,36 +181,30 @@ npx wrangler pages deployment tail https://<deployment-id>.tw-catalog.pages.dev 
 
 ## CI 行為
 
-Browser 驗證由 `.github/workflows/browser.yml` 在 PR 與手動 dispatch 執行，使用獨立的取消／排隊範圍。`Browser acceptance` 仍是活動發布 PR 在相同 head SHA 上必須實際成功的檢查；main 不重跑 browser 全套。Browser workflow 的失敗不占住 Pages 的 main 部署鎖，也不改變正式部署的固定 SHA、attempt、必要 smoke 與舊版本拒絕規則。
+`.github/workflows/ci.yml` 是唯一的 workflow（#546）。每次變更都跑同一組檢查，不依路徑分類；只改文件也照跑，多花幾分鐘 runner 時間，換來不必維護分類規則。
 
-`.github/workflows/deploy-pages.yml`：
+| Job | 何時執行 | 做什麼 |
+|---|---|---|
+| `Verify` | 每次 | `npm ci`、lint、型別檢查、`npm test` |
+| `Browser acceptance` | PR 與手動 dispatch | 完整 browser journeys；main 不重跑 |
+| `Deploy` | `Verify` 通過後；fork PR 不執行 | 見下表 |
+| `Full preview portal E2E` | 同 repository 的 PR，部署後 | 對本次 preview deployment 實走 portal 流程 |
 
-先由 `Classify verification scope` 比較整次 push 的 before→after，或 PR base→受測 merge tree；新增、刪除及 rename 的兩端都納入。[ci-scope.mjs](../../scripts/ci-scope.mjs) 允許已列出的內部 Markdown、設計證據、`.evidence/`、issue／PR 模板及開發工具走非產品流程。另只有 event-data pins、`published-events.json`、circle identity allocations／evidence 的純資料變更可成為 `publication-data` 候選。公開隱私權頁、產品程式、bindings、依賴、測試／CI 基礎設施、混合及未知路徑維持完整 gate；歷史不完整時也回到完整 gate。分類失敗不放行後續工作。
-
-main 的非完整候選、以及 PR 的 `publication-data` 候選，另比較最近成功 main push 的部署 SHA→目前版本，避免未交付的程式差異被跳過。基準須為比較範圍的 ancestor，來自同一 workflow，整個 run 及唯一的 `Verify and deploy` job 都成功；非產品 run 的 skipped deploy 不算基準。只查最近 20 個成功 run，找不到、API／歷史不可驗證或遇到手動部署時保守執行完整 gate；兩個 workflow 的分類 job 需要 `actions: read`。
-
-`publication-data` 目前與完整 gate 跑相同的 build 與 browser 檢查。活動資料改由 R2 提供後（[#546](https://github.com/dekkmarsvin/tw_doujin_event/issues/546)），pin 變更不再影響部署內容，這個 profile 會在 #546 階段 4 隨 CI 重整移除。
-
-Browser job 使用與 Playwright lockfile 版本相符的官方容器，內含 browser 與 Linux libraries，避免每次執行 apt。更新 Playwright 時同步更新 image tag；容器拉取時間算進整個 job 耗時，不只比較安裝 step。
-
-輕量流程的 `Check non-product changes` 執行 contribution-files（已含 doc-map），tooling 類另檢查 Claude JSON、hook 語法與非遠端模式。不部署、不跑產品 Node／browser／remote preview E2E；summary 明確標示它們不適用且未執行，不能當成那些測試通過的證據。以下部署表適用完整 gate；手動 dispatch 一律完整執行。
-
-| 觸發 | 行為 |
+| 觸發 | 部署 |
 |---|---|
-| push 到 `main` | 完整 gate 通過後以 branch `main` 發布到 `tw-catalog`；production origin smoke 必須通過，再以獨立 job 匿名觀測正式入口 `map.kotoban.top` |
+| push 到 `main` | 以 branch `main` 發布到 `tw-catalog`，production origin smoke 必須通過 |
 | 同 repository 的 pull request | 以 branch `pr-<number>` 發布到**同一個 project**，網址 `pr-<number>.tw-catalog.pages.dev`；不覆蓋 production |
-| fork pull request | **不執行 deploy job**，避免把 Cloudflare token 暴露給外部程式碼 |
+| fork pull request | **不部署**，避免把 Cloudflare token 暴露給外部程式碼 |
 | `workflow_dispatch` | 從 GitHub Actions 頁面手動重跑目前 branch |
 
 - **只有一次部署，沒有先發到開發環境再晉升的流程。**
-- PR 在 workflow 層取消同 PR 的舊 run；main 不自動取消，使用 `queue: max` 保留最多 100 個 pending run。GitHub 依進入鎖的順序執行，不保證 dispatch 順序。分類 job 先查 main：開始時已被取代的 run 在測試與 browser 之前結束，不長時間占住鎖；部署前再查一次，涵蓋只重跑失敗 job 時沿用舊分類結果的情況，避免延遲 run 回退 production。滿佇列仍可能取消，不能把排隊等同交付。[GitHub concurrency 規則](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)。
-- 分類也在 workflow 鎖內；文件更新若仍含未交付產品差異，會承接完整 gate。publication 維持原 SHA／attempt 與必要 smoke；舊 run 失敗且 main 已前進，或 origin commit 已由 GitHub ancestry 證明是本 SHA 之後、目前 main 歷史中的版本時，回不可重試 superseded，交由管理者核對，不能反覆重跑舊 checkout 或自動算成 published。後續只有文件更新而未部署時也適用。
+- PR 的新 push 取消同 PR 的舊 run；main 上執行中的部署不會被中途取消，排隊中的 run 由最新的一個取代。
 - Node.js `24.20.0`（`.nvmrc`）、npm `11.19.0`、`npm ci`、Wrangler `4.120.1`，build output 固定為 `dist`。
 - Pages 使用 repository root 的 `wrangler.jsonc`；獨立 Worker 使用各自目錄的設定。
+- Browser job 使用與 Playwright lockfile 版本相符的官方容器，內含 browser 與 Linux libraries。更新 Playwright 時同步更新 image tag。
 - **preview 環境不繼承 production 的 secrets。** preview 的 session、pepper、E2E token 與 Mailgun 金鑰都必須用 `--env preview` 設定；preview 的寄件網域是 `verify.kotoban.top`。
 - **401 wiring smoke 與完整 portal E2E 是兩件事。** production origin 與 preview smoke 的 200 只證明靜態資產上線，401 只證明 handler 可建立且 session／pepper 存在，**沒有寄信、D1 寫入或管理流程**。PR 的「Full preview portal E2E」才會實走 request link → mail sink → verify → claim → admin approval → preview → edit → public overlay。
 - `Full preview portal E2E` 使用該 run 的 immutable deployment URL，排隊期間即使 PR branch alias 已前進，也不會改驗另一版本。共用 preview 資源的 E2E 仍以同一個全域鎖序列執行；不代表每個 PR 擁有獨立 D1。
-- `map.kotoban.top` 的匿名觀測是獨立 advisory job。它成功時補上 custom domain、公開 Access 邊界與 Functions 的讀者視角；失敗時留下 warning 與 `cf-ray` 診斷，不把已由 production origin 證明成功的部署標成失敗。決策見 [ADR-0034](../adr/0034-production-origin-gates-deployment.md)。
 - E2E 先讀 Cloudflare 的本次 deployment 快照，核對 deployment ID、immutable URL、commit、preview 環境、成功狀態，以及 `DB` UUID／兩個 R2 bucket 名稱均符合 preview 設定。另讀 project 的 canonical production deployment，確認 preview 同時與 repo 宣告及實際 production 資源不重疊，避免 PR 誤改宣告掩蓋重疊；失敗時不開始產品操作。不查 production 資料筆數，也不寫額外隔離探針。
 - 每個 run／attempt 使用保留的 `preview-admin+e2e-<runId>@example.test`、`preview-circle+e2e-<runId>@example.test`。只有對應 base 地址已列入 preview sink allowlist 才可使用；受 token 保護的 POST 建立該 run 的 admin。社團依搜尋結果順序逐一以 POST 核對原始 D1，任何狀態的 claims／overrides、或該社團 R2 prefix 中任一物件均略過；公開投影空白不代表原始資料不存在。取第一個沒有資料的社團走正常認領與編輯，全部都有資料時失敗，不覆寫人工資料。
 - 流程開始時以 `DELETE /api/preview/mail` 加 JSON `{ "runId": "…", "finishedRuns": true }` 清除已結束 run 留下的保留 fixture：E2E job 持有全域 `preview-portal-e2e` 鎖，所以此時仍在 D1 的保留身分都屬於已結束的 run，包含自己的 cleanup 沒完成的 run。只比對上述保留地址，人工資料與相似但不在保留格式內的地址一律不動。遠端 journey 只在該 CI job 內執行，不另外手動對 preview 跑，以免繞過這個鎖。
@@ -268,15 +262,18 @@ npx wrangler r2 object put tw-doujin-event-data/index.json --file index.json --c
 
 獨立部署，見[排程清除 Worker](./retention-purge-worker.md)。
 
-## 獨立 Worker 的版本與條件交付
+## 獨立 Worker
 
-Pages 完整 CI 另執行 `node scripts/worker-delivery.mjs --build-only`：使用鎖定 Wrangler dry build，從實際打包的傳遞依賴、lockfile、Node 版本及有效環境設定產生 fingerprint。結果是「built-not-deployed」，不代表線上 Worker 已更新。涵蓋帳號上既有的四個 Worker：publication production／preview、retention production／preview；不為其他環境建立新的 Worker。
+`tw-catalog-publication-dispatch` 與 `tw-catalog-retention-purge` 不隨 Pages 部署，CI 也不部署它們。改了 Worker 會用到的程式（`app/publication-dispatch.ts`、`db/retention-purge.ts` 等）後，合併到 main 再手動部署：
 
-`Inspect or deploy independent Workers` 是手動 workflow，預設 `apply=false`：查 active deployment 的唯一 100% version，記錄 target、environment、commit、fingerprint、deployment ID／version ID。尚無 fingerprint tag 的既有版本記為 `source-unverified`，不推定它落後。相同來源標記只證明程式對應，不代替 cron 執行、郵件送達或產品驗收。
+```bash
+npm run publication:deploy
+npm run publication:deploy:preview
+npm run purge:deploy
+npm run purge:deploy:preview
+```
 
-維護者選擇 `apply=true` 才更新有不同／未知 fingerprint 的目標。只接受乾淨且仍等於遠端 main 的 checkout；先核對既有 vars、D1／R2、其他 binding 與 cron 未漂移，保留外部 vars／secrets，再部署並重查實際 active version。設定不符須另行處置；部署回應或複查失敗記為未確認並保留已完成目標的證據，不能當成功。每個 mutation 前重查 main，整個手動 workflow 序列排隊。不要用一般 Pages 綠燈取代這個交付結果。
-
-本機可用同一腳本 `--audit` 做唯讀查核、`--apply --target <target>` 做已授權交付；需 Cloudflare account ID 與具有對應讀取／部署權限的 token。報告在 `.wrangler/worker-delivery.json`；Actions summary／七天 artifact 供本次診斷，實際驗收證據仍摘錄到 issue／PR。
+部署後用 `npx wrangler deployments list --config <設定檔>` 確認 active version 是剛才那次。
 
 ## 發布前 gate
 
@@ -310,7 +307,7 @@ Pages 每次部署都是不可變 deployment。若正式版本有問題：
 
 正式寄送由同環境 D1 `account_notifications_enabled` 控制，Pages producer 與 Worker 均讀取最新設定。Admin 從關閉改為啟用時自動建立 `account_notifications_since`，取消早於起點的舊 pending，不補寄停用期間事件。登入／邀請、待審通知與發布各自獨立；origin 沿用 `NOTIFICATION_ORIGIN`。
 
-正式啟用前依 Worker delivery audit 核對 active version、binding、schedule、source fingerprint，並取得有授權 preview 信箱的社團結果、主辦結果與摘要收信證據。D1 sink、provider accepted、delivered、人工觀察分開記錄在 issue／PR；不由 CI 或 Pages 部署推定 Worker／收件匣已完成。preview 白名單與 Mailgun secrets 沿用既有隔離規則，不將 production 地址放入測試。
+正式啟用前確認 Worker 已部署目前版本，並取得有授權 preview 信箱的社團結果、主辦結果與摘要收信證據。D1 sink、provider accepted、delivered、人工觀察分開記錄在 issue／PR；不由 CI 或 Pages 部署推定 Worker／收件匣已完成。preview 白名單與 Mailgun secrets 沿用既有隔離規則，不將 production 地址放入測試。
 
 `account_notifications.tick` 含 batch ID 與結果；D1 批次保存安全錯誤分類及 provider ID，不記錄地址／信件全文於正式 logs。每 tick 最多 10 個批次、每摘要最多 100 項；租約 120 秒，批次內容固定，暫時錯誤退避至 6 小時，首次嘗試 48 小時後終止，完成／取消／失敗 30 天清除。外部已受理但寫回失敗可能重複，禁止以重試成功宣稱 exactly-once。
 
@@ -321,7 +318,7 @@ Pages 每次部署都是不可變 deployment。若正式版本有問題：
 既有環境透過保留一次性 env seed 的 PR #480 遷移；完成初始值、Pages／Worker 與 D1 核對後，Phase 5 移除舊五個營運環境旗標與 GitHub build variable，以及初始化讀取。現行版本只由 D1 管理營運設定，不保留 env fallback。
 
 - 新環境先部署 Pages 並登入 `/admin?section=settings` 初始化。預設暫停申請、空名單、通知與發布關閉；由管理者在 Admin 開啟所需功能。
-- 再部署 publication-dispatch Worker，執行 `node scripts/worker-delivery.mjs --audit` 核對同環境 D1 binding、active version、schedule 與 source fingerprint。Worker 不 seed 營運設定；只有 Pages／CI 成功不代表 Worker 已更新。
+- 再部署 publication-dispatch Worker（見[獨立 Worker](#獨立-worker)），確認 active version 是剛才那次。Worker 不 seed 營運設定；只有 Pages／CI 成功不代表 Worker 已更新。
 - 在 Admin 保存設定、重新載入並核對；下一次 request／scheduled tick 使用 D1 新值。手動「檢查服務」由實際 Worker 執行，不寄測試信或修改儲存庫；無結果／無診斷讀取權不宣稱寄信或發布失敗。
 - `ORGANIZER_PUBLICATION_MODE`、憑證、binding、通知 origin 維持部署設定。
 

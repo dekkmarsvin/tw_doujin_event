@@ -105,7 +105,7 @@ node --test tests/contribution-files.test.mjs
 
 這項測試檢查文件之間的相對連結與錨點，以及 issue 表單的 triage 標籤。
 
-CI 以 [ci-scope.mjs](../../scripts/ci-scope.mjs) 的保守 allowlist 分類：內部文件、證據與已列出的開發工具跑文件檢查；開發工具另查 Claude 設定 JSON、hook shell 語法與非遠端模式。這些變更不部署，也不執行產品 Node／browser／remote preview E2E。未知路徑、混合產品變更、測試／CI 基礎設施、公開文件、依賴或無法核對的比較歷史都走完整 gate；手動 dispatch 同樣完整執行。精確 CI 行為見[部署 runbook](./deployment.md#ci-行為)。
+CI 不依路徑分類，文件變更也跑完整檢查，見[部署 runbook](./deployment.md#ci-行為)。
 
 ### 開發途中只跑相關的測試
 
@@ -136,9 +136,7 @@ node scripts/run-tests.mjs module cli --concurrency=2
 
 ### 瀏覽器驗收
 
-CI 的 `Browser acceptance` 位於獨立 `Browser verification` workflow，只在 PR 與手動 dispatch 執行；main 不重跑全套，也不讓 browser 的完成時間占住正式部署佇列。活動發布 PR 仍須取得同 head SHA 的成功結果才能自動合併。
-
-`publication-data` profile 目前與完整 gate 跑相同的 browser journeys；#546 階段 4 會移除它。CI 使用 Playwright 官方固定版本容器，本機仍可用既有安裝指令。
+CI 的 `Browser acceptance` job 只在 PR 與手動 dispatch 執行，main 不重跑全套。CI 使用 Playwright 官方固定版本容器，本機仍可用既有安裝指令。
 
 新增或補強 UI 行為驗收時，優先修改既有 journey，不為同一流程新增另一套。核對附近的 JSX／CSS／原始碼斷言：有價值的行為保護，確認另一層已涵蓋或改成適當行為測試後移除；低價值、重複、過時或只鎖定實作的斷言，可直接刪除，不要求一對一補測。PR 用一句話說明新增／刪除的保護與原因即可，不建立測試清冊或新 gate。
 

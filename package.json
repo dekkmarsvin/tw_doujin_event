@@ -41,6 +41,8 @@
     "test:browser:matrix": "node scripts/run-browser-tests.mjs --matrix full",
     "test:browser:install": "playwright install chromium",
     "lint": "eslint .",
+    "publication:deploy": "wrangler deploy --config workers/publication-dispatch/wrangler.jsonc",
+    "publication:deploy:preview": "wrangler deploy --config workers/publication-dispatch/wrangler.jsonc --env preview",
     "purge:dev": "wrangler dev --config workers/retention-purge/wrangler.jsonc --test-scheduled",
     "purge:deploy": "wrangler deploy --config workers/retention-purge/wrangler.jsonc",
     "purge:deploy:preview": "wrangler deploy --config workers/retention-purge/wrangler.jsonc --env preview"
