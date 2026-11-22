@@ -34,11 +34,3 @@ test("publication paths fail closed outside the two repository allowlists", asyn
   await assert.rejects(publication.assemblePublicationBundle({ ...base, mainFiles: [{ path: "app/event-map-app.tsx", content: "x" }] }), /not allowed/);
   await assert.rejects(publication.assemblePublicationBundle({ ...base, dataFiles: [{ path: "events/other/event.json", content: "x" }] }), /not allowed/);
 });
-
-test("GitHub webhook HMAC accepts exact bytes and rejects tampering", async () => {
-  const body = JSON.stringify({ action: "completed", check_run: { id: 1 } });
-  const signature = await publication.signGitHubWebhookForTest("secret", body);
-  assert.equal(await publication.verifyGitHubWebhookSignature("secret", body, signature), true);
-  assert.equal(await publication.verifyGitHubWebhookSignature("secret", `${body} `, signature), false);
-  assert.equal(await publication.verifyGitHubWebhookSignature("secret", body, "sha256=00"), false);
-});

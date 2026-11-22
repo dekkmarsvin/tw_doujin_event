@@ -1,4 +1,3 @@
-import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { buildOfficialCatalogPayload } from "../../scripts/official-catalog-core.mjs";
@@ -43,33 +42,6 @@ export async function amendmentFixture(runner, adjustSnapshot = () => {}) {
   return { now, source, snapshot, baseline, published, mainFiles, dataFiles, referenceRecords };
 }
 
-export function gitReaderFixture(fixture) {
-  const reads = [];
-  const main = fixture.mainFiles;
-  const original = new Map(fixture.originalMainFiles ?? main);
-  const data = fixture.dataFiles;
-  const commits = new Map([[fixture.source.mainCommit, original], [fixture.baseline.mainCommit, main],
-    [fixture.source.dataCommit, fixture.originalDataFiles ?? data], ...(fixture.extraCommits ?? [])]);
-  return { reads, original, async fetch(url, init) {
-    assert.ok(!init?.method || init.method === "GET", "baseline loading must never write to GitHub");
-    const path = new URL(url).pathname;
-    reads.push(path);
-    if (path.endsWith("/git/ref/heads/main")) return Response.json({ ref: "refs/heads/main", object: { type: "commit", sha: fixture.baseline.mainCommit } });
-    const commit = path.match(/\/git\/commits\/([a-f0-9]{40})$/)?.[1];
-    if (commit && commits.has(commit)) return Response.json({ sha: commit, tree: { sha: commit }, parents: [], message: "fixture" });
-    const tree = path.match(/\/git\/trees\/([a-f0-9]{40})$/)?.[1];
-    if (tree && commits.has(tree)) return Response.json({ sha: tree, truncated: false, tree: [...commits.get(tree)].map(([path, text]) => ({ path, type: "blob", mode: "100644", sha: hash(text).slice(0, 40) })) });
-    const blob = path.match(/\/git\/blobs\/([a-f0-9]{40})$/)?.[1];
-    if (blob) for (const files of commits.values()) for (const text of files.values()) {
-      if (hash(text).slice(0, 40) === blob) return Response.json({ sha: blob, encoding: "base64", content: Buffer.from(text).toString("base64") });
-    }
-    throw new Error(`Unexpected GitHub read ${path}`);
-  } };
-}
-
-/** A reviewed migration merges the same two circles across two days, while
- * preserving their earliest IDs and all four placements. Old approvals stay
- * byte-for-byte unchanged, just like the PF45 correction in PR #416. */
 export async function adoptedAmendmentFixture(runner) {
   const data = await amendmentFixture(runner, (snapshot) => {
     snapshot.draft.event.days.push({ id: "2", label: "第二天", date: "2026-11-08" });
@@ -77,8 +49,6 @@ export async function adoptedAmendmentFixture(runner) {
     snapshot.maps.push({ ...structuredClone(snapshot.maps[0]), id: "day-two", periodKey: "2" });
   });
   const { baselineCanonicalJson, baselineEventEvidence } = await runner.import("/app/organizer-baseline-adoption.ts");
-  data.originalMainFiles = new Map(data.mainFiles);
-  data.originalDataFiles = new Map(data.dataFiles);
   const grouping = buildOrganizerCircleGrouping(data.baseline.event.id, data.snapshot.import.rows, data.snapshot.draft.officialSource.url);
   const groupingPath = "events/event-alpha/circle-identity-groups.json";
   const text = JSON.stringify(grouping, null, 2) + "\n";
@@ -101,7 +71,6 @@ export async function adoptedAmendmentFixture(runner) {
       pinSha256: hash(baselineCanonicalJson(pin)), groupingSha256: hash(baselineCanonicalJson(grouping)),
       evidenceSha256: hash(baselineCanonicalJson(baselineEventEvidence(evidence, data.baseline.event.id))) },
     authorization: { pullRequest: "https://github.com/dekkmarsvin/tw_doujin_event/pull/416", decision: "ADR-0071" } };
-  data.extraCommits = [[pin.commit, data.dataFiles], [data.adoption.target.mainCommit, new Map(data.mainFiles)]];
   data.expectedBaseline = { ...data.baseline, schema: "organizer-amendment-baseline/2", pin, grouping, evidence,
     adoption: { record: data.adoption, sha256: hash(baselineCanonicalJson(data.adoption)) } };
   return data;

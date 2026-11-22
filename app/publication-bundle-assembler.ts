@@ -90,21 +90,3 @@ export async function assemblePublicationBundle(input: PublicationBundleInput): 
     bundleHash: await sha256(hashInput),
   };
 }
-
-async function hmacKey(secret: string, usage: KeyUsage[]) {
-  return crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, usage);
-}
-
-export async function verifyGitHubWebhookSignature(secret: string, body: string, signature: string | null) {
-  if (!signature?.startsWith("sha256=")) return false;
-  const value = signature.slice(7);
-  if (!/^[0-9a-f]{64}$/u.test(value)) return false;
-  const bytes = new Uint8Array(value.match(/../gu)!.map((pair) => Number.parseInt(pair, 16)));
-  return crypto.subtle.verify("HMAC", await hmacKey(secret, ["verify"]), bytes, encoder.encode(body));
-}
-
-/** Exported solely to construct exact signatures in runtime-agnostic tests. */
-export async function signGitHubWebhookForTest(secret: string, body: string) {
-  const signature = await crypto.subtle.sign("HMAC", await hmacKey(secret, ["sign"]), encoder.encode(body));
-  return `sha256=${hex(signature)}`;
-}

@@ -30,7 +30,7 @@ beforeEach(async () => {
   handlers = createCirclePortalHandlers({ repository: repo, sendMail: async () => {}, lookupCircle: async () => null, searchCircles: async () => [],
     fetchEvidence: async () => null, verifyHuman: async () => true, turnstileSitekey: () => "test", projectCircle: async () => null,
     config: { eventId: "sample", origin, sessionSecret: "secret", hashPepper: "pepper", adminEmails: [], now: () => now,
-      dataUpdatedAt: "2026-09-01T00:00:00Z", eventEndsAt: "2027-12-31T00:00:00Z", organizerPublicationMode: "github" } });
+      dataUpdatedAt: "2026-09-01T00:00:00Z", eventEndsAt: "2027-12-31T00:00:00Z", organizerPublicationMode: "r2" } });
 });
 function request(method = "GET", body, signed = cookie) {
   return new Request(`${origin}/api/admin/site-settings`, { method, headers: { origin, "content-type": "application/json", ...(signed ? { cookie: signed } : {}) },
@@ -184,7 +184,8 @@ test("service checks use Worker credentials, return safe sources and never send 
   assert.doesNotMatch(JSON.stringify(rejected), /never-return|secret-provider/);
   assert.equal((await checkMailService(env, async () => new Response(null, { status: 403 }))).status, "unknown");
   assert.equal((await checkMailService(env, async () => { throw new Error("timeout"); })).status, "unknown");
-  assert.equal((await checkPublicationService({ ORGANIZER_PUBLICATION_MODE: "github" })).source, "GitHub App 設定");
+  assert.equal((await checkPublicationService({ ORGANIZER_PUBLICATION_MODE: "r2" })).status, "available");
+  assert.equal((await checkPublicationService({ ORGANIZER_PUBLICATION_MODE: "github" })).status, "unavailable", "the Git pipeline is gone");
   await repo.requestServiceCheck(now + 1);
   await repo.completeServiceCheck(checked.requestedAt, now + 2, { mail: rejected, publication: rejected });
   assert.equal((await repo.getServiceChecks()).checkedAt, null, "an older check cannot overwrite a newer request");

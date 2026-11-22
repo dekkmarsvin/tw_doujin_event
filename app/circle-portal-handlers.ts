@@ -121,11 +121,10 @@ type PortalConfig = {
    */
   publishedEvent?: (eventId: string) => Promise<{ dataUpdatedAt: string; eventEndsAt: string } | null>;
   /** Merge remains off until the GitHub App and both repository rulesets are verified. */
-  organizerPublicationMode?: "disabled" | "fake" | "github" | "r2";
+  organizerPublicationMode?: "disabled" | "fake" | "r2";
 };
 
 type PortalDependencies = {
-  auditPublicationRecovery?: import("./organizer-publication-recovery").PublicationRecoveryAudit;
   loadPublishedAmendmentBaseline?: (source: AmendmentPublishedSource) => Promise<OrganizerAmendmentBaseline>;
   /** Durable dispatch only; never wait for checks or deployment in a request.
    * Omitted until the production driver and rollout gates are verified. */
@@ -167,10 +166,8 @@ type PortalDependencies = {
   resolveMapContributionScope?: (input: { periodKey: string; venueSpaceId: string }) => Promise<MapContributionScope | null>;
   /** Reads only the reviewed public repository snapshot used as diff base. */
   readPublishedEventMap?: (targetPath: string) => Promise<PublishedEventMap | null>;
-  /** Fixed-scope, server-side GitHub App installation probe. */
-  githubInstallationProbe?: () => Promise<{ ok: true }>;
-  /** Audits the fixed publication repositories before a failed candidate is reopened. */
-  githubRemoteAuditor?: (jobId: string) => Promise<{ clear: true }>;
+  /** Confirms readers do not see a failed job's approval before its candidate is reopened. */
+  publicationAuditor?: (jobId: string) => Promise<{ clear: boolean }>;
   config: PortalConfig;
 };
 
@@ -237,12 +234,11 @@ async function readJson(request: Request): Promise<Record<string, unknown> | nul
 }
 
 export function createCirclePortalHandlers({
-  auditPublicationRecovery,
   loadPublishedAmendmentBaseline,
   dispatchOrganizerPublication,
   repository, sendMail, mailRecipientAllowed, lookupCircle, searchCircles, fetchEvidence, verifyHuman, turnstileSitekey,
   projectCircle, thumbnailStore, mapContributionStore, resolveMapContributionScope, readPublishedEventMap,
-  githubInstallationProbe, githubRemoteAuditor, config,
+  publicationAuditor, config,
 }: PortalDependencies) {
   // The roster lives in the database so it can change without a redeploy.
   // Normalized on both sides, as a stored account email is: comparing a raw
@@ -1188,26 +1184,6 @@ export function createCirclePortalHandlers({
     const body = await readJson(request);
     if (!body || Object.keys(body).length) return json({ error: "請求格式無效。" }, 400);
     return json({ services: await repository.requestServiceCheck(config.now()) }, 202);
-  }
-
-  async function adminProbeGitHubInstallation(request: Request) {
-    const gate = await requireAdmin(request);
-    if (!gate.ok) return gate.response;
-    const body = await readJson(request);
-    if (!body || Object.keys(body).length !== 0) {
-      return json({ error: "請求格式無效。", code: "invalid_request" }, 400);
-    }
-    if (!githubInstallationProbe) {
-      return json({ error: "GitHub App 尚未設定。", code: "github_app_not_configured" }, 503);
-    }
-    try {
-      await githubInstallationProbe();
-      return json({ ok: true });
-    } catch (error) {
-      const code = error instanceof PublicationFailure && error.code === "github_app_config"
-        ? "github_app_not_configured" : "github_installation_probe_failed";
-      return json({ error: "GitHub App installation probe failed.", code }, 503);
-    }
   }
 
   async function adminManageMapContributor(request: Request) {
@@ -2799,11 +2775,6 @@ export function createCirclePortalHandlers({
       publicationAvailable: config.organizerPublicationMode !== undefined && config.organizerPublicationMode !== "disabled" && Boolean(dispatchOrganizerPublication),
       claimReviewAvailable: Boolean(candidate.event_id && (config.publishedEvent
         ? await config.publishedEvent(candidate.event_id) : candidate.event_id === config.eventId)),
-      recoveryAvailable: Boolean(access.admin && auditPublicationRecovery && loadPublishedAmendmentBaseline
-        && candidate.publication_operation === "AMEND" && candidate.status === "failed"
-        && publication?.status === "failed" && publication.candidate_version === candidate.current_version
-        && publication.data_merge_sha && publication.main_pr_number && publication.main_head_sha
-        && !publication.main_merge_sha && !publication.workflow_run_id),
       publication: publication ? {
         id: publication.id,
         status: publication.status,
@@ -3767,62 +3738,6 @@ export function createCirclePortalHandlers({
     return json({ ok: true, jobId, status: (await repository.getOrganizerPublicationJob(jobId))?.status, step: result.step });
   }
 
-  /**
-   * Retire an unpublished amendment only after a separate restoration PR is
-   * verified under the publication lease. Its failed job remains immutable
-   * history; a new candidate requires a new submission and approval.
-   */
-  async function abandonOrganizerAmendment(request: Request, candidateId: string) {
-    const access = await organizerAccess(request, candidateId);
-    if (!access.ok) return access.response;
-    if (!access.admin) return json({ error: "只有網站管理者可以終止失敗修正。" }, 403);
-    const body = await readJson(request);
-    const expectedVersion = body?.expectedVersion;
-    const restorationPullNumber = body?.restorationPullNumber;
-    const reason = typeof body?.reason === "string" ? body.reason.normalize("NFKC").trim() : "";
-    if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1
-      || !Number.isSafeInteger(restorationPullNumber) || (restorationPullNumber as number) < 1 || !reason || reason.length > 1000
-      || Object.keys(body!).some((key) => !["expectedVersion", "restorationPullNumber", "reason"].includes(key))) {
-      return json({ error: "請填寫還原 PR 編號與終止原因，並使用目前版本。" }, 400);
-    }
-    if (!auditPublicationRecovery || !loadPublishedAmendmentBaseline) return json({ error: "目前無法核對還原紀錄。" }, 503);
-    const lease = await repository.claimOrganizerRecoveryLease({ candidateId, expectedVersion: expectedVersion as number,
-      actorAccountId: access.current.accountId, now: config.now() });
-    if (!lease) return json({ error: "目前狀態不適用此恢復流程，或另一筆發布正在處理。請重新載入。" }, 409);
-    try {
-      const job = await repository.getOrganizerPublicationJob(lease.jobId);
-      const stored = await repository.getOrganizerAmendment(candidateId);
-      const snapshot = await repository.getOrganizerSubmissionSnapshot(candidateId, expectedVersion as number);
-      if (!job || !stored || !snapshot || snapshot.id !== job.snapshot_id || snapshot.sha256 !== job.approval_hash
-        || await sha256Hex(snapshot.snapshot_json) !== job.approval_hash) throw new Error("snapshot");
-      const approved = JSON.parse(snapshot.snapshot_json);
-      if (approved.candidateId !== candidateId || approved.candidateVersion !== expectedVersion
-        || approved.operation !== "AMEND" || approved.amendment?.baselineJson !== stored.baseline_json
-        || approved.amendment?.baselineSha256 !== stored.baseline_sha256) throw new Error("baseline");
-      const baseline = await readOrganizerAmendmentBaseline(stored.baseline_json, stored.baseline_sha256);
-      const source = await repository.getOrganizerCandidate(baseline.source.candidateId);
-      const sourceJob = await repository.getOrganizerPublicationJob(baseline.source.jobId);
-      const sourceSnapshot = await repository.getOrganizerSubmissionSnapshot(baseline.source.candidateId, baseline.source.candidateVersion);
-      if (!source || source.status !== "published" || source.current_version !== baseline.source.candidateVersion
-        || source.published_version !== baseline.source.candidateVersion || !sourceJob || sourceJob.status !== "published"
-        || sourceJob.candidate_id !== source.id || sourceJob.candidate_version !== source.current_version
-        || sourceJob.snapshot_id !== baseline.source.snapshotId || sourceJob.approval_hash !== baseline.source.approvalHash
-        || sourceJob.data_merge_sha !== baseline.source.dataCommit || sourceJob.main_merge_sha !== baseline.source.mainCommit
-        || !sourceSnapshot || sourceSnapshot.id !== sourceJob.snapshot_id) throw new Error("source");
-      const current = await loadPublishedAmendmentBaseline({ ...baseline.source, snapshotJson: sourceSnapshot.snapshot_json });
-      if (JSON.stringify(current.pin) !== JSON.stringify(baseline.pin)) throw new Error("published");
-      const evidence = await auditPublicationRecovery({ job, baseline, restorationPullNumber: restorationPullNumber as number });
-      if (!evidence || evidence.restorationPullNumber !== restorationPullNumber) throw new Error("audit");
-      const committed = await repository.abandonRestoredOrganizerAmendment({ candidateId, expectedVersion: expectedVersion as number,
-        actorAccountId: access.current.accountId, now: config.now(), job, leaseToken: lease.token,
-        baselineSha256: stored.baseline_sha256, reason, evidence });
-      if (!committed) return json({ error: "版本、權限或處理時間已變更，請重新載入後再試。" }, 409);
-      return json({ ok: true, status: "abandoned", sourceCandidateId: baseline.source.candidateId });
-    } catch {
-      return json({ error: "還原紀錄或公開基準未通過核對，這次修正仍維持失敗狀態。", code: "publication_recovery_unverified" }, 409);
-    } finally { await repository.releaseOrganizerPublicationLease(lease.jobId, lease.token); }
-  }
-
   async function reopenOrganizerCandidate(request: Request, candidateId: string) {
     const access = await organizerAccess(request, candidateId);
     if (!access.ok) return access.response;
@@ -3834,8 +3749,8 @@ export function createCirclePortalHandlers({
       || !reason || reason.length > 1000) {
       return json({ error: "版本與退回理由為必填，理由不可超過 1000 字。" }, 400);
     }
-    if (!githubRemoteAuditor) {
-      return json({ error: "目前無法確認發布儲存庫狀態，請稍後再試。", code: "github_remote_audit_unavailable" }, 503);
+    if (!publicationAuditor) {
+      return json({ error: "目前無法確認發布狀態，請稍後再試。", code: "publication_audit_unavailable" }, 503);
     }
     const now = config.now();
     const lease = await repository.claimFailedOrganizerCandidateReopenLease({
@@ -3856,19 +3771,10 @@ export function createCirclePortalHandlers({
       if (!await repository.hasOrganizerPublicationLease(lease.jobId, lease.token, config.now())) {
         return json({ error: "退回處理逾時，請重新載入後再試。", code: "lease_lost" }, 409);
       }
-      try {
-        const audited = await githubRemoteAuditor(lease.jobId);
-        if (!audited || audited.clear !== true) {
-          throw new PublicationFailure("github_remote_audit", "GitHub remote publication state could not be verified.", true);
-        }
-      } catch (error) {
-        const code = error instanceof PublicationFailure && error.code === "github_remote_started"
-          ? "remote_state_exists" : "github_remote_audit_failed";
-        const status = code === "remote_state_exists" ? 409 : 503;
-        return json({ error: code === "remote_state_exists"
-          ? "發布儲存庫已有這筆工作的遠端紀錄，無法安全退回修改。"
-          : "目前無法完整確認發布儲存庫狀態，請稍後再試。", code }, status);
-      }
+      let audited: { clear: unknown } | undefined;
+      try { audited = await publicationAuditor(lease.jobId); } catch { audited = undefined; }
+      if (audited?.clear === false) return json({ error: "這筆核准已經公開，不能退回修改。", code: "remote_state_exists" }, 409);
+      if (audited?.clear !== true) return json({ error: "目前無法確認發布狀態，請稍後再試。", code: "publication_audit_failed" }, 503);
       if (!await repository.hasOrganizerPublicationLease(lease.jobId, lease.token, config.now())) {
         return json({ error: "退回處理逾時，請重新載入後再試。", code: "lease_lost" }, 409);
       }
@@ -3943,7 +3849,6 @@ export function createCirclePortalHandlers({
     adminListAdmins, adminManageAdmins, adminAccountDetail, adminSearchAccountsByCircle, adminDisableAccount, adminManageMapContributor,
     // Cross-event and read-only; it filters to served events itself.
     adminReviewQueue,
-    adminProbeGitHubInstallation,
     // Candidate-scoped: an organizer candidate is addressed by candidateId and
     // exists before any event is published, so `eventScoped` — which demands a
     // published event this deployment serves — would refuse every one of them.
@@ -3956,7 +3861,7 @@ export function createCirclePortalHandlers({
     listOrganizerMaps, getOrganizerMap, createOrganizerMap, updateOrganizerMap,
     putOrganizerMapBackground, getOrganizerMapBackground, putOrganizerEventImage, getOrganizerEventImage,
     validateOrganizerCandidate, previewOrganizerCandidate, manageOrganizerCollaborators,
-    submitOrganizerCandidate, adminReviewOrganizerCandidate, adminRetryOrganizerPublication, reopenOrganizerCandidate, abandonOrganizerAmendment,
+    submitOrganizerCandidate, adminReviewOrganizerCandidate, adminRetryOrganizerPublication, reopenOrganizerCandidate,
     createOrganizerAmendment, getOrganizerAmendment, saveOrganizerAmendment,
     // Event-scoped: each answers only for the event the request named.
     listClaims: eventScoped(listClaims, true),

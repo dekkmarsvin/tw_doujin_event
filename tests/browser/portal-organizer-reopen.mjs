@@ -206,10 +206,8 @@ async function reviewPanel(page) {
 }
 
 async function expandTechnicalDetails(page, review) {
-  const details = review.locator("details").filter({ hasText: "技術詳細資訊" });
-  await details.locator("summary").click();
-  assert.notEqual(await details.getAttribute("open"), null, "technical details are expanded for the evidence capture");
-  await details.locator("p").first().waitFor();
+  // Administrators see the failure code beside the result; there is nothing to expand.
+  await review.getByText(/錯誤代碼：/).waitFor();
   await page.waitForTimeout(100);
 }
 
@@ -248,7 +246,7 @@ try {
   assert.equal(await owner.getByRole("button", { name: "退回修改", exact: true }).count(), 0, "the recovery action is gone after reopening");
   assert.equal(await owner.getByRole("button", { name: "重試發布", exact: true }).count(), 0, "the prior failed job cannot be retried after reopening");
   assert.deepEqual(ownerRoutes.reopenBodies, [{ expectedVersion: 1, reason: "補齊活動資料後重新送審" }]);
-  assert.equal(await ownerReview.locator("details").filter({ hasText: "技術詳細資訊" }).count(), 0, "owners see the publication result without internal diagnostics");
+  assert.equal(await ownerReview.getByText(/錯誤代碼：/).count(), 0, "owners see the publication result without internal diagnostics");
   await capture(owner, "organizer-reopen-owner-history", { panel: ownerReview });
 
   // #221: the numbered strip is gone and the readiness rail is the only
@@ -340,7 +338,7 @@ try {
   const startedRoutes = started.__reopen;
   await started.getByRole("button", { name: "登出", exact: true }).waitFor();
   const startedReview = await reviewPanel(started);
-  assert.match(await startedReview.innerText(), /目前發布進度不允許退回修改.*請聯絡網站管理者/);
+  assert.match(await startedReview.innerText(), /已經開始寫入，不能退回修改.*請聯絡網站管理者/);
   assert.equal(await startedReview.getByRole("textbox", { name: "退回理由", exact: true }).count(), 0, "a started publication has no reopen reason field");
   assert.equal(await startedReview.getByRole("button", { name: "退回修改", exact: true }).count(), 0, "a started publication has no reopen action");
   assert.equal(startedRoutes.reopenRequests, 0, "a started publication sends no reopen request");

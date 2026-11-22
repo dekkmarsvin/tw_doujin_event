@@ -38,9 +38,7 @@
     "MAILGUN_SENDER": "場刊 Map <noreply@verify.kotoban.top>",
     // Pages publishes to the event data bucket within the approving request
     // (#546); this Worker only finishes a job whose request ended early.
-    "ORGANIZER_PUBLICATION_MODE": "r2",
-    "GITHUB_APP_ID": "4931208",
-    "GITHUB_APP_INSTALLATION_ID": "161391064"
+    "ORGANIZER_PUBLICATION_MODE": "r2"
   },
   "d1_databases": [{
     "binding": "DB",

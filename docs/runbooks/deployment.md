@@ -75,33 +75,19 @@ production 的六個 runtime secret 以 `wrangler pages secret put` 設定。**�
 
 ### Organizer 發布
 
-活動申請與 publication 是不同的開關，由 `/admin?section=settings` 管理共用 D1 的即時設定。公開申請由維護者手動啟用；首頁沿用既有登入入口。#477 已接受決策取代 #163 原公開申請開關前置，真實零人工技術補救旅程仍屬 Organizer 里程碑驗收。
+活動申請與 publication 是不同的開關，由 `/admin?section=settings` 管理共用 D1 的即時設定。公開申請由維護者手動啟用；首頁沿用既有登入入口。
 
 新環境與既有設定遷移順序見[網站營運設定遷移](#網站營運設定遷移477)。申請模式不依賴前端 build 或重新部署；關閉仍保留已有申請、審核與工作區。
 
-Pages production 需設定 `GITHUB_WEBHOOK_SECRET`、`GITHUB_APP_ID`、`GITHUB_APP_PRIVATE_KEY`、`GITHUB_APP_INSTALLATION_ID`。Private key 與 webhook secret 不進 repo；App 僅安裝於固定 data／main 兩個 repository，啟用前置以 [ADR-0058 第 4 點](../adr/0058-publication-is-enforced-by-the-app-not-the-ruleset.md#4-開啟-production-publication-的前置) 為準，取代 ADR-0046 的舊 ruleset 前置。
+`ORGANIZER_PUBLICATION_MODE=r2` 時，核准在同一個請求內寫入活動資料 bucket，見[核准即發布](#核准即發布)。未設定時預設 disabled，核准與重試回 503；編輯、匯入、地圖、驗證、預覽與送審仍可使用。設定同時寫在根目錄 `wrangler.jsonc` 與 `workers/publication-dispatch/wrangler.jsonc`，不以 dashboard 臨時改值代替。
 
-`ORGANIZER_PUBLICATION_MODE` 未設定時預設 disabled，核准／重試與 webhook 回 503；編輯、匯入、地圖、驗證、預覽與送審仍可使用。正式啟用的版本控制設定同時涵蓋根目錄 `wrangler.jsonc` 與 `workers/publication-dispatch/wrangler.jsonc` 的 production vars；不以 dashboard 臨時改值代替。Preview vars 不繼承 production，排程 Worker 的 preview 維持 disabled。
+獨立 `tw-catalog-publication-dispatch` Worker 綁同一個 production identity D1 與活動資料 bucket，每分鐘執行，沒有 HTTP 入口。它只接手核准請求中斷後留下的工作，並送出通知信。用 `npx wrangler deploy --config workers/publication-dispatch/wrangler.jsonc` 部署（preview 加 `--env preview`），與 Pages 部署分開。
 
-獨立 `tw-catalog-publication-dispatch` Worker 綁同一個 production identity D1，每分鐘執行，沒有 HTTP 入口。既有 App／installation ID 是公開識別值，存於 Worker 的 production vars，避免部署覆寫 dashboard 設定；相同 App 的 `GITHUB_APP_PRIVATE_KEY` 另以 Worker secret 設定。依已核准 rollout，用 `wrangler deploy --config workers/publication-dispatch/wrangler.jsonc --env ''` 部署。這與 Pages 部署分開，屬一次性建置及日後工程版本更新，正常新增活動不用手動部署或建立 credentials。
-
-Worker 的 `preview_urls: false` 與 observability 也納入設定，保留既有 Dashboard 的入口／日誌狀態，避免 Wrangler 預設值在部署時覆寫。`tw-catalog-publication-dispatch` 與 `tw-catalog-retention-purge` 兩個 Worker 都開啟 Workers Logs 與 Workers Traces（`head_sampling_rate: 1`、`invocation_logs: true`、`persist: true`），因為兩者都只有 cron 入口，沒有使用者會替它們回報失敗；`observability` 是可繼承欄位，`env.preview` 不必重寫。執行日誌只記錄 publication tick 的結果與 job ID，不加入 App 憑證。
+Worker 的 `preview_urls: false` 與 observability 也納入設定，保留既有 Dashboard 的入口／日誌狀態，避免 Wrangler 預設值在部署時覆寫。`tw-catalog-publication-dispatch` 與 `tw-catalog-retention-purge` 兩個 Worker 都開啟 Workers Logs 與 Workers Traces（`head_sampling_rate: 1`、`invocation_logs: true`、`persist: true`），因為兩者都只有 cron 入口，沒有使用者會替它們回報失敗；`observability` 是可繼承欄位，`env.preview` 不必重寫。
 
 根目錄 `wrangler.jsonc` 是 Pages 專案設定，**不能**加 `observability`：Pages 的支援欄位清單沒有它，Wrangler 會直接以 `Configuration file for Pages projects does not support "observability"` 中斷部署。Pages Functions 也沒有可查詢的 Workers Logs，只有不落地的即時串流（見下方 `wrangler pages deployment tail`）。
 
-Webhook 使用 Pages production 的 `POST /api/integrations/github/webhook`，JSON／HMAC 必須保留，事件喚醒與 cron 恢復依 [Organizer 發布契約](../contracts/organizer-workspace.md#發布邊界)。需要暫停發布時，將兩份 production mode 改為 disabled 並部署；保留 D1 job、snapshot、lease／checkpoint，不手改 job 狀態。正式啟用發布、核准內容與真實故障演練都需要維護者的真人確認；合併工程 PR 不代表已完成這些確認。
-
-### 還原未公開的失敗修正
-
-此維護流程限 [ADR-0069](../adr/0069-restored-unpublished-amendments-retain-failed-history.md) 的 failed AMEND；開始前確認維護者已核准恢復。保留原失敗 job，不手改 D1、不清空 intent／checkpoint、不重新使用舊核准。
-
-1. 確認原 data PR 已合併、main PR 尚未合併且原 pin 仍公開；關閉原 main PR 並保留紀錄。若 main 已合併或部署結果不明，停止使用此流程。
-2. 在最新 data main 建立還原分支，只將 `events/<eventId>/` 還原至原公開 pin commit。比對完整活動目錄及共用 reference；不要回退其他活動或共用 reference。以獨立 PR 通過 `data / check`，使用 squash 合併（還原 commit 必須只有一個 parent）。
-3. 確認 Pages 與獨立 publication Worker 都已部署支援目前 snapshot 的工程版本。Pages 成功部署不代表 Worker 已更新；分別記錄兩者版本。
-4. Admin 開啟失敗修正的「審核與發布」，填入資料還原 PR 編號與終止原因，執行「核對還原並終止」。伺服器唯讀查核 GitHub，成功才在 D1 交易中解除候選鎖定。查核失敗時維持原狀，先處理回報原因，不繞過核對。
-5. 確認狀態為「已終止修正」，舊失敗工作仍可查閱且不可重試。回到已發布來源，建立新修正，重新驗證、預覽、送審與核准。以新 job 的 data／main PR、Pages deployment、公開內容與 D1 完成狀態驗收。
-
-將還原 PR、原／新 job、版本、核准 snapshot 與驗證結果記錄於原 issue／PR；這是人工恢復，不列入零人工補救旅程。
+需要暫停發布時，在 `/admin?section=settings` 關閉發布；保留 D1 job 與 snapshot，不手改 job 狀態。
 
 ### preview 的兩個信箱
 

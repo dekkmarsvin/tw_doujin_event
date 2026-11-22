@@ -61,7 +61,7 @@ function cookieFrom(response) {
   return (response.headers.get("set-cookie") ?? "").split(";")[0];
 }
 
-function createHandlers(githubRemoteAuditor) {
+function createHandlers(publicationAuditor) {
   const dependencies = {
     repository,
     sendMail: async (message) => { sent.push(message); },
@@ -83,7 +83,7 @@ function createHandlers(githubRemoteAuditor) {
       now: () => now,
     },
   };
-  if (githubRemoteAuditor !== undefined) dependencies.githubRemoteAuditor = githubRemoteAuditor;
+  if (publicationAuditor !== undefined) dependencies.publicationAuditor = publicationAuditor;
   return createCirclePortalHandlers(dependencies);
 }
 
@@ -517,12 +517,13 @@ test("a live global publication lease refuses before remote audit", async () => 
   await repository.releaseOrganizerPublicationLease(candidate.jobId, competingLease.token);
 });
 
+// Readers already see the approval (409), or the check gave no usable answer (503).
 const remoteAuditFailures = [
-  ["false", async () => ({ clear: false })],
-  ["malformed", async () => ({ clear: "true" })],
-  ["throw", async () => { throw new Error("remote audit unavailable"); }],
+  ["published", async () => ({ clear: false }), 409, "remote_state_exists"],
+  ["malformed", async () => ({ clear: "true" }), 503, "publication_audit_failed"],
+  ["throw", async () => { throw new Error("remote audit unavailable"); }, 503, "publication_audit_failed"],
 ];
-for (const [label, auditor] of remoteAuditFailures) {
+for (const [label, auditor, status, code] of remoteAuditFailures) {
   test(`a ${label} remote audit fails closed, releases the lease, and leaves rows unchanged`, async () => {
     const candidate = await failedCandidate();
     now = NOW + 10;
@@ -535,8 +536,8 @@ for (const [label, auditor] of remoteAuditFailures) {
     const before = await readBusinessState();
 
     const response = await reopen(candidate, ownerCookie, { expectedVersion: 1, reason: REASON });
-    assert.equal(response.status, 503);
-    assert.equal((await response.json()).code, "github_remote_audit_failed");
+    assert.equal(response.status, status);
+    assert.equal((await response.json()).code, code);
     assert.deepEqual(calls, [candidate.jobId]);
     assert.deepEqual(await readBusinessState(), before);
     assert.equal(await readGlobalLease(), null);
@@ -552,7 +553,7 @@ test("an omitted remote auditor fails closed before claiming a lease", async () 
 
   const response = await reopen(candidate, ownerCookie, { expectedVersion: 1, reason: REASON });
   assert.equal(response.status, 503);
-  assert.equal((await response.json()).code, "github_remote_audit_unavailable");
+  assert.equal((await response.json()).code, "publication_audit_unavailable");
   assert.deepEqual(await readBusinessState(), before);
   assert.equal(await readGlobalLease(), null);
 });

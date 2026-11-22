@@ -12,14 +12,10 @@ import type { MapContributionFileStore } from "../app/map-contribution-files";
 import { isPublishedEventMap } from "../app/event-map";
 import { resolveCanonicalMapPeriod } from "../app/map-contribution-draft";
 import { resolvePublishedAuthoringScope } from "../app/event-authoring-scope";
-import { createGitHubInstallationProbe } from "../app/github-installation-probe";
-import { createGitHubRemoteAuditor, GITHUB_PUBLICATION_REPOSITORIES } from "../app/github-remote-auditor";
-import { createGitHubAppTokenProvider } from "../app/github-app-token";
 import { createPublicationDispatcher } from "../app/publication-dispatch";
-import { createPublishedAmendmentBaselineLoader } from "../app/organizer-amendment-baseline";
-import { createPublicationRecoveryAuditor } from "../app/organizer-publication-recovery";
 import { readEntryJson, readEventIndex, readEventJson } from "./_event-data";
 import { createR2AmendmentBaselineLoader } from "../app/event-data-publisher";
+import { readEventIndexObject } from "../app/event-data-store";
 
 /**
  * Wires the framework-agnostic portal handlers to the Pages runtime: D1, the
@@ -301,45 +297,15 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     if (value === null) return null;
     return isPublishedEventMap(value) && value.eventId === eventId ? value : null;
   };
-  const githubInstallationProbe = createGitHubInstallationProbe({
-    appId: env.GITHUB_APP_ID ?? "",
-    installationId: env.GITHUB_APP_INSTALLATION_ID ?? "",
-    privateKey: env.GITHUB_APP_PRIVATE_KEY ?? "",
-    webhookSecret: env.GITHUB_WEBHOOK_SECRET ?? "",
-    now: () => Date.now(),
-  });
-  const githubRemoteAuditor = createGitHubRemoteAuditor({
-    tokenProvider: createGitHubAppTokenProvider({
-      appId: env.GITHUB_APP_ID ?? "",
-      installationId: env.GITHUB_APP_INSTALLATION_ID ?? "",
-      privateKey: env.GITHUB_APP_PRIVATE_KEY ?? "",
-      repositories: GITHUB_PUBLICATION_REPOSITORIES,
-      permissions: { contents: "read", pull_requests: "read", metadata: "read" },
-      now: () => Date.now(),
-    }),
-  });
+  // A failed job may be reopened only while readers do not see its approval.
+  const publicationAuditor = async (jobId: string) => {
+    const job = await repository.getOrganizerPublicationJob(jobId);
+    if (!job) throw new Error("Publication job not found.");
+    const current = await readEventIndexObject(env.EVENT_DATA);
+    return { clear: !current?.index.events.some((entry) => entry.source?.approvalHash === job.approval_hash) };
+  };
   return createCirclePortalHandlers({
-    auditPublicationRecovery: env.ORGANIZER_PUBLICATION_MODE === "github" ? createPublicationRecoveryAuditor({
-      tokenProvider: createGitHubAppTokenProvider({ appId: env.GITHUB_APP_ID ?? "", installationId: env.GITHUB_APP_INSTALLATION_ID ?? "",
-        privateKey: env.GITHUB_APP_PRIVATE_KEY ?? "", repositories: GITHUB_PUBLICATION_REPOSITORIES,
-        permissions: { contents: "read", pull_requests: "read", checks: "read", metadata: "read" }, now: () => Date.now() }),
-    }) : undefined,
-    loadPublishedAmendmentBaseline: env.ORGANIZER_PUBLICATION_MODE === "r2" ? createR2AmendmentBaselineLoader(env.EVENT_DATA)
-      : env.ORGANIZER_PUBLICATION_MODE === "github" ? createPublishedAmendmentBaselineLoader({
-      onUnavailable: (diagnostic) => console.warn(JSON.stringify({ event: "organizer.amendment.baseline_unavailable", ...diagnostic })),
-      tokenProvider: createGitHubAppTokenProvider({ appId: env.GITHUB_APP_ID ?? "", installationId: env.GITHUB_APP_INSTALLATION_ID ?? "",
-        privateKey: env.GITHUB_APP_PRIVATE_KEY ?? "", repositories: GITHUB_PUBLICATION_REPOSITORIES,
-        permissions: { contents: "read", metadata: "read" }, now: () => Date.now() }),
-      published: async (id) => {
-        const response = await env.ASSETS.fetch(new Request(new URL("/deployment-manifest.json", request.url)));
-        if (!response.ok) throw new Error("目前無法核對公開版本。");
-        const manifest = await response.json() as { schema?: string; events?: Array<{ eventId: string; dataCommit: string }> };
-        if (manifest.schema !== "publication-deployment/1" || !Array.isArray(manifest.events)) throw new Error("公開版本記錄格式無效。");
-        const pinned = manifest.events.find((item) => item.eventId === id);
-        if (!pinned) return null;
-        return { dataCommit: pinned.dataCommit, catalog: (await catalog(env, request, id)).payload };
-      },
-    }) : undefined,
+    loadPublishedAmendmentBaseline: env.ORGANIZER_PUBLICATION_MODE === "r2" ? createR2AmendmentBaselineLoader(env.EVENT_DATA) : undefined,
     repository,
     sendMail: async (message) => {
       const event = { event: "portal.mail", mailType: message.purpose };
@@ -413,8 +379,7 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
       return { ...resolved, periodAliases, groups: [...groups.values()] };
     },
     readPublishedEventMap,
-    githubInstallationProbe,
-    githubRemoteAuditor,
+    publicationAuditor,
     dispatchOrganizerPublication,
     projectCircle: async (circleId, fields, updatedAt = new Date().toISOString()) => {
       // Runs the same projection the reader runs, against the same snapshot, so
