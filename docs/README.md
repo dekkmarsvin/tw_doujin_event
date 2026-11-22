@@ -46,7 +46,6 @@
 | 文件 | 何時用 |
 |---|---|
 | [本機開發與驗證](./runbooks/local-development.md) | 啟動、跑測試 |
-| [社團資料更新](./runbooks/catalog-data-update.md) | 活動資料或 data pin 有變動時 |
 | [地圖 authoring](./runbooks/map-authoring.md) | 更新地圖時 |
 | [部署](./runbooks/deployment.md) | 密鑰、CI 行為、回滾 |
 | [首次啟用](./runbooks/first-time-setup.md) | 從零建 Cloudflare 資源 |

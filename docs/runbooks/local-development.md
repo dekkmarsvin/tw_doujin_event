@@ -56,21 +56,19 @@ npm run portal:login-link
 npm run portal:login-link -- --email=local-circle@example.test --audience=circle
 ```
 
-## 驗證真實活動資料
+## 已發布活動的對照資料
 
-只有資料更新、release 或部署前需要這條路徑：
+`pinned` browser journeys 從正式站（`tw-catalog.pages.dev`）複製 FF47 的公開檔案，並以 [fixtures/published/ff47.json](../../fixtures/published/ff47.json) 的 hash 核對。FF47 更正過後核對會失敗；確認變更符合預期，再更新 hash：
 
 ```bash
-npm run data:fetch -- ff47
-npm run data:stage -- ff47
-npm run event-data:check
+node scripts/fetch-published-event.mjs ff47 --update
 ```
 
-`data:fetch` 只接受 `data/event-data-pins/ff47.json` 的完整 commit SHA，逐檔核對 SHA-256 後原子替換 `.event-data/ff47/`。部署的站台從 R2 讀活動資料，上傳方式見[部署 runbook](./deployment.md#活動資料r2)。
+部署的站台從 R2 讀活動資料，見[部署 runbook](./deployment.md#活動資料r2)。
 
 `npm run dev:portal` 啟動前會把 staged 的 fixture 寫進本機的活動資料 bucket（`.wrangler/local-portal`），讓 Functions 與正式環境一樣從 R2 讀取。
 
-`.event-data/`、`.event-data-stage.json` 與 `public/data/events/` 都是本機／CI 產物，不進版控。
+`.event-data-stage.json` 與 `public/data/events/` 都是本機／CI 產物，不進版控。
 
 ## Authoring 環境
 
@@ -171,7 +169,7 @@ npm run test:browser -- --journey reader-thumbnails
 npm run test:browser -- --journey portal-admin-entry --journey portal-organizer-entry
 ```
 
-未知名稱、未知選項及缺少值會失敗，不會默默改跑全套。部分旅程的成功只證明所選範圍；完整 profile 的 `Browser acceptance` 不提供 `--journey`，維持完整代表性驗收；純發布資料使用上述 published Reader 驗證。
+未知名稱、未知選項及缺少值會失敗，不會默默改跑全套。部分旅程的成功只證明所選範圍；完整 profile 的 `Browser acceptance` 不提供 `--journey`，維持完整代表性驗收。
 
 ### journey 與它需要的資料
 
@@ -183,7 +181,7 @@ journey 放在 `tests/browser/*.mjs`，**不需要登記到任何清單**：runn
 
 | 宣告 | 環境 | 用途 |
 |---|---|---|
-| `pinned`（預設，可省略） | Vite + pinned FF47 | 真實 catalog 的尺寸、幾何與互動 |
+| `pinned`（預設，可省略） | Vite + 正式站複製的 FF47 | 真實 catalog 的尺寸、幾何與互動 |
 | `fixture` | Vite + `sample` + `sample-two` | 真實資料不該有的情境：已移動／已取消攤位、有圖與無圖社團、多活動選擇器 |
 | `portal` | `dev:portal` 的隔離環境 | 需要登入的流程：magic-link、認領、審核、編輯與發布 |
 
@@ -197,7 +195,7 @@ journey 放在 `tests/browser/*.mjs`，**不需要登記到任何清單**：runn
 
 因此 `portal` journey 需要 8788 埠。若你自己的 `npm run dev:portal` 正在跑，runner 會直接停下並說明，不會半跑在你的資料上。
 
-`pinned` 每次都重新下載並驗證目前 pin 的 FF47 資料，即使 `.event-data/ff47` 已存在，避免切換分支或更新 pin 後仍驗收舊資料；下載或驗證失敗即停止，不沿用舊資料繼續測試。因此 `pinned` 需要 GitHub 網路，`fixture` 則完全離線。
+`pinned` 每次都重新從正式站複製 FF47 並核對 hash，核對失敗即停止，不沿用舊資料繼續測試。因此 `pinned` 需要網路，`fixture` 則完全離線。
 
 `portal` journey 使用 `config/local-portal.env` 的本機測試值（Cloudflare 官方 always-pass Turnstile 金鑰、保留的 `.test` 收信地址、local D1 收信槽），magic link 由本機收信槽取得，與 `npm run smoke:portal` 同一條路徑。安全性本身的驗證仍留在 `tests/circle-portal-route.test.mjs`：enumeration resistance、Turnstile/CSRF 檢查順序、rejected request 不寫 DB、claim 唯一性與競態、retention/刪除、token 不變式——這些 browser 證明不了，改用 browser 會是拿真實覆蓋換更慢更不穩的版本。
 

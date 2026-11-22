@@ -50,7 +50,7 @@ const OUTPUT = { representative: "outputs/map-viewport-pr", full: "outputs/map-v
 // server altogether: `/api/*` only exists under Pages Functions, so a Vite dev
 // server answers a sign-in with the reader's HTML instead.
 const ENVIRONMENTS = {
-  pinned: { fetch: ["ff47"], stage: ["ff47"], server: "vite", label: "pinned ff47" },
+  pinned: { fetch: "ff47", server: "vite", label: "published ff47" },
   fixture: { stage: ["--fixture", "sample", "sample-two"], server: "vite", label: "fixtures sample, sample-two" },
   portal: { server: "portal", label: "local portal (sample fixture)" },
 };
@@ -132,15 +132,15 @@ if (!groups.size) throw new Error("No browser journeys are eligible; refusing an
 const playwright = resolvePlaywright();
 
 function stage(mode) {
-  const { fetch: fetchEvents, stage: stageArguments, label } = ENVIRONMENTS[mode];
-  if (!stageArguments) return;
-  // An existing directory may belong to an older pin or contain incomplete
-  // data; always refresh before staging, and stop if verification fails rather
-  // than running against the previous checkout.
-  for (const event of fetchEvents ?? []) {
-    console.error(`staging ${event}: fetching the pinned event data`);
-    run("fetch-event-data.mjs", [event]);
+  const { fetch: published, stage: stageArguments, label } = ENVIRONMENTS[mode];
+  // Always copied afresh, and the run stops if the copy fails its check rather
+  // than measuring whatever an earlier run left behind.
+  if (published) {
+    console.error(`staging ${published}: copying the published event`);
+    run("fetch-published-event.mjs", [published]);
+    return;
   }
+  if (!stageArguments) return;
   console.error(`staging ${label} into public/data/events (\`npm test\` restages the fixture afterwards)`);
   run("stage-event-data.mjs", stageArguments);
 }

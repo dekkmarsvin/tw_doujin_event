@@ -14,4 +14,4 @@
 
 PR 保持一個目的，依模板寫結果、驗證與部署影響。工作規則見 [AGENTS.md](AGENTS.md)。
 
-活動資料與 pin 更新依[資料更新 runbook](docs/runbooks/catalog-data-update.md)執行。不要提交下載後的 `.event-data/`、本機產物或秘密。
+活動資料經主辦單位工作區核准後發布，不在這個 repo 更新。不要提交本機產物或秘密。

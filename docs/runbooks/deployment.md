@@ -228,20 +228,20 @@ npx wrangler pages deployment tail https://<deployment-id>.tw-catalog.pages.dev 
 
 `ORGANIZER_PUBLICATION_MODE=r2` 時，管理者核准後在同一個請求內：產生公開檔案、更新社團配號表、寫入新版本，最後改寫 `index.json`（帶 ETag 條件，另一筆發布剛完成時要求重試）。失敗不會改動讀者看到的內容；可重試的失敗用既有的「重試」按鈕，同一筆核准重送不會重複發布。更正沿用名單異動宣告，基準改從 bucket 讀取並與公開的 `circles.json` 核對。publication Worker 在 `r2` 模式下不推進任何發布，只保留通知排程。
 
-### 從 data repository 上傳（一次性）
+### 新環境的空白資料
 
-把 data repository 的已發布活動整批搬進 bucket，用於初次遷移，或 bucket 還沒有任何經核准發布的活動時：
+新的 bucket 要先有一份空的 index 與社團配號表，Functions 與主辦工作區才能運作，第一筆核准才能發布：
 
 ```bash
-npm run data:fetch -- --published
-npm run data:stage -- --published
-npm run event-data:upload -- --remote --preview
-npm run event-data:upload -- --remote
+echo '{"schema":"circle-id-allocations/1","nextSequence":1,"allocations":[]}' > allocations.json
+echo '{"schema":"circle-identity-evidence/1","entries":[]}' > evidence.json
+echo '{"schema":"event-index/1","registry":"initial","events":[]}' > index.json
+npx wrangler r2 object put tw-doujin-event-data/registry/initial/allocations.json --file allocations.json --content-type application/json --remote
+npx wrangler r2 object put tw-doujin-event-data/registry/initial/evidence.json --file evidence.json --content-type application/json --remote
+npx wrangler r2 object put tw-doujin-event-data/index.json --file index.json --content-type application/json --remote
 ```
 
-需要已登入、可寫入該帳號 R2 的 Wrangler。上傳一併寫入 main repository 的社團配號表與各活動的分組，先寫完所有檔案，最後才寫 `index.json`；中途失敗時讀者仍看到上一版，重跑即可。
-
-**bucket 裡一有經核准發布的活動，上傳就會拒絕執行**：data repository 沒有那些活動與它們的配號，整批上傳會把它們從讀者端移除。
+preview 把 bucket 換成 `tw-doujin-event-data-preview`。讀者頁至少要有一個已發布活動才能顯示：第一筆核准前首頁會出錯，main 的 production smoke 也會失敗，先完成第一筆核准再公開網址。**已有活動的 bucket 不要這樣做**：讀者會看不到所有活動，之後的核准也會從頭配發社團 ID。
 
 ### 回滾
 

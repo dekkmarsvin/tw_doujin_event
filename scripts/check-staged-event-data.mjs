@@ -3,18 +3,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer, isRunnableDevEnvironment } from "vite";
 import { readJsonFileStrict } from "./strict-json-file.mjs";
-import { MAP_MANIFEST_FILE } from "./event-data-pin-utils.mjs";
+import { MAP_MANIFEST_FILE } from "../app/event-data-pin.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const arguments_ = process.argv.slice(2);
-const workspaceArgument = arguments_[0] === "--workspace" && arguments_.length === 2 ? arguments_[1] : null;
-if (arguments_.length > 0 && !workspaceArgument) {
-  throw new Error("Usage: npm run event-data:check -- [--workspace <directory>]");
-}
-const workspace = workspaceArgument ? path.resolve(root, workspaceArgument) : root;
-const stage = JSON.parse(await readFile(path.join(workspace, ".event-data-stage.json"), "utf8"));
+if (process.argv.length > 2) throw new Error("Usage: npm run event-data:check");
+const stage = JSON.parse(await readFile(path.join(root, ".event-data-stage.json"), "utf8"));
 const stagedEvents = stage.events ?? [{ eventId: stage.eventId, source: stage.source }];
-const eventsRoot = path.join(workspace, "public", "data", "events");
+const eventsRoot = path.join(root, "public", "data", "events");
 const eventDirectories = await readdir(eventsRoot);
 
 // The staged tree must be exactly the staged set — no leftovers from an earlier

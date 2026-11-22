@@ -13,7 +13,7 @@
 
 收藏與行程保存在目前瀏覽器，可匯出完整 JSON 備份並從備份復原，也可匯出 CSV。帶到手機或分享給朋友使用短網址與 QR Code，只分享勾選的本場行程，不包含私人備註、群組、購買項目或預算；兩台裝置之後的修改不會自動同步。已下載的場刊與地圖支援離線閱讀，詳細規則見[收藏與走訪規劃契約](docs/contracts/planning.md)。
 
-已發布活動以 [published-events.json](data/published-events.json) 為準。主辦[首次發布](https://github.com/dekkmarsvin/tw_doujin_event/issues/212)與[發布後更正](https://github.com/dekkmarsvin/tw_doujin_event/issues/190)均已有實際交付紀錄；驗收仍保留工程補救與人工操作紀錄。
+已發布活動由主辦單位工作區核准後直接發布到活動資料 bucket，見[部署 runbook](docs/runbooks/deployment.md#活動資料r2)。
 
 另外授權的地圖貢獻者可在社團入口維護私人草稿，核准匯出後仍需經資料發布流程，見[地圖貢獻契約](docs/contracts/map-contributions.md)。
 

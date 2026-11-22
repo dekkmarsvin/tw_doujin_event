@@ -30,7 +30,7 @@
 可回復性的界線是：
 
 - **指令自己回報的失敗**（驗證失敗、rename 失敗、下載失敗）必須復原既有狀態。這是 #116 就寫下的要求，仍然有效。
-- **被外部終止的指令**不承諾自動 crash recovery，復原方式是人工重跑。實際步驟見[社團資料更新 runbook](../runbooks/catalog-data-update.md)，本 ADR 不複述。
+- **被外部終止的指令**不承諾自動 crash recovery，復原方式是人工重跑。實際步驟見[社團資料更新 runbook](https://github.com/dekkmarsvin/tw_doujin_event/blob/08ac8a5268507f3caa938f80a4374c09b9035083/docs/runbooks/catalog-data-update.md)，本 ADR 不複述。
 
 ### 2. review finding 的處置以 ticket 為界
 
