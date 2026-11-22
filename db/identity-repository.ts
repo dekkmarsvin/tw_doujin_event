@@ -9,7 +9,6 @@ import {
 import { createIdentityInitializer, seedOrganizerVenueCatalog, referenceInsertStatement as prepareReferenceInsert } from "./identity-runtime-initializer";
 import { createVenueReference, createVenueSpaceReference, type OrganizerReferenceRecord } from "../app/organizer-reference-catalog";
 import { createOrganizerAmendmentRepository } from "./organizer-amendment-repository";
-import { createOrganizerRecoveryRepository } from "./organizer-recovery-repository";
 import { createOrganizerApplicationRepository } from "./organizer-application-repository";
 import { createReviewNotificationRepository, seedNotificationPreferences, enqueueReviewNotification, deleteNotificationRecipient, cancelNotificationRecipient } from "./review-notification-repository";
 import { createAccountNotificationRepository, createAccountNotificationWriter, deleteAccountNotifications, claimNotificationSource, circleNotificationSource, ownerNotificationSource, memberNotificationSource, organizerCandidateEdition } from "./account-notification-repository";
@@ -3515,21 +3514,6 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       ORDER BY j.next_attempt_at, j.created_at, j.id LIMIT ?2`).bind(now, Math.max(1, Math.min(10, limit))).all<{ id: string }>()).results;
   }
 
-  /** The wake and delivery completion share one transaction. Duplicate POSTs
-   * can enqueue once; they never execute a publication step in the request. */
-  async function wakeOrganizerPublications(input: { deliveryId: string; stage: 'data' | 'main'; sha: string; now: number }) {
-    await ensureTables();
-    const results = await database.batch([
-      database.prepare(`UPDATE organizer_publication_jobs SET next_attempt_at = 0, pending_attempts = 0
-        WHERE status IN ('queued', 'publishing')
-          AND ((?1 = 'data' AND data_head_sha = ?2) OR (?1 = 'main' AND (main_head_sha = ?2 OR main_merge_sha = ?2)))
-          AND EXISTS (SELECT 1 FROM github_webhook_deliveries WHERE delivery_id = ?3 AND processed_at IS NULL)`)
-        .bind(input.stage, input.sha, input.deliveryId),
-      database.prepare(`UPDATE github_webhook_deliveries SET processed_at = ?1, result = 'processed'
-        WHERE delivery_id = ?2 AND processed_at IS NULL`).bind(input.now, input.deliveryId),
-    ]);
-    return { woken: results[0].meta.changes };
-  }
 
   async function claimOrganizerPublicationLease(input: { jobId: string; now: number; ttlMs: number }) {
     await ensureTables();
@@ -3684,41 +3668,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       .bind(jobId, token).run();
   }
 
-  async function recordGitHubWebhookDelivery(input: {
-    deliveryId: string; event: string; payloadSha256: string; now: number;
-  }) {
-    await ensureTables();
-    try {
-      const result = await database.prepare(
-        `INSERT INTO github_webhook_deliveries (delivery_id, event, payload_sha256, received_at)
-         VALUES (?1, ?2, ?3, ?4)`,
-      ).bind(input.deliveryId, input.event, input.payloadSha256, input.now).run();
-      return result.meta.changes === 1 ? "recorded" as const : "duplicate" as const;
-    } catch (error) {
-      if (error instanceof Error && /unique constraint/i.test(error.message)) {
-        const existing = await database.prepare(
-          "SELECT event, payload_sha256, processed_at, result FROM github_webhook_deliveries WHERE delivery_id = ?1",
-        ).bind(input.deliveryId).first<{ event: string; payload_sha256: string; processed_at: number | null; result: string | null }>();
-        if (!existing || existing.event !== input.event || existing.payload_sha256 !== input.payloadSha256) return "mismatch" as const;
-        return existing.processed_at !== null && existing.result === "processed"
-          ? "duplicate" as const
-          : "recorded" as const;
-      }
-      throw error;
-    }
-  }
 
-  async function completeGitHubWebhookDelivery(input: { deliveryId: string; processed: boolean; result?: string; now: number }) {
-    await ensureTables();
-    const result = await database.prepare(
-      `UPDATE github_webhook_deliveries
-       SET processed_at = CASE WHEN ?1 = 1 THEN ?2 ELSE NULL END, result = ?3
-       WHERE delivery_id = ?4 AND processed_at IS NULL`,
-    ).bind(input.processed ? 1 : 0, input.now,
-      input.processed ? "processed" : `failed:${(input.result ?? "unknown").slice(0, 500)}`,
-      input.deliveryId).run();
-    return result.meta.changes === 1;
-  }
 
   async function storePreviewMail(message: { email: string; subject: string; text: string; now: number }) {
     await ensureTables();
@@ -3755,7 +3705,6 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     ...createReviewNotificationRepository(database, ensureTables),
     ...createAccountNotificationRepository(database, ensureTables),
     ...createOrganizerAmendmentRepository(database, ensureTables),
-    ...createOrganizerRecoveryRepository(database, ensureTables),
     ...createOrganizerApplicationRepository(database, ensureTables, organizerCandidateStatements, notify),
     ensureTables, writeAudit, getOrganizerModerationEventId, getOrganizerModerationCandidateForEvent,
     listAdmins, isAdminEmail, addAdmin, removeAdmin,
@@ -3791,9 +3740,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     claimFailedOrganizerCandidateReopenLease, reopenFailedOrganizerCandidate,
     markOrganizerPublicationRemoteWriteIntent,
     retryOrganizerPublicationJob, expireStalledOrganizerPublicationJobs, claimOrganizerPublicationLease,
-    listDueOrganizerPublicationJobs, wakeOrganizerPublications,
+    listDueOrganizerPublicationJobs,
     hasOrganizerPublicationLease, releaseOrganizerPublicationLease,
-    updateOrganizerPublicationJob, recordGitHubWebhookDelivery, completeGitHubWebhookDelivery,
+    updateOrganizerPublicationJob,
     storePreviewMail, latestPreviewMail, clearPreviewData,
   };
 }

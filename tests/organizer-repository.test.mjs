@@ -17,7 +17,6 @@ const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { createIdentityRepository } = await environment.runner.import("/db/identity-repository.ts");
 const { createOrganizerPublicationExecutor, PublicationFailure, publicationHasStarted, QUEUED_PUBLICATION_TIMEOUT_MS } = await environment.runner.import("/app/organizer-publication.ts");
-const { createGitHubPublicationAdapter } = await environment.runner.import("/app/github-publication.ts");
 const { publicationFailureMessage } = await environment.runner.import("/app/organizer-publication-presentation.ts");
 const { sha256Hex } = await environment.runner.import("/app/portal-crypto.ts");
 const { circleRetentionExpiresAt } = await environment.runner.import("/app/circle-overrides.ts");
@@ -27,9 +26,6 @@ const { hmacSign } = await environment.runner.import("/app/portal-crypto.ts");
 const { runPublicationTick, createScheduledPublicationDispatcher,
   PUBLICATION_CRON, PUBLICATION_RETRY_MAX_MS, PUBLICATION_TICK_MAX_TRANSITIONS, PUBLICATION_JOB_MAX_TRANSITIONS,
   PUBLICATION_TICK_START_BUDGET_MS } = await environment.runner.import("/app/publication-scheduler.ts");
-const { signGitHubWebhookForTest } = await environment.runner.import("/app/publication-bundle-assembler.ts");
-const { onRequest: middleware } = await environment.runner.import("/functions/_middleware.ts");
-const { onRequestPost: webhook } = await environment.runner.import("/functions/api/integrations/github/webhook.ts");
 const { default: scheduledWorker } = await environment.runner.import("/workers/publication-dispatch/index.ts");
 
 const miniflare = new Miniflare(convertV4MiniflareOptions({
@@ -307,60 +303,7 @@ test("expiry rechecks the lease after its SELECT and cannot fail a delivery that
   assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "publishing");
 });
 
-async function webhookRequest({ deliveryId = "delivery-246", event = "check_run", body = JSON.stringify({
-  repository: { full_name: "dekkmarsvin/tw_doujin_event-data" }, check_run: { head_sha: "a".repeat(40) },
-}), signature, mode = "github", contentType = "application/json", method = "POST", path = "/api/integrations/github/webhook" } = {}) {
-  const request = new Request(`https://portal.example.test${path}`, { method, headers: {
-    "content-type": contentType, "x-github-delivery": deliveryId, "x-github-event": event,
-    "x-hub-signature-256": signature ?? await signGitHubWebhookForTest("webhook-secret", body),
-  }, ...(method === "GET" ? {} : { body }) });
-  const env = { DB: database, ORGANIZER_PUBLICATION_MODE: mode, GITHUB_WEBHOOK_SECRET: "webhook-secret" };
-  return middleware({ request, next: () => webhook({ request, env }) });
-}
-
-test("only the exact webhook POST passes Origin and still enforces JSON, HMAC and disabled mode", async () => {
-  assert.equal((await webhookRequest({ signature: "" })).status, 401);
-  assert.equal((await webhookRequest({ contentType: "text/plain" })).status, 415);
-  assert.equal((await webhookRequest({ mode: "disabled" })).status, 503);
-  for (const method of ["PATCH", "PUT", "DELETE"]) assert.equal((await webhookRequest({ method })).status, 403);
-  for (const path of ["/api/integrations/github/webhook/", "/api/claims", "/api/integrations/github/webhook-other"]) {
-    assert.equal((await webhookRequest({ path })).status, 403);
-  }
-  assert.equal((await webhookRequest({ method: "GET" })).status, 405);
-  assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM github_webhook_deliveries").first()).n, 0);
-});
-
-test("signed concurrent webhook replay wakes a pinned job once and never advances a step itself", async () => {
-  const { jobId } = await publicationFixture();
-  const dispatch = createScheduledPublicationDispatcher(repository, { eventExists: async () => false,
-    run: async ({ step }) => ({ pending: true, metadata: checkpoint(step) }) }, () => NOW + 10);
-  await dispatch(jobId);
-  const responses = await Promise.all([webhookRequest(), webhookRequest(), webhookRequest()]);
-  for (const response of responses) assert.equal(response.status, 202);
-  const job = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal(job.next_attempt_at, 0);
-  assert.equal(job.pending_attempts, 0);
-  assert.equal(job.step, "preparing_data");
-  // Once a later tick defers again, a replay cannot reset its due time.
-  await dispatch(jobId);
-  const deferred = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal((await webhookRequest()).status, 202);
-  assert.deepEqual(await repository.getOrganizerPublicationJob(jobId), deferred);
-  assert.equal((await webhookRequest({ event: "check_suite" })).status, 409);
-  assert.equal(await repository.completeGitHubWebhookDelivery({ deliveryId: "delivery-246", processed: false, now: NOW + 20 }), false);
-  assert.equal((await webhookRequest()).status, 202);
-  assert.deepEqual(await repository.getOrganizerPublicationJob(jobId), deferred, "a late failed duplicate cannot erase processed delivery");
-  for (const [event, payload] of [
-    ["check_run", { repository: { full_name: "someone/other" }, check_run: { head_sha: "a".repeat(40) } }],
-    ["push", { repository: { full_name: "dekkmarsvin/tw_doujin_event-data" }, check_run: { head_sha: "a".repeat(40) } }],
-    ["check_run", { repository: { full_name: "dekkmarsvin/tw_doujin_event-data" }, check_run: { head_sha: "b".repeat(40) } }],
-  ]) {
-    assert.equal((await webhookRequest({ deliveryId: crypto.randomUUID(), event, body: JSON.stringify(payload) })).status, 202);
-    assert.deepEqual(await repository.getOrganizerPublicationJob(jobId), deferred);
-  }
-});
-
-test("a cron overlapping webhook and another tick has one leased mutation and keeps its checkpoint", async () => {
+test("overlapping cron ticks have one leased mutation and keep the checkpoint", async () => {
   const { jobId } = await publicationFixture();
   await createScheduledPublicationDispatcher(repository, { eventExists: async () => false,
     run: async () => ({ metadata: checkpoint("preparing_data") }) }, () => NOW + 10)(jobId);
@@ -373,7 +316,6 @@ test("a cron overlapping webhook and another tick has one leased mutation and ke
   const driver = { eventExists: async () => false, run: async () => { calls += 1; entered(); await barrier; clock += PUBLICATION_TICK_START_BUDGET_MS; return {}; } };
   const first = runPublicationTick({ repository, driver, now: () => clock });
   await started;
-  assert.equal((await webhookRequest()).status, 202);
   const competing = await runPublicationTick({ repository: createIdentityRepository(database), driver, now: () => NOW + 60_000 });
   assert.deepEqual(competing.results, [{ jobId, result: "skipped", transitions: 1, elapsedMs: 0 }]);
   release();
@@ -430,8 +372,9 @@ test("Pages runtime exposes publication by mode and a fake retry finishes throug
   const base = { DB: database, EVENT_ID: "sample", SESSION_SECRET: secret, HASH_PEPPER: "pepper",
     ADMIN_EMAILS: "admin@example.test", ASSETS: { fetch: async () => new Response(null, { status: 404 }) } };
   const path = `/api/organizer/events/${id}`;
-  for (const [mode, preview, expected] of [["disabled", true, false], ["fake", false, false], ["fake", true, true], ["github", false, true]]) {
-    const env = { ...base, ORGANIZER_PUBLICATION_MODE: mode, ...(preview ? { PREVIEW_MAIL_SINK: "d1" } : {}) };
+  const eventData = { get: async () => null, put: async () => ({}) };
+  for (const [mode, preview, expected] of [["disabled", true, false], ["fake", false, false], ["fake", true, true], ["r2", false, true]]) {
+    const env = { ...base, EVENT_DATA: eventData, ORGANIZER_PUBLICATION_MODE: mode, ...(preview ? { PREVIEW_MAIL_SINK: "d1" } : {}) };
     const runtime = portalHandlers({ request: request(path), env });
     const detail = await runtime.getOrganizerCandidate(request(path), id);
     assert.equal(detail.status, 200);
@@ -442,23 +385,6 @@ test("Pages runtime exposes publication by mode and a fake retry finishes throug
   assert.equal(await repository.updateOrganizerPublicationJob({ jobId, leaseToken: lease.token, expectedStep: step, nextStep: step, status: "failed", retryable: true, failureCode: "dispatch_failed", error: "Test dispatch failure", now: NOW + 9 }), true);
   await repository.releaseOrganizerPublicationLease(jobId, lease.token);
   const retryPath = `/api/organizer/publications/${jobId}/retry`;
-  const failed = await repository.getOrganizerPublicationJob(jobId);
-  const productionRuntime = portalHandlers({ request: request(retryPath, "POST"), env: { ...base, ORGANIZER_PUBLICATION_MODE: "github" } });
-  const enqueued = await productionRuntime.adminRetryOrganizerPublication(request(retryPath, "POST"), jobId);
-  assert.equal(enqueued.status, 200, await enqueued.clone().text());
-  const queued = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal(queued.status, "queued", "Pages never executes the retry with its own runtime or credentials");
-  for (const key of ["id", "snapshot_id", "approval_hash", "candidate_version", "step", "data_merge_sha", "main_merge_sha", "workflow_run_id"]) {
-    assert.equal(queued[key], failed[key], key);
-  }
-  assert.ok((await repository.listDueOrganizerPublicationJobs(NOW + 10)).some((job) => job.id === jobId));
-  // The independent executor owns the next attempt. A fake driver can still
-  // be used only by the explicitly isolated preview runtime below.
-  await createOrganizerPublicationExecutor(repository, {
-    eventExists: async () => false,
-    run: async () => { throw new PublicationFailure("dispatch_failed", "test", true); },
-  }, () => NOW + 10)(jobId);
-  assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "failed");
   const runtime = portalHandlers({ request: request(retryPath, "POST"), env: { ...base, PREVIEW_MAIL_SINK: "d1", ORGANIZER_PUBLICATION_MODE: "fake" } });
   const response = await runtime.adminRetryOrganizerPublication(request(retryPath, "POST"), jobId);
   assert.equal(response.status, 200, await response.clone().text());
@@ -467,15 +393,12 @@ test("Pages runtime exposes publication by mode and a fake retry finishes throug
   assert.equal((await repository.getOrganizerCandidate(id)).status, "published");
 });
 
-test("Pages github dispatch preserves its durable job for the Worker; fake remains preview-only", async () => {
+test("fake dispatch is preview-only and completes in the request", async () => {
   const { jobId } = await publicationFixture();
   const input = { repository, eventExists: async () => false, now: () => NOW + 10 };
   assert.equal(createPublicationDispatcher({ ...input, mode: "disabled", allowFake: true }), undefined);
   assert.equal(createPublicationDispatcher({ ...input, mode: "fake", allowFake: false }), undefined);
-  const queued = await repository.getOrganizerPublicationJob(jobId);
-  await createPublicationDispatcher({ ...input, mode: "github", allowFake: false })(jobId);
-  assert.deepEqual(await repository.getOrganizerPublicationJob(jobId), queued);
-  assert.ok((await repository.listDueOrganizerPublicationJobs(NOW + 10)).some((job) => job.id === jobId));
+  assert.equal(createPublicationDispatcher({ ...input, mode: "github", allowFake: false }), undefined, "the Git pipeline is gone");
   const dispatch = createPublicationDispatcher({ ...input, mode: "fake", allowFake: true });
   await dispatch(jobId);
   const job = await repository.getOrganizerPublicationJob(jobId);
@@ -612,26 +535,6 @@ test("publication resumes main and smoke failures without recreating successful 
     assert.equal(calls.filter((value) => value === step).length, step === "preparing_main" ? 2 : 1);
   }
   assert.equal((await repository.getLatestOrganizerPublicationJob(id)).id, jobId);
-});
-
-test("GitHub publication failures persist only safe executor error text", async () => {
-  const { jobId } = await publicationFixture();
-  const adapter = createGitHubPublicationAdapter({
-    owner: "dekkmarsvin",
-    installationToken: "INSTALLATION_TOKEN_SENTINEL",
-    fetch: async () => { throw new Error("PRIVATE_KEY_SENTINEL"); },
-  });
-  const execute = createOrganizerPublicationExecutor(repository, {
-    eventExists: async () => false,
-    run: async () => { await adapter.readRepositoryMetadata("tw_doujin_event-data"); return {}; },
-  }, () => NOW + 10);
-
-  await execute(jobId);
-  const job = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal(job.status, "failed");
-  assert.equal(job.failure_code, "github_api_request");
-  assert.equal(job.error, "GitHub API request failed.");
-  assert.doesNotMatch(job.error, /PRIVATE_KEY_SENTINEL|INSTALLATION_TOKEN_SENTINEL/u);
 });
 
 test("a job nobody dispatched times out into the existing retry path", async () => {
@@ -1333,7 +1236,7 @@ test("map revisions are scoped by candidate, period and venue-space while owner 
   assert.equal((await repository.getOrganizerMapDraft("candidate-pf", "map-pf-day1")).current_revision, 2);
 });
 
-test("approved snapshots create one leased publication job and webhook deliveries are idempotent", async () => {
+test("approved snapshots create one leased publication job", async () => {
   await repository.createOrganizerCandidate({
     id: "candidate-pf", tentativeName: "PF", ownerEmail: "owner@example.test",
     createdByAccountId: adminId, draftJson: JSON.stringify(initialDraft), now: NOW,
@@ -1391,11 +1294,6 @@ test("approved snapshots create one leased publication job and webhook deliverie
   }), true);
   assert.equal((await repository.getOrganizerCandidate("candidate-pf")).status, "published");
 
-  const delivery = { deliveryId: "delivery-1", event: "check_run", payloadSha256: "b".repeat(64), now: NOW + 14 };
-  assert.equal(await repository.recordGitHubWebhookDelivery(delivery), "recorded");
-  assert.equal(await repository.completeGitHubWebhookDelivery({ deliveryId: delivery.deliveryId, processed: true, now: NOW + 15 }), true);
-  assert.equal(await repository.recordGitHubWebhookDelivery(delivery), "duplicate");
-  assert.equal(await repository.recordGitHubWebhookDelivery({ ...delivery, payloadSha256: "c".repeat(64) }), "mismatch");
 });
 
 /**

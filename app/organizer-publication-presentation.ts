@@ -1,18 +1,3 @@
-const GROUPS = [
-  { label: "準備活動資料", steps: ["assemble", "preparing_data"] },
-  { label: "更新公開資料", steps: ["waiting_data_checks", "merging_data", "preparing_main", "waiting_main_checks", "merging_main"] },
-  { label: "更新網站", steps: ["waiting_deployment"] },
-  { label: "確認公開結果", steps: ["verifying_production", "smoke", "verify"] },
-];
-
-export function publicationProgress(job: { step: string; status: string }) {
-  const current = GROUPS.findIndex((group) => group.steps.includes(job.step));
-  return GROUPS.map((group, index) => ({ label: group.label,
-    state: job.status === "published" || (current >= 0 && index < current) ? "complete"
-      : index === current ? job.status === "failed" ? "failed" : "current" : "pending",
-  }));
-}
-
 export function publicationFailureMessage(job: { failureCode: string | null; retryable: boolean; started: boolean }, available: boolean) {
   // Every field here is required. `started` began as optional, and omitting it
   // made `!job.started` true, so a job with remote artefacts pinned would have
@@ -33,10 +18,11 @@ export function publicationFailureMessage(job: { failureCode: string | null; ret
   // switched off the retry button is disabled, and the activity page already
   // carries one line explaining why, so this one stops at what happened.
   if (job.failureCode === "queued_timeout" && !job.started) return available ? "發布沒有開始，內容沒有被退件。可以重試發布。" : "發布沒有開始，內容沒有被退件。";
-  if (job.failureCode === "event_id_collision") return "這個活動代碼已存在，首次發布不能覆寫。請聯絡網站管理者，透過已發布活動修正流程處理。";
-  if (job.failureCode === "amendment_baseline_changed" || job.failureCode === "amendment_base_conflict") return "修正所依據的公開版本或發布資料已變更，系統已停止合併。請聯絡網站管理者核對版本，不能直接重試覆寫。";
-  if (job.failureCode === "snapshot_mismatch") return "已核准內容與發布記錄不一致，系統已停止發布。請聯絡網站管理者檢查這一版的送審記錄。";
-  if (!available) return "發布失敗，內容沒有被退件。已完成的進度會保留。";
-  return job.retryable ? "發布暫時失敗，內容沒有被退件。可以重試發布，系統會從失敗步驟繼續，保留已完成的進度。"
-    : "發布已停止，內容沒有被退件。請聯絡網站管理者排除問題後再繼續。";
+  if (job.failureCode === "event_id_collision") return "這個活動代碼已經公開，首次發布不能覆寫。請退回修改並換一個活動代碼，或聯絡網站管理者。";
+  if (job.failureCode === "amendment_baseline_changed" || job.failureCode === "amendment_base_conflict" || job.failureCode === "amendment_baseline_legacy") {
+    return "這次修正所依據的公開版本已經變更，這一版無法發布。請聯絡網站管理者。";
+  }
+  if (job.failureCode === "snapshot_mismatch") return "已核准的內容與送審紀錄不一致，沒有發布。請聯絡網站管理者。";
+  if (!available) return "發布失敗，內容沒有被退件。";
+  return job.retryable ? "發布暫時失敗，內容沒有被退件。可以重試發布。" : "發布已停止，內容沒有被退件。請聯絡網站管理者。";
 }

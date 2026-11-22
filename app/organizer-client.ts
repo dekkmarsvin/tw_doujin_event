@@ -76,7 +76,6 @@ export type OrganizerEventSummary = {
 
 export type OrganizerEventDetail = {
   claimReviewAvailable?: boolean;
-  recoveryAvailable?: boolean;
   publicationAvailable?: boolean;
   event: OrganizerEventSummary & { eventIdLocked: boolean };
   draft: OrganizerEventDraft;
@@ -416,11 +415,6 @@ export function reopenOrganizerEvent(candidateId: string, expectedVersion: numbe
   });
 }
 
-export function abandonOrganizerAmendment(candidateId: string, expectedVersion: number, restorationPullNumber: number, reason: string) {
-  return organizerCall<{ ok: true; status: "abandoned"; sourceCandidateId: string }>(`/api/admin/organizer/events/${encodeURIComponent(candidateId)}/abandon`, {
-    method: "POST", body: JSON.stringify({ expectedVersion, restorationPullNumber, reason }),
-  });
-}
 
 export function readSharedReferences() {
   return organizerCall<import('./shared-reference-catalog').SharedReferenceCatalog>('/api/admin/references');

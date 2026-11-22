@@ -2,12 +2,11 @@ import { runRequestedServiceCheck } from "../../app/site-service-check";
 import { runAccountNotificationTick } from "../../app/account-notification-scheduler";
 import { createIdentityRepository, type IdentityRepository } from "../../db/identity-repository";
 import { runPublicationTick } from "../../app/publication-scheduler";
-import { createRuntimePublicationDriver, readPublishedEventAtOrigin } from "../../app/publication-runtime";
 import { createFakePublicationDriver, createR2PublicationDriver } from "../../app/publication-dispatch";
 import { runReviewNotificationTick } from "../../app/review-notification-scheduler";
 import { sendPortalMail, type MailEnvironment } from "../../app/portal-mail";
 
-type Env = MailEnvironment & Partial<Pick<PortalEnv, "EVENT_DATA">> & Pick<PortalEnv, "DB" | "ORGANIZER_PUBLICATION_MODE" | "GITHUB_APP_ID" | "GITHUB_APP_INSTALLATION_ID" | "GITHUB_APP_PRIVATE_KEY" | "NOTIFICATION_ORIGIN">;
+type Env = MailEnvironment & Partial<Pick<PortalEnv, "EVENT_DATA">> & Pick<PortalEnv, "DB" | "ORGANIZER_PUBLICATION_MODE" | "NOTIFICATION_ORIGIN">;
 
 /**
  * One repository per isolate, not per tick — the same reason `repositoryFor`
@@ -46,10 +45,8 @@ export default {
         // r2: Pages publishes within the approving request (#546). This tick
         // only finishes a job whose request ended before it did.
         const r2 = env.ORGANIZER_PUBLICATION_MODE === "r2" && env.EVENT_DATA;
-        if (!r2 && env.ORGANIZER_PUBLICATION_MODE !== "github" && !(env.ORGANIZER_PUBLICATION_MODE === "fake" && env.PREVIEW_MAIL_SINK === "d1")) return;
-        const driver = r2 ? createR2PublicationDriver(env.EVENT_DATA!)
-          : env.ORGANIZER_PUBLICATION_MODE === "fake" ? createFakePublicationDriver(async () => false)
-            : createRuntimePublicationDriver(env, readPublishedEventAtOrigin);
+        if (!r2 && !(env.ORGANIZER_PUBLICATION_MODE === "fake" && env.PREVIEW_MAIL_SINK === "d1")) return;
+        const driver = r2 ? createR2PublicationDriver(env.EVENT_DATA!) : createFakePublicationDriver(async () => false);
         const summary = await runPublicationTick({ repository: repositoryFor(env), driver });
         console.log(JSON.stringify({ event: "publication.tick", ...summary }));
       })(),

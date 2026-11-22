@@ -49,13 +49,7 @@ export function createPublicationDispatcher(input: {
   eventData?: EventDataBucket;
 }) {
   if (input.mode === "r2" && input.eventData) return runToCompletion(input.repository, createR2PublicationDriver(input.eventData), input.now);
-  if (input.mode !== "github" && !(input.mode === "fake" && input.allowFake)) return undefined;
-  if (input.mode === "github") {
-    // Approval/retry already committed a due job. Only the independent Worker
-    // executes it, so a Pages runtime defect cannot consume a requested retry
-    // before a repaired Worker can resume the pinned publication.
-    return async () => {};
-  }
+  if (!(input.mode === "fake" && input.allowFake)) return undefined;
   return runToCompletion(input.repository, createFakePublicationDriver(input.eventExists), input.now);
 }
 

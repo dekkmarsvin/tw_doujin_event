@@ -304,14 +304,14 @@ try {
   const failed = await repo.getLatestOrganizerPublicationJob(candidate);
   assert.equal(failed.status,"failed"); assert.equal(failed.step,"waiting_deployment"); assert.equal(failed.retryable,1);
   assert.equal(publishedBytes,beforeBytes,"Failed amendment must leave synthetic public view unchanged");
-  assert.match(await admin.locator("body").innerText(), /系統會從失敗步驟繼續/);
+  assert.match(await admin.locator("body").innerText(), /可以重試發布/);
   await admin.getByRole("button", { name: "重試發布", exact: true }).scrollIntoViewIfNeeded();
   await journey.capture(admin,"amendment-real-d1-recoverable-failure"); await admin.close();
   const retryOwner = await journey.page({ url: `${base}/organizer`, routes: routes("owner") });
   await retryOwner.getByRole("combobox", { name: "活動版本", exact: true }).selectOption(candidate);
   await openSection(retryOwner, /^檢查與發布/);
   await retryOwner.getByRole("button", { name: "重試發布", exact: true }).click();
-  await retryOwner.getByText("已要求從失敗步驟繼續，請查看發布進度。", { exact: true }).waitFor({ timeout: PUBLICATION_TIMEOUT });
+  await retryOwner.getByText("已發布。", { exact: true }).waitFor({ timeout: PUBLICATION_TIMEOUT });
   const completed = await repo.getLatestOrganizerPublicationJob(candidate);
   assert.equal(completed.status,"published");
   for (const key of ["id","snapshot_id","approval_hash","data_pr_number","data_head_sha","data_merge_sha","main_pr_number","main_head_sha","main_merge_sha"]) assert.equal(completed[key],failed[key],key);

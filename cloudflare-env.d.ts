@@ -114,13 +114,9 @@ interface PortalEnv {
   PREVIEW_E2E_TOKEN?: string;
   /** Only the explicit loopback portal may reset its entire disposable store. */
   LOCAL_PORTAL_DISPOSABLE?: string;
-  /** Defaults disabled. Production enablement follows ADR-0058; fake is accepted
+  /** Defaults disabled. `r2` publishes approvals to EVENT_DATA (#546); fake is accepted
    * only with the isolated preview mail sink. */
-  ORGANIZER_PUBLICATION_MODE?: "disabled" | "fake" | "github" | "r2";
-  GITHUB_WEBHOOK_SECRET?: string;
-  GITHUB_APP_ID?: string;
-  GITHUB_APP_PRIVATE_KEY?: string;
-  GITHUB_APP_INSTALLATION_ID?: string;
+  ORGANIZER_PUBLICATION_MODE?: "disabled" | "fake" | "r2";
 }
 
 interface EventContext<Env, Params extends string, Data> {
