@@ -18,7 +18,7 @@ export function publicationFailureMessage(job: { failureCode: string | null; ret
   // switched off the retry button is disabled, and the activity page already
   // carries one line explaining why, so this one stops at what happened.
   if (job.failureCode === "queued_timeout" && !job.started) return available ? "發布沒有開始，內容沒有被退件。可以重試發布。" : "發布沒有開始，內容沒有被退件。";
-  if (job.failureCode === "event_id_collision") return "這個活動代碼已經公開，首次發布不能覆寫。請退回修改並換一個活動代碼，或聯絡網站管理者。";
+  if (job.failureCode === "event_id_collision") return "這個活動代碼已經公開，首次發布不能覆寫。請聯絡網站管理者。";
   if (job.failureCode === "amendment_baseline_changed" || job.failureCode === "amendment_base_conflict" || job.failureCode === "amendment_baseline_legacy") {
     return "這次修正所依據的公開版本已經變更，這一版無法發布。請聯絡網站管理者。";
   }

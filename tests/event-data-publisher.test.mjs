@@ -306,3 +306,21 @@ test("a partial move keeps a multi-day circle whole, and a changed identity hist
   assert.deepEqual(catalog.placements.filter((row) => row.circleId === "c-000001" && row.status === "active").map((row) => [row.day, row.boothCode]), [["1", "S01"], ["2", "S01"]]);
   assert.equal(catalog.placements.find((row) => row.boothCode === "S05" && row.status === "active").circleId, "c-000003");
 });
+
+test("a correction numbers new circles after the ids another event claimed while it was being edited", async () => {
+  const fixture = await amendmentFixture(runner);
+  const store = seeded();
+  await publishApprovedSnapshot(store, published(fixture), tick);
+  const baseline = await createR2AmendmentBaselineLoader(store)({ ...fixture.source });
+  // Another event is published after the correction's baseline was taken.
+  const otherSnapshot = { ...JSON.parse(fixture.source.snapshotJson), candidateId: "other", eventId: "event-beta" };
+  otherSnapshot.draft = { ...otherSnapshot.draft, event: { ...otherSnapshot.draft.event, id: "event-beta" } };
+  otherSnapshot.references = { ...otherSnapshot.references, selection: { ...otherSnapshot.references.selection, eventId: "event-beta" } };
+  const otherJson = JSON.stringify(otherSnapshot);
+  await publishApprovedSnapshot(store, { snapshotJson: otherJson, approvalHash: hash(otherJson), candidateId: "other", candidateVersion: 1 }, tick);
+  const claimed = circlesOf(store, "event-beta").circles.map((circle) => circle.id);
+  await publishApprovedSnapshot(store, amendmentSnapshot(baseline, [{ kind: "released", sources: ["1:S02"], circleName: "接手社" }], "amendment-one"), tick);
+  const handedOver = circlesOf(store).circles.find((circle) => circle.name === "接手社").id;
+  assert.ok(!claimed.includes(handedOver), `${handedOver} was already given to event-beta`);
+  assert.equal(store.read("index.json").events.length, 2, "the other event stays published");
+});

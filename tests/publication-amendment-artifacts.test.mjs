@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { createServer, isRunnableDevEnvironment } from "vite";
-import { amendmentFixture, hash } from "./support/organizer-amendment-fixture.mjs";
+import { adoptedAmendmentFixture, amendmentFixture, hash } from "./support/organizer-amendment-fixture.mjs";
 import { buildOfficialCatalogPayload } from "../scripts/official-catalog-core.mjs";
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 if (!isRunnableDevEnvironment(vite.environments.ssr)) throw new Error("Vite SSR unavailable");
@@ -159,4 +159,28 @@ test("main replacement rejects changed or absent pin, changed source identity an
   }
   const input = mainInput(fixture, data.allFiles); input.dataFiles.set(prefix + "circle-identity-groups.json", fixture.dataFiles.get(prefix + "circle-identity-groups.json"));
   await assert.rejects(builder.buildPublicationMainStage(source, input), (e) => e.code === "snapshot_mismatch");
+});
+
+// Approvals published before #546 carry Git-era baselines (ch-20's does), and
+// the next correction reads them back: they must still load, and still refuse tampering.
+test("a Git-era correction approved with an adopted /2 baseline still loads and still refuses tampering", async () => {
+  const fixture = await adoptedAmendmentFixture(runner);
+  fixture.baseline = fixture.expectedBaseline;
+  const first = await snapshotFor(fixture, [], "adopted-settings", { name: "整合後的活動" });
+  const artifacts = await builder.buildApprovedPublicationArtifacts(first.source);
+  assert.equal(artifacts.operation, "AMEND");
+  assert.equal(artifacts.event.name, "整合後的活動");
+  for (const alter of [
+    (baseline) => { baseline.schema = "organizer-amendment-baseline/1"; delete baseline.adoption; },
+    (baseline) => { baseline.adoption.sha256 = "f".repeat(64); },
+    (baseline) => { baseline.source.jobId = "fabricated-job"; },
+    (baseline) => { baseline.grouping.groups[0].linkage.value = "unreviewed"; },
+    (baseline) => { baseline.evidence.entries[0].aliases.push("unreviewed"); },
+  ]) {
+    const tampered = structuredClone(first.snapshot);
+    const baseline = JSON.parse(tampered.amendment.baselineJson); alter(baseline);
+    tampered.amendment.baselineJson = JSON.stringify(baseline);
+    tampered.amendment.baselineSha256 = hash(tampered.amendment.baselineJson);
+    await assert.rejects(builder.buildApprovedPublicationArtifacts(approved(tampered)), (error) => error.code === "snapshot_mismatch");
+  }
 });

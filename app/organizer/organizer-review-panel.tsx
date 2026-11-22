@@ -72,7 +72,7 @@ function PublicationSection(props: SectionProps & {
   return <div className={styles.subpanel} aria-live="polite"><h4>{historicalPublication ? "發布狀態（先前儲存的內容）" : "發布狀態"}</h4>{historicalPublication && <p className={styles.warning}>這是先前儲存內容的發布紀錄；舊工作不會再重試，是否可編輯依目前活動狀態決定。</p>}<p>{PUBLICATION_STATUS_LABEL[detail.publication.status] ?? "正在確認發布狀態"}</p>
       {detail.event.status === "abandoned" ? <p>這次修正已終止，公開內容沒有改變。要再修正，請從活動清單的已發布版本開始。</p> : <>
         {detail.publication.status === "failed" && !historicalPublication && <p className={styles.warning}>{publicationFailureMessage(detail.publication, detail.publicationAvailable === true)}</p>}
-        {(session.isAdmin || owner) && !historicalPublication && detail.publication.status === "failed" && detail.publication.retryable && <button type="button" disabled={!detail.publicationAvailable || pending} onClick={() => act(retryOrganizerPublication(detail.publication!.id), (result) => result.status === "published" ? "已發布。" : "仍未發布，請看下方說明。")}>重試發布</button>}
+        {(session.isAdmin || owner) && !historicalPublication && detail.publication.status === "failed" && detail.publication.retryable && <button type="button" disabled={!detail.publicationAvailable || pending} onClick={() => act(retryOrganizerPublication(detail.publication!.id), (result) => result.status === "published" ? "已發布。" : "發布還沒有完成，請看下方說明。")}>重試發布</button>}
       </>}
       {session.isAdmin && detail.publication.status === "failed" && detail.publication.failureCode && <p>錯誤代碼：{detail.publication.failureCode}</p>}
   <ActionNotice notice={notice} /></div>;
