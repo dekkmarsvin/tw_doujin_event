@@ -87,10 +87,13 @@ export async function start(name, { showScrollbars = false } = {}) {
   };
 }
 
+/** A published event file, at its plain path or the versioned one a deployed page reads. */
+export const eventFileUrl = (eventId, file) => new RegExp(`/data/events/${eventId}/(?:v/[^/]+/)?${file.replace(/\./g, "\\.")}$`);
+
 /** Replace the catalog the reader reads, built from the real fixture it ships. */
 export function catalogRoute(eventId, mutate) {
   return async (page) => {
-    await page.route(`**/data/events/${eventId}/circles.json`, async (route) => {
+    await page.route(eventFileUrl(eventId, "circles.json"), async (route) => {
       const source = await (await fetch(`${base}/data/events/${eventId}/circles.json`)).json();
       mutate(source);
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(source) });

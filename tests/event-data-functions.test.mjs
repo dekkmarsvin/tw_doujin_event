@@ -71,13 +71,31 @@ test("a new version takes over as soon as the index names it", async () => {
   assert.equal(await readEventJson(env, "nope", "circles.json"), null);
 });
 
+// #546 4d: a page asks for the files of the version it was built with, so the
+// offline cache never pairs one version's catalog with another's map.
+test("a version's URL serves that version only while it is current", async () => {
+  const env = { EVENT_DATA: bucket("20261122000000") };
+  const get = (path) => eventFileResponse(env, new Request("https://example.com/x"), "sample", path);
+  assert.deepEqual(await (await get("v/20261122000000/circles.json")).json(), circles);
+  for (const path of ["v/20261121000000/circles.json", "v/20261122000000/secret.json", "v/20261122000000/../index.json"]) {
+    assert.equal((await get(path)).status, 404, path);
+  }
+  const renamed = { ...circles, circles: circles.circles.map((circle) => ({ ...circle, name: `${circle.name}（新）` })) };
+  env.EVENT_DATA.objects.set("events/sample/20261123000000/circles.json", JSON.stringify(renamed));
+  const index = JSON.parse(env.EVENT_DATA.objects.get("index.json"));
+  index.events[0].version = "20261123000000";
+  env.EVENT_DATA.objects.set("index.json", JSON.stringify(index));
+  assert.equal((await get("v/20261122000000/circles.json")).status, 404, "a superseded version is no longer served");
+  assert.deepEqual(await (await get("v/20261123000000/circles.json")).json(), renamed);
+});
+
 test("every HTML page carries the published events as data, and the homepage its summary", async () => {
   const env = { EVENT_DATA: bucket() };
   const page = () => new Response('<html><head><title>x</title></head><body><div id="root"></div><script>untrusted()</script></body></html>', { headers: { "content-type": "text/html; charset=utf-8", "content-length": "1" } });
   const home = await (await withPublishedEvents(env, "/", page())).text();
   const block = home.match(/<script type="application\/json" id="published-events">(.*?)<\/script><\/head>/)?.[1];
   assert.ok(block, "the data block closes the head");
-  assert.deepEqual(JSON.parse(block), [{ definition, references }]);
+  assert.deepEqual(JSON.parse(block), [{ definition, references, version: "20261122000000" }], "each event carries the version its files are read at");
   assert.match(home, /<div id="root"><header[\s\S]*範例創作市集[\s\S]*<\/main><\/div>/);
   const portal = await withPublishedEvents(env, "/circle", page());
   assert.equal(portal.headers.get("content-length"), null);

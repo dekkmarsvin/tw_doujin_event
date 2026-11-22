@@ -7,7 +7,7 @@ import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer } from "vite";
 import { resetSiteSettings } from "../support/site-settings-fixture.mjs";
 import { amendmentFixture } from "../support/organizer-amendment-fixture.mjs";
-import { base, start } from "./support/journey.mjs";
+import { base, eventFileUrl, start } from "./support/journey.mjs";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const runner = vite.environments.ssr.runner;
@@ -333,7 +333,7 @@ try {
   // sample's map; only the file's eventId is changed to match.
   const publishedMap = JSON.parse(generated.files.find((file) => file.path.endsWith("/map.json")).text);
   assert.deepEqual(publishedMap.layout.servicePoints, savedServices, "publication writes the approved service point unchanged");
-  const readerPage = await journey.mapPage({ event: "sample", routes: async (page) => page.route("**/data/events/sample/map.json", (route) => route.fulfill({ json: { ...publishedMap, eventId: "sample" } })) });
+  const readerPage = await journey.mapPage({ event: "sample", routes: async (page) => page.route(eventFileUrl("sample", "map.json"), (route) => route.fulfill({ json: { ...publishedMap, eventId: "sample" } })) });
   const published = readerPage.locator('[data-marker^="service:"]');
   await published.waitFor();
   assert.equal(await published.getAttribute("aria-label"), "北側，醫護站");

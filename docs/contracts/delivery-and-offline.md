@@ -42,8 +42,8 @@ FF47 的舊資料沒有 Organizer 候選及身分分組檔。除原始固定 pin
 
 ## Payload 邊界
 
-- **場刊與地圖是版本化快照**（`circles.json`，加上 `map.json` 或 `map-manifest.json` + `maps/<periodKey>/<venueSpaceId>.json`），存在活動資料 bucket，由 [`functions/_event-data.ts`](../../functions/_event-data.ts) 依 `index.json` 指向的版本以原路徑 `/data/events/<eventId>/…` 提供，**不打包進 JS bundle**。`index.json` 是唯一的版本指標：發布先寫完新版本的所有檔案，最後才改 `index.json`，讀者只會看到舊版或新版。
-- **已發布活動清單**（每場的活動定義與 reference records）由 middleware 以 `<script type="application/json" id="published-events">` 資料區塊寫進每個會執行程式的 HTML；`app/event-catalog.ts` 同步讀取。部署的 bundle 不內含任何活動；開發伺服器與 fixture build 仍以 Vite `define` 帶入 staged 活動。讀不到 `index.json` 時 HTML 回 503，不以空清單或 fixture 冒充。
+- **場刊與地圖是版本化快照**（`circles.json`，加上 `map.json` 或 `map-manifest.json` + `maps/<periodKey>/<venueSpaceId>.json`），存在活動資料 bucket，由 [`functions/_event-data.ts`](../../functions/_event-data.ts) 依 `index.json` 指向的版本提供，**不打包進 JS bundle**。`index.json` 是唯一的版本指標：發布先寫完新版本的所有檔案，最後才改 `index.json`，讀者只會看到舊版或新版。部署的 Reader 以頁面載入時的版本讀 `/data/events/<eventId>/v/<version>/…`，每個版本的檔案各有網址，離線快取因此不會把一個版本的場刊和另一個版本的地圖配在一起；舊的 `/data/events/<eventId>/…` 仍提供目前版本。開發伺服器的 staged 資料沒有版本，沿用原路徑。
+- **已發布活動清單**（每場的活動定義、reference records 與目前版本）由 middleware 以 `<script type="application/json" id="published-events">` 資料區塊寫進每個會執行程式的 HTML；`app/event-catalog.ts` 同步讀取。部署的 bundle 不內含任何活動；開發伺服器與 fixture build 仍以 Vite `define` 帶入 staged 活動。讀不到 `index.json` 時 HTML 回 503，不以空清單或 fixture 冒充。
 - 公開 bundle 只承載介面與投影邏輯。**場刊資料字面值不得回流到 bundle**，由測試把關。
 - 公開產物不得包含 `_worker.js` 或 server bundle。理由與整體取捨見 [ADR-0008](../adr/0008-static-public-reading-path.md)。
 - 社團補充資料由 `/data/events/:eventId/overrides.json` 這個 Pages Function 提供，疊加在快照之上。
@@ -131,10 +131,10 @@ Service Worker 只攔截同源請求，`challenges.cloudflare.com` 直接落到�
 
 - `dist/index.html` 存在；`dist/_worker.js` 與 `dist/server/index.js` 不存在。
 - 部署的 `dist` 不含 `data/events/`，bundle 不內含已發布活動。
-- `/data/events/<event>/<file>` 只提供 `index.json` 列出的目前版本檔案；未列出的檔案、未發布的活動與路徑穿越一律 404。
+- `/data/events/<event>/<file>` 與 `/data/events/<event>/v/<version>/<file>` 只提供 `index.json` 列出的目前版本檔案；被取代的版本、未列出的檔案、未發布的活動與路徑穿越一律 404，撤下或更正立即生效。
 - 主 bundle 不含場刊資料字面值。
 - 公開 bundle 不包含 `/api/events/`、地圖管理匯入器或管理發布文案。
-- Service Worker 安裝時快取 `index.json` 列出的**每一個**已發布活動的全部檔案。選了第二場活動再離線的讀者不得拿到空殼。
+- Service Worker 安裝時以版本化網址快取 `index.json` 列出的**每一個**已發布活動的全部檔案。選了第二場活動再離線的讀者不得拿到空殼。
 - `dist/_headers` 與 `dist/_routes.json` 存在；Functions 涵蓋 HTML、API、`/data/events/*` 與 `/sitemap.xml`，資產與字型直送。
 - 全新瀏覽器工作階段不需圖片或 D1 即可取得同一份場刊與地圖。
 - 離線重新載入後，已下載的場刊、地圖、字型與介面仍可運作；縮圖不可用時維持文字卡。
