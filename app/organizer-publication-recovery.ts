@@ -65,7 +65,7 @@ export function createPublicationRecoveryAuditor(options: Pick<GitHubAdapterOpti
     if (restoredCommit.parents.length !== 1) refuse();
     const [before, restored, current, baselineTree, mainTree] = await Promise.all([
       tree(dataRepo, restoredCommit.parents[0].sha), tree(dataRepo, restoration.merge_commit_sha), tree(dataRepo, dataMain),
-      tree(dataRepo, baseline.pin.commit), tree(mainRepo, mainHead),
+      tree(dataRepo, baseline.pin!.commit), tree(mainRepo, mainHead),
     ]);
     const prefix = `events/${baseline.event.id}/`;
     const expected = leaves(before);
@@ -76,7 +76,7 @@ export function createPublicationRecoveryAuditor(options: Pick<GitHubAdapterOpti
     if (!same(expected, leaves(restored)) || !same(eventLeaves, new Map([...leaves(current)].filter(([path]) => path.startsWith(prefix))))) refuse();
     // Shared references used by the original snapshot must also be restored;
     // recovery never reverts unrelated shared-reference changes on its behalf.
-    for (const file of baseline.pin.files) {
+    for (const file of baseline.pin!.files) {
       const original = baselineTree.find((entry) => entry.path === file.path);
       if (!original || leaves(current).get(file.path) !== `${original.mode}/${original.type}/${original.sha}`) refuse();
     }
@@ -86,6 +86,6 @@ export function createPublicationRecoveryAuditor(options: Pick<GitHubAdapterOpti
     if (JSON.stringify(pin) !== JSON.stringify(baseline.pin)) refuse();
     return { restorationPullNumber, restorationHeadSha: restoration.head.sha, restorationMergeSha: restoration.merge_commit_sha,
       auditedDataMain: dataMain, auditedMain: mainHead, sourceCandidateId: baseline.source.candidateId,
-      sourceVersion: baseline.source.candidateVersion, sourceDataCommit: baseline.pin.commit };
+      sourceVersion: baseline.source.candidateVersion, sourceDataCommit: baseline.pin!.commit };
   };
 }

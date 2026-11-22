@@ -1,48 +1,11 @@
 /**
- * Published event data, read from R2 (#546).
- *
- * `index.json` is the one pointer: the events readers are offered, in order,
- * each with its current version, the files that version holds, and the event
- * definition and reference records the pages need before any file loads.
- * Files live under `events/<eventId>/<version>/<path>` and are never rewritten;
- * publishing writes a new version's files first and `index.json` last, so a
- * reader sees the old version or the new one, never a mix.
+ * Published event data, served from R2 (#546). The bucket layout is described
+ * in `app/event-data-store.ts`.
  */
 
-export const EVENT_INDEX_KEY = "index.json";
-export const EVENT_INDEX_SCHEMA = "event-index/1";
+import { EVENT_INDEX_KEY, eventFileKey, isSafeEventFile, isSafeEventId, parseEventIndex, type EventIndex, type EventIndexEntry } from "../app/event-data-store";
 
-export type EventIndexEntry = {
-  eventId: string;
-  version: string;
-  files: string[];
-  definition: unknown;
-  references: unknown;
-};
-
-export type EventIndex = { schema: typeof EVENT_INDEX_SCHEMA; events: EventIndexEntry[] };
-
-const SAFE_ID = /^[a-z0-9][a-z0-9-]*$/;
-const SAFE_FILE = /^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*\.json$/;
-
-export function eventFileKey(eventId: string, version: string, file: string) {
-  return `events/${eventId}/${version}/${file}`;
-}
-
-export function parseEventIndex(value: unknown): EventIndex {
-  const index = value as Partial<EventIndex> | null;
-  if (!index || index.schema !== EVENT_INDEX_SCHEMA || !Array.isArray(index.events)) throw new Error("Event index has an unknown shape.");
-  const seen = new Set<string>();
-  for (const entry of index.events) {
-    if (!entry || typeof entry.eventId !== "string" || !SAFE_ID.test(entry.eventId) || seen.has(entry.eventId)) throw new Error("Event index names an invalid event.");
-    if (typeof entry.version !== "string" || !SAFE_ID.test(entry.version)) throw new Error(`Event index has an invalid version for ${entry.eventId}.`);
-    if (!Array.isArray(entry.files) || !entry.files.every((file) => typeof file === "string" && SAFE_FILE.test(file) && !file.split("/").includes(".."))) {
-      throw new Error(`Event index has an invalid file list for ${entry.eventId}.`);
-    }
-    seen.add(entry.eventId);
-  }
-  return index as EventIndex;
-}
+export type { EventIndex, EventIndexEntry };
 
 export async function readEventIndex(env: Pick<PortalEnv, "EVENT_DATA">): Promise<EventIndex> {
   const object = await env.EVENT_DATA.get(EVENT_INDEX_KEY);
@@ -88,7 +51,7 @@ export async function eventIndexResponse(env: Pick<PortalEnv, "EVENT_DATA">, req
 
 /** `GET /data/events/<eventId>/<file>`: the current version's copy. */
 export async function eventFileResponse(env: Pick<PortalEnv, "EVENT_DATA">, request: Request, eventId: string, file: string) {
-  if (!SAFE_ID.test(eventId) || !SAFE_FILE.test(file)) return new Response("Not found", { status: 404 });
+  if (!isSafeEventId(eventId) || !isSafeEventFile(file)) return new Response("Not found", { status: 404 });
   const entry = (await readEventIndex(env)).events.find((item) => item.eventId === eventId);
   if (!entry || !entry.files.includes(file)) return new Response("Not found", { status: 404 });
   const object = await env.EVENT_DATA.get(eventFileKey(eventId, entry.version, file));

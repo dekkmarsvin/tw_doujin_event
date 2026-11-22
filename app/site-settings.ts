@@ -36,7 +36,7 @@ export type PublicationActivity = {
 };
 export type AdminSiteSettings = {
   settings: SiteSettings;
-  publicationMode: "disabled" | "fake" | "github";
+  publicationMode: "disabled" | "fake" | "github" | "r2";
   publicationActivities: PublicationActivity[];
   services: ServiceChecks | null;
 };

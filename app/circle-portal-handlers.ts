@@ -121,7 +121,7 @@ type PortalConfig = {
    */
   publishedEvent?: (eventId: string) => Promise<{ dataUpdatedAt: string; eventEndsAt: string } | null>;
   /** Merge remains off until the GitHub App and both repository rulesets are verified. */
-  organizerPublicationMode?: "disabled" | "fake" | "github";
+  organizerPublicationMode?: "disabled" | "fake" | "github" | "r2";
 };
 
 type PortalDependencies = {

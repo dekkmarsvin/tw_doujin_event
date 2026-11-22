@@ -48,9 +48,8 @@
   // Top level is production only — `vars` is non-inheritable, which is why the
   // preview environment declares its own dummy pair below.
   "vars": {
-    // Paused while #546 moves publication to the event data bucket: the old
-    // pipeline writes to the data repository, which no longer reaches readers.
-    "ORGANIZER_PUBLICATION_MODE": "disabled",
+    // Approval publishes straight to the event data bucket (#546).
+    "ORGANIZER_PUBLICATION_MODE": "r2",
     "EVENT_ID": "ff47",
     "TURNSTILE_SITEKEY": "0x4AAAAAAET9rAWIzjOckkSc",
     "THUMBNAIL_PUBLIC_ORIGIN": "https://media.kotoban.top"
@@ -94,6 +93,7 @@
       "vars": {
         "EVENT_ID": "ff47",
         "PREVIEW_MAIL_SINK": "d1",
+        "ORGANIZER_PUBLICATION_MODE": "r2",
         "PREVIEW_TEST_RECIPIENTS": "preview-admin@example.test,preview-circle@example.test",
         "MAILGUN_DOMAIN": "verify.kotoban.top",
         "TURNSTILE_SITEKEY": "1x00000000000000000000AA",

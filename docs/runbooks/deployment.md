@@ -236,14 +236,21 @@ Browser job 使用與 Playwright lockfile 版本相符的官方容器，內含 b
 
 已發布活動存在 R2 bucket `tw-doujin-event-data`（preview：`tw-doujin-event-data-preview`），由 Pages Functions 以原本的 `/data/events/…` 路徑提供（#546）。bucket 不開公開網域。
 
-- `index.json`：已發布活動與讀者看到的順序，每場記錄目前版本、檔案清單、活動定義與 reference records。這是唯一的版本指標。
-- `events/<eventId>/<version>/<file>`：各版本的檔案，寫入後不再修改，舊版本保留。
+- `index.json`：已發布活動與讀者看到的順序，每場記錄目前版本、檔案清單、活動定義、reference records 與發布它的核准來源，另記錄目前的社團配號表版本。這是唯一的版本指標。
+- `events/<eventId>/<version>/<file>`：各版本的公開檔案，寫入後不再修改，舊版本保留。
+- `events/<eventId>/<version>/source/`：下一次更正要讀的發布輸入（社團分組），不對外提供。
+- `registry/<version>/`：社團配號表（`allocations.json`、`evidence.json`）。
+- `history/index-<version>.json`：每一份發布過的 `index.json` 完整副本，供回滾使用。
 
 讀不到 `index.json` 時所有 HTML 頁回 503，所以**部署讀 R2 的程式之前，production 與 preview 的 bucket 都要先有資料**。
 
-### 從 data repository 上傳
+### 核准即發布
 
-在核准即發布（#546 階段 4）完成前，活動資料仍從 data repository 的 pin 產生，再整批上傳成一個新版本：
+`ORGANIZER_PUBLICATION_MODE=r2` 時，管理者核准後在同一個請求內：產生公開檔案、更新社團配號表、寫入新版本，最後改寫 `index.json`（帶 ETag 條件，另一筆發布剛完成時要求重試）。失敗不會改動讀者看到的內容；可重試的失敗用既有的「重試」按鈕，同一筆核准重送不會重複發布。更正沿用名單異動宣告，基準改從 bucket 讀取並與公開的 `circles.json` 核對。publication Worker 在 `r2` 模式下不推進任何發布，只保留通知排程。
+
+### 從 data repository 上傳（一次性）
+
+把 data repository 的已發布活動整批搬進 bucket，用於初次遷移，或 bucket 還沒有任何經核准發布的活動時：
 
 ```bash
 npm run data:fetch -- --published
@@ -252,19 +259,20 @@ npm run event-data:upload -- --remote --preview
 npm run event-data:upload -- --remote
 ```
 
-需要已登入、可寫入該帳號 R2 的 Wrangler。上傳先寫完所有檔案，最後才寫 `index.json`；中途失敗時讀者仍看到上一版，重跑即可。
+需要已登入、可寫入該帳號 R2 的 Wrangler。上傳一併寫入 main repository 的社團配號表與各活動的分組，先寫完所有檔案，最後才寫 `index.json`；中途失敗時讀者仍看到上一版，重跑即可。
+
+**bucket 裡一有經核准發布的活動，上傳就會拒絕執行**：data repository 沒有那些活動與它們的配號，整批上傳會把它們從讀者端移除。
 
 ### 回滾
 
-舊版本的檔案都還在。從 bucket 下載上一份 `index.json` 的內容，或把目前 `index.json` 裡各活動的 `version` 改回上一個版本後重新上傳 `index.json`：
+舊版本的檔案、配號表與每一份 `index.json` 都還在。回滾就是把整份舊的 index 復原，不要只改其中某個活動的 `version`：index 裡的活動定義、reference records、核准來源與配號表版本必須一起回到同一個時間點。
 
 ```bash
+npx wrangler r2 object get tw-doujin-event-data/history/index-<版本>.json --file index.json --remote
 npx wrangler r2 object put tw-doujin-event-data/index.json --file index.json --content-type application/json --remote
 ```
 
-### 發布暫停
-
-舊的發布流程寫入 data repository，已不會影響讀者看到的內容，因此 `wrangler.jsonc` 把 `ORGANIZER_PUBLICATION_MODE` 設為 `disabled`：核准與重試回「發布暫停」。#546 階段 4 改為核准時直接寫入 R2 後再恢復。
+回滾後，之後發布的版本與它們配發的社團 ID 都不再生效；這段期間核准的活動或更正要重新核准。
 
 ## 首次啟用
 

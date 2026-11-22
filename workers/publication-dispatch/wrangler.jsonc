@@ -36,7 +36,9 @@
     "NOTIFICATION_ORIGIN": "https://map.kotoban.top",
     "MAILGUN_DOMAIN": "verify.kotoban.top",
     "MAILGUN_SENDER": "場刊 Map <noreply@verify.kotoban.top>",
-    "ORGANIZER_PUBLICATION_MODE": "github",
+    // Pages publishes to the event data bucket within the approving request
+    // (#546); this Worker only finishes a job whose request ended early.
+    "ORGANIZER_PUBLICATION_MODE": "r2",
     "GITHUB_APP_ID": "4931208",
     "GITHUB_APP_INSTALLATION_ID": "161391064"
   },
@@ -45,11 +47,12 @@
     "database_name": "tw-catalog-identity",
     "database_id": "935b605f-6d08-436f-bbf8-f80b8f3bd7e2"
   }],
+  "r2_buckets": [{ "binding": "EVENT_DATA", "bucket_name": "tw-doujin-event-data" }],
   "env": {
     "preview": {
       "triggers": { "crons": ["* * * * *"] },
       "vars": {
-        "ORGANIZER_PUBLICATION_MODE": "disabled",
+        "ORGANIZER_PUBLICATION_MODE": "r2",
         "PREVIEW_MAIL_SINK": "d1",
         "PREVIEW_TEST_RECIPIENTS": "preview-admin@example.test,preview-circle@example.test",
         "NOTIFICATION_ORIGIN": "https://review-notifications.tw-catalog.pages.dev",
@@ -60,7 +63,8 @@
         "binding": "DB",
         "database_name": "tw-catalog-identity-preview",
         "database_id": "88716ee2-4d17-4c93-87aa-bfe9c961a599"
-      }]
+      }],
+      "r2_buckets": [{ "binding": "EVENT_DATA", "bucket_name": "tw-doujin-event-data-preview" }]
     }
   }
 }

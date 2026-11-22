@@ -37,6 +37,8 @@ interface D1Database {
 interface R2PutOptions {
   httpMetadata?: { contentType?: string; cacheControl?: string };
   customMetadata?: Record<string, string>;
+  /** The put returns null, writing nothing, when the stored ETag differs. */
+  onlyIf?: { etagMatches: string };
 }
 
 interface R2ObjectBody {
@@ -44,6 +46,7 @@ interface R2ObjectBody {
   httpMetadata?: { contentType?: string };
   /** Quoted ETag, ready for an `ETag` header. */
   httpEtag: string;
+  etag: string;
   text(): Promise<string>;
 }
 
@@ -53,7 +56,7 @@ interface R2Bucket {
     truncated: boolean;
     cursor?: string;
   }>;
-  put(key: string, value: ArrayBuffer | ArrayBufferView | ReadableStream, options?: R2PutOptions): Promise<unknown>;
+  put(key: string, value: string | ArrayBuffer | ArrayBufferView | ReadableStream, options?: R2PutOptions): Promise<unknown>;
   get(key: string): Promise<R2ObjectBody | null>;
   delete(keys: string | string[]): Promise<void>;
 }
@@ -113,7 +116,7 @@ interface PortalEnv {
   LOCAL_PORTAL_DISPOSABLE?: string;
   /** Defaults disabled. Production enablement follows ADR-0058; fake is accepted
    * only with the isolated preview mail sink. */
-  ORGANIZER_PUBLICATION_MODE?: "disabled" | "fake" | "github";
+  ORGANIZER_PUBLICATION_MODE?: "disabled" | "fake" | "github" | "r2";
   GITHUB_WEBHOOK_SECRET?: string;
   GITHUB_APP_ID?: string;
   GITHUB_APP_PRIVATE_KEY?: string;

@@ -130,11 +130,13 @@ export async function buildApprovedPublicationArtifacts(source: ApprovedArtifact
       const approved = snapshot.amendment!;
       if (typeof approved.baselineJson !== "string" || await sha256Hex(approved.baselineJson) !== approved.baselineSha256) fail("修正基準的核准 hash 不符。", "snapshot_mismatch");
       const baseline = JSON.parse(approved.baselineJson) as OrganizerAmendmentBaseline;
-      if (!["organizer-amendment-baseline/1", "organizer-amendment-baseline/2"].includes(baseline.schema) || !Array.isArray(approved.changes)
+      // `/3` is pinned to an event data bucket version (#546); older baselines to Git commits and a pin.
+      const gitPinned = baseline.schema !== "organizer-amendment-baseline/3";
+      if (!["organizer-amendment-baseline/1", "organizer-amendment-baseline/2", "organizer-amendment-baseline/3"].includes(baseline.schema) || !Array.isArray(approved.changes)
         || baseline.source.candidateId === snapshot.candidateId || !Number.isSafeInteger(baseline.source.candidateVersion) || baseline.source.candidateVersion < 1
-        || !COMMIT.test(baseline.source.dataCommit) || !COMMIT.test(baseline.source.mainCommit) || !COMMIT.test(baseline.mainCommit)
-        || baseline.event.id !== snapshot.eventId || baseline.pin.eventId !== snapshot.eventId
-        || !sameJson(parseEventDataPin(baseline.pin), baseline.pin)
+        || (gitPinned && (!COMMIT.test(baseline.source.dataCommit) || !COMMIT.test(baseline.source.mainCommit) || !COMMIT.test(baseline.mainCommit ?? "")
+          || baseline.pin?.eventId !== snapshot.eventId || !sameJson(parseEventDataPin(baseline.pin), baseline.pin)))
+        || baseline.event.id !== snapshot.eventId
         || !sameJson(snapshotDraft, baseline.draft) || !referencesMatchBaseline(baseline.references, snapshot.references)) fail("修正 snapshot 與固定基準的活動、reference 或版本不符。", "snapshot_mismatch");
       try { await assertBaselineProvenance(baseline); }
       catch { fail("修正 snapshot 的公開基準來源不符。", "snapshot_mismatch"); }
@@ -232,7 +234,7 @@ export async function buildPublicationDataStage(source: ApprovedArtifactSource, 
   const artifacts = await buildApprovedPublicationArtifacts(source);
   if (artifacts.amendment) {
     const prefix = `events/${artifacts.snapshot.eventId}/`;
-    const pinned = artifacts.amendment.baseline.pin.files.filter((file: { path: string }) => file.path.startsWith(prefix));
+    const pinned = artifacts.amendment.baseline.pin!.files.filter((file: { path: string }) => file.path.startsWith(prefix));
     const expected = new Set([...pinned.map((file: { path: string }) => file.path), prefix + "NOTICE"]);
     if (base.eventDirectoryExists !== true || !base.eventFiles || base.eventFiles.size !== expected.size
       || [...base.eventFiles.keys()].some((path) => !expected.has(path))) fail("尚未完整核對原活動的固定資料基準。", "amendment_baseline_changed");

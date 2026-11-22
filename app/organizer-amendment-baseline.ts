@@ -19,10 +19,12 @@ export type AmendmentPublishedSource = {
 };
 type Artifacts = Awaited<ReturnType<typeof buildApprovedPublicationArtifacts>>;
 export type OrganizerAmendmentBaseline = {
-  schema: "organizer-amendment-baseline/1" | "organizer-amendment-baseline/2";
+  /** `/3` is read from the event data bucket (#546) and pins its version instead of Git commits. */
+  schema: "organizer-amendment-baseline/1" | "organizer-amendment-baseline/2" | "organizer-amendment-baseline/3";
   adoption?: { record: OrganizerBaselineAdoption; sha256: string };
   source: Omit<AmendmentPublishedSource, "snapshotJson">;
-  mainCommit: string; pin: ReturnType<typeof parseEventDataPin>;
+  version?: string;
+  mainCommit?: string; pin?: ReturnType<typeof parseEventDataPin>;
   event: Artifacts["event"]; official: Artifacts["official"]; grouping: Artifacts["grouping"];
   allocations: unknown; evidence: unknown; draft: OrganizerEventDraft;
   references: Artifacts["snapshot"]["references"];

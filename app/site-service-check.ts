@@ -30,6 +30,7 @@ export async function checkMailService(env: MailEnvironment, requestFetch = glob
 
 export async function checkPublicationService(env: Environment, requestFetch = globalThis.fetch): Promise<ServiceCheck> {
   if (env.ORGANIZER_PUBLICATION_MODE === "fake" && env.PREVIEW_MAIL_SINK === "d1") return check("available", "預覽發布", "使用隔離的預覽發布功能。");
+  if (env.ORGANIZER_PUBLICATION_MODE === "r2") return check("available", "活動資料發布", "核准時直接寫入活動資料儲存。");
   if (env.ORGANIZER_PUBLICATION_MODE !== "github") return check("unavailable", "發布設定", "此環境尚未啟用 GitHub 發布能力。");
   try {
     // Token exchange checks the same two repositories and permission scope as publication; no repository writes.
