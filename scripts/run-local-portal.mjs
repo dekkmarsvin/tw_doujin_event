@@ -16,7 +16,7 @@ const wrangler = fileURLToPath(new URL(
 ));
 // Pages Functions serve event data from R2 (#546), so the staged fixture goes
 // into the portal's local bucket before the server starts.
-const seed = spawnSync(process.execPath, [fileURLToPath(new URL("./upload-event-data.mjs", import.meta.url)), "--local", "--persist-to", ".wrangler/local-portal"], {
+const seed = spawnSync(process.execPath, [fileURLToPath(new URL("./upload-event-data.mjs", import.meta.url)), "--persist-to", ".wrangler/local-portal"], {
   cwd: fileURLToPath(new URL("..", import.meta.url)),
   stdio: "inherit",
 });

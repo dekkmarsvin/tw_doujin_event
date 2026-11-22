@@ -94,7 +94,7 @@ main repo PR
   allocations.json + evidence.json + data/event-data-pins/<eventId>.json
 ```
 
-main PR 必須先在同一分支產生並 review identity registry diff，再執行 staging 與 pin gate。現行 [`scripts/build-official-circle-catalog.mjs`](../../scripts/build-official-circle-catalog.mjs) 讀取 main repo 的 `evidence.json` 且要求完整 coverage；這項 fail-closed seam 保留。
+main PR 必須先在同一分支產生並 review identity registry diff，再執行 staging 與 pin gate。現行 [`scripts/build-official-circle-catalog.mjs`](https://github.com/dekkmarsvin/tw_doujin_event/blob/08ac8a5268507f3caa938f80a4374c09b9035083/scripts/build-official-circle-catalog.mjs) 讀取 main repo 的 `evidence.json` 且要求完整 coverage；這項 fail-closed seam 保留。
 
 [#116](https://github.com/dekkmarsvin/tw_doujin_event/issues/116) 不關閉，改為「新活動 identity 配號與 evidence 產生器」：移除跨活動候選、沿用與改名裁決 UI；從 `official-booths.json` 加上可 review 的同活動 grouping 產生全域唯一 allocation／本活動 evidence，並提供 dry-run、原子寫入與 coverage 驗證。該產生器完成前，不能宣稱新活動已達兩個 PR 的穩定流程。
 
@@ -139,16 +139,16 @@ main PR 必須先在同一分支產生並 review identity registry diff，再執
 
 | 檔案 | 變更 |
 |---|---|
-| `scripts/reference-data-fetcher.mjs` → [`scripts/event-data-fetcher.mjs`](../../scripts/event-data-fetcher.mjs)、[`scripts/verified-tree-replace.mjs`](../../scripts/verified-tree-replace.mjs) | 第二次 fetch 與雙樹原子替換移除；`replaceVerifiedTrees` 降為單樹 |
-| [`scripts/fetch-event-data.mjs`](../../scripts/fetch-event-data.mjs) | 移除 reference pin 的第二段解析與 `stageReferenceData` 呼叫；`files` 直接涵蓋 references |
-| [`scripts/event-data-pin-utils.mjs`](../../scripts/event-data-pin-utils.mjs) | pin schema 升版，`files` 路徑允許 `events/` 與 `references/` 兩個前綴 |
+| `scripts/reference-data-fetcher.mjs` → [`scripts/event-data-fetcher.mjs`](https://github.com/dekkmarsvin/tw_doujin_event/blob/08ac8a5268507f3caa938f80a4374c09b9035083/scripts/event-data-fetcher.mjs)、[`scripts/verified-tree-replace.mjs`](https://github.com/dekkmarsvin/tw_doujin_event/blob/08ac8a5268507f3caa938f80a4374c09b9035083/scripts/verified-tree-replace.mjs) | 第二次 fetch 與雙樹原子替換移除；`replaceVerifiedTrees` 降為單樹 |
+| [`scripts/fetch-event-data.mjs`](https://github.com/dekkmarsvin/tw_doujin_event/blob/08ac8a5268507f3caa938f80a4374c09b9035083/scripts/fetch-event-data.mjs) | 移除 reference pin 的第二段解析與 `stageReferenceData` 呼叫；`files` 直接涵蓋 references |
+| [`scripts/event-data-pin-utils.mjs`](https://github.com/dekkmarsvin/tw_doujin_event/blob/08ac8a5268507f3caa938f80a4374c09b9035083/scripts/event-data-pin-utils.mjs) | pin schema 升版，`files` 路徑允許 `events/` 與 `references/` 兩個前綴 |
 | `scripts/reference-data-pin-utils.mjs` → [`scripts/reference-selection-utils.mjs`](../../scripts/reference-selection-utils.mjs) | **只移除定位面**：`REFERENCE_DATA_REPOSITORY`、`rawReferenceFileUrl`、pin 的 `repository`／`commit` 欄位驗證。記錄 schema、`validateSources`、`validateProvenance`、`selectEventReferenceRecords` 與 selection 驗證**全部保留** |
 | [`scripts/stage-event-data.mjs`](../../scripts/stage-event-data.mjs) | selection 來源改為 `events/<eventId>/reference-selection.json` |
-| [`scripts/circle-identity-registry.mjs`](../../scripts/circle-identity-registry.mjs) 與 #116 的產生器 | 保留全域唯一配號；新增 event-local linkage 模式，以可 review 的主辦來源 grouping 合併同活動多日 sources；名稱只用於 drift 檢查，不得作為 grouping 依據，也不得從其他活動產生候選或沿用 ID |
-| [`scripts/build-official-circle-catalog.mjs`](../../scripts/build-official-circle-catalog.mjs) | main identity evidence 的完整 coverage gate 不變；main identity + pin PR 必須在同一分支通過 |
+| [`scripts/circle-identity-registry.mjs`](https://github.com/dekkmarsvin/tw_doujin_event/blob/08ac8a5268507f3caa938f80a4374c09b9035083/scripts/circle-identity-registry.mjs) 與 #116 的產生器 | 保留全域唯一配號；新增 event-local linkage 模式，以可 review 的主辦來源 grouping 合併同活動多日 sources；名稱只用於 drift 檢查，不得作為 grouping 依據，也不得從其他活動產生候選或沿用 ID |
+| [`scripts/build-official-circle-catalog.mjs`](https://github.com/dekkmarsvin/tw_doujin_event/blob/08ac8a5268507f3caa938f80a4374c09b9035083/scripts/build-official-circle-catalog.mjs) | main identity evidence 的完整 coverage gate 不變；main identity + pin PR 必須在同一分支通過 |
 | `npm run reference-data:fetch` | 移除。獨立維護 reference 時直接 clone 資料 repo |
-| [`tests/event-data-pin.test.mjs`](../../tests/event-data-pin.test.mjs)、[`tests/reference-selection.test.mjs`](../../tests/reference-selection.test.mjs)、[`tests/circle-identity-registry.test.mjs`](../../tests/circle-identity-registry.test.mjs) | 隨 pin schema 升版調整，並證明跨活動同名會配發新 ID、具主辦證據的同活動多日群組沿用同一 ID、只有同名但無 grouping 證據時 fail closed、同活動既有 source 重跑為 no-op |
-| [共享 reference 選擇契約](../contracts/reference-selection.md)、[社團目錄契約](../contracts/circle-catalog.md)、[社團資料更新 runbook](../runbooks/catalog-data-update.md) | 前者只改定位面；後兩者改寫跨活動 linkage 與兩 PR 流程，完整 coverage 邊界不動 |
+| [`tests/event-data-pin.test.mjs`](https://github.com/dekkmarsvin/tw_doujin_event/blob/08ac8a5268507f3caa938f80a4374c09b9035083/tests/event-data-pin.test.mjs)、[`tests/reference-selection.test.mjs`](../../tests/reference-selection.test.mjs)、[`tests/circle-identity-registry.test.mjs`](../../tests/circle-identity-registry.test.mjs) | 隨 pin schema 升版調整，並證明跨活動同名會配發新 ID、具主辦證據的同活動多日群組沿用同一 ID、只有同名但無 grouping 證據時 fail closed、同活動既有 source 重跑為 no-op |
+| [共享 reference 選擇契約](../contracts/reference-selection.md)、[社團目錄契約](../contracts/circle-catalog.md)、[社團資料更新 runbook](https://github.com/dekkmarsvin/tw_doujin_event/blob/08ac8a5268507f3caa938f80a4374c09b9035083/docs/runbooks/catalog-data-update.md) | 前者只改定位面；後兩者改寫跨活動 linkage 與兩 PR 流程，完整 coverage 邊界不動 |
 
 **現在做最便宜。**只有一場活動時遷移是一個 PR；每多一場活動就多一個 repository 要搬、一組 ruleset 要建、一份 pin 要重算。
 

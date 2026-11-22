@@ -2,8 +2,10 @@
 
 > **凍結（2026-11-21）**：描述舊後端，後端依 [#546](https://github.com/dekkmarsvin/tw_doujin_event/issues/546) 重寫後隨對應程式刪除。只用來理解現況，不作為新需求的依據。
 
-**實作**：[`scripts/reference-selection-utils.mjs`](../../scripts/reference-selection-utils.mjs)、[`scripts/stage-event-data.mjs`](../../scripts/stage-event-data.mjs)、[`scripts/event-data-fetcher.mjs`](../../scripts/event-data-fetcher.mjs)、[`scripts/event-workspace-generator.mjs`](../../scripts/event-workspace-generator.mjs)
-**測試**：`tests/reference-selection.test.mjs`、`tests/event-data-fetcher.test.mjs`、`tests/event-workspace-generator.test.mjs`
+**實作**：[`app/reference-selection.mjs`](../../app/reference-selection.mjs)
+**測試**：`tests/reference-selection.test.mjs`
+
+> data repository 的下載與 staging（`data:fetch`、`data:stage` 的 pin 模式）已在 #546 階段 4c-2 移除。下方描述 pin 與 data repo 的段落只是歷史；核准發布時仍以同一套 selection 驗證核准 snapshot 內的 references。
 
 跨活動共用的主辦、主辦分類目錄、場館與場地維護在公開的 [`dekkmarsvin/tw_doujin_event-data`](https://github.com/dekkmarsvin/tw_doujin_event-data) 的 `references/`。公開事實只接受活動主辦或場館官方說明頁；社團自行填寫的內容仍屬活動 overlay。
 

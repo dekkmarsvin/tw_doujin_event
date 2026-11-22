@@ -1,12 +1,9 @@
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { createHash } from "node:crypto";
-import { readFile, mkdir, mkdtemp, writeFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { createServer, isRunnableDevEnvironment } from "vite";
-import { parseEventDataPin } from "../scripts/event-data-pin-utils.mjs";
+import { parseEventDataPin } from "../app/event-data-pin.mjs";
 import { buildOfficialCatalogPayload } from "../scripts/official-catalog-core.mjs";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
@@ -18,6 +15,7 @@ const { withOrganizerImportedAreaIds } = await runner.import("/app/organizer-eve
 const catalog = await runner.import("/app/organizer-reference-catalog.ts");
 const { pinnedVenue } = await runner.import("/app/organizer-reference-seeds.ts");
 const { validateStagedEventArtifacts } = await runner.import("/app/staged-event-data.ts");
+const { publishApprovedSnapshot } = await runner.import("/app/event-data-publisher.ts");
 after(() => vite.close());
 const hash = (text) => createHash("sha256").update(text).digest("hex");
 const source = (snapshot) => { const snapshotJson = JSON.stringify(snapshot); return { snapshotJson, approvalHash: hash(snapshotJson) }; };
@@ -25,7 +23,34 @@ const now = Date.parse("2026-09-14T10:00:00.000Z");
 const mapLayout = JSON.parse(await readFile("fixtures/events/sample/map.json", "utf8")).layout;
 const allocationsJson = await readFile("data/circle-identities/allocations.json", "utf8");
 const evidenceJson = await readFile("data/circle-identities/evidence.json", "utf8");
-const ff47PinBefore = await readFile("data/event-data-pins/ff47.json", "utf8");
+
+/** Publish into an in-memory event data bucket and read back what readers get,
+ * checked the way the build checks staged events. */
+async function publishForReaders(approved) {
+  let tag = 0;
+  const store = new Map();
+  const write = (key, text) => store.set(key, { text, etag: `e${++tag}` });
+  write("index.json", JSON.stringify({ schema: "event-index/1", registry: "r0", events: [] }));
+  write("registry/r0/allocations.json", allocationsJson);
+  write("registry/r0/evidence.json", evidenceJson);
+  const bucket = {
+    async get(key) { const object = store.get(key); return object ? { text: async () => object.text, etag: object.etag } : null; },
+    async put(key, value, options = {}) {
+      if (options.onlyIf && store.get(key)?.etag !== options.onlyIf.etagMatches) return null;
+      write(key, value);
+      return {};
+    },
+  };
+  await publishApprovedSnapshot(bucket, { ...approved, candidateId: "candidate-next", candidateVersion: 8 }, () => now);
+  const { version, files } = JSON.parse(store.get("index.json").text).events.find((entry) => entry.eventId === "next-event");
+  // Readers only get files the index lists; anything else is a 404.
+  const read = (file) => {
+    assert.ok(files.includes(file), `${file} is not listed for readers`);
+    return JSON.parse(store.get(`events/next-event/${version}/${file}`).text);
+  };
+  validateStagedEventArtifacts(read("event.json"), read("reference-records.json"), read("circles.json"), read("map.json"), "next-event");
+  return read;
+}
 
 async function sample({ days = 1 } = {}) {
   const organizer = catalog.createOrganizerReference({ name: "測試主辦", sourceUrl: "https://organizer.example/" }, now);
@@ -66,7 +91,7 @@ test("new approvals publish the same cross-day grouping reviewed at import witho
   assert.equal((await builder.buildApprovedPublicationArtifacts(source(snapshot))).grouping.groups.length, 4);
 });
 
-test("approved snapshot produces deterministic two-stage files and stages through the real Reader pipeline", async () => {
+test("approved snapshot produces deterministic two-stage files and publishes files readers can load", async () => {
   const snapshot = await sample();
   const approved = source(snapshot);
   const data = await builder.buildPublicationDataStage(approved, base(snapshot));
@@ -81,25 +106,11 @@ test("approved snapshot produces deterministic two-stage files and stages throug
   const previous = JSON.parse(evidenceJson);
   assert.deepEqual(mainFiles.get("data/circle-identities/evidence.json").entries.slice(0, previous.entries.length), previous.entries);
   assert.equal(mainFiles.get("data/circle-identities/evidence.json").entries.length, previous.entries.length + 2, "same names are not linkage");
-  assert.equal(await readFile("data/event-data-pins/ff47.json", "utf8"), ff47PinBefore);
-  const workspace = await mkdtemp(path.join(tmpdir(), "publication-artifacts-"));
-  try {
-    for (const file of [...data.allFiles, ...main.files]) {
-      const relative = file.path.startsWith("events/next-event/") ? `.event-data/next-event/${file.path.slice("events/next-event/".length)}`
-        : file.path.startsWith("references/") ? `.event-data/next-event/${file.path}` : file.path;
-      const destination = path.join(workspace, relative);
-      await mkdir(path.dirname(destination), { recursive: true });
-      await writeFile(destination, file.text);
-    }
-    execFileSync(process.execPath, ["scripts/stage-event-data.mjs", "next-event", "--workspace", workspace], { cwd: process.cwd(), stdio: "pipe" });
-    execFileSync(process.execPath, ["scripts/check-staged-event-data.mjs", "--workspace", workspace], { cwd: process.cwd(), stdio: "pipe" });
-    const root = path.join(workspace, "public/data/events/next-event");
-    const reader = JSON.parse(await readFile(path.join(root, "circles.json"), "utf8"));
-    assert.deepEqual(reader.placements.map(({ area }) => area), ["A", "B"]);
-    const event = JSON.parse(await readFile(path.join(root, "event.json"), "utf8"));
-    assert.equal(event.eventEndsAt, "2026-11-07T23:59:59+08:00");
-    assert.equal(event.dataUpdatedAt, snapshot.contentUpdatedAt);
-  } finally { await rm(workspace, { recursive: true, force: true }); }
+  const read = await publishForReaders(approved);
+  assert.deepEqual(read("circles.json").placements.map(({ area }) => area), ["A", "B"]);
+  const event = read("event.json");
+  assert.equal(event.eventEndsAt, "2026-11-07T23:59:59+08:00");
+  assert.equal(event.dataUpdatedAt, snapshot.contentUpdatedAt);
 });
 
 test("aliases publish only when the organizer set them", async () => {
@@ -206,7 +217,6 @@ test("an existing venue record is replaced only by the same record with its addr
   const pin = JSON.parse(main.files.find((file) => file.path.includes("event-data-pins/")).text);
   assert.equal(pin.files.find((file) => file.path === venuePath).sha256, hash(completed.content));
   // FF47's own pin names the old bytes at its own commit and does not move.
-  assert.equal(await readFile("data/event-data-pins/ff47.json", "utf8"), ff47PinBefore);
 
   const renamed = JSON.parse(pinnedVenue);
   renamed.name = "爭艷館（舊名）";
@@ -288,30 +298,16 @@ test("service points and space marks in an approved map survive publication and 
   snapshot.maps[0].content.layout.rows[0].labelSide = "left";
   snapshot.maps[0].content.layout.accessPoints = [{ id: "side", kind: "both", direction: "east", x: 5, y: 50, label: "側門" }];
   const approved = source(snapshot);
-  const data = await builder.buildPublicationDataStage(approved, base(snapshot));
-  const main = await builder.buildPublicationMainStage(approved, mainInput(data.allFiles));
-  const workspace = await mkdtemp(path.join(tmpdir(), "publication-services-"));
-  try {
-    for (const file of [...data.allFiles, ...main.files]) {
-      const relative = file.path.startsWith("events/next-event/") ? `.event-data/next-event/${file.path.slice("events/next-event/".length)}`
-        : file.path.startsWith("references/") ? `.event-data/next-event/${file.path}` : file.path;
-      const destination = path.join(workspace, relative);
-      await mkdir(path.dirname(destination), { recursive: true });
-      await writeFile(destination, file.text);
-    }
-    execFileSync(process.execPath, ["scripts/stage-event-data.mjs", "next-event", "--workspace", workspace], { cwd: process.cwd(), stdio: "pipe" });
-    execFileSync(process.execPath, ["scripts/check-staged-event-data.mjs", "--workspace", workspace], { cwd: process.cwd(), stdio: "pipe" });
-    const map = JSON.parse(await readFile(path.join(workspace, "public/data/events/next-event/map.json"), "utf8"));
-    assert.deepEqual(map.layout.servicePoints, servicePoints);
-    assert.deepEqual(map.layout.spaceMarks, spaceMarks);
-    assert.deepEqual(map.layout.notes, notes);
-    assert.deepEqual(map.layout.paths, paths);
-    assert.deepEqual(map.layout.floor, shape);
-    assert.equal(map.layout.landmarks.length, 3);
-    for (const landmark of map.layout.landmarks) assert.deepEqual(landmark.rect, shape);
-    assert.equal(map.layout.rows[0].labelSide, "left");
-    assert.equal(map.layout.accessPoints[0].kind, "both");
-  } finally { await rm(workspace, { recursive: true, force: true }); }
+  const map = (await publishForReaders(approved))("map.json");
+  assert.deepEqual(map.layout.servicePoints, servicePoints);
+  assert.deepEqual(map.layout.spaceMarks, spaceMarks);
+  assert.deepEqual(map.layout.notes, notes);
+  assert.deepEqual(map.layout.paths, paths);
+  assert.deepEqual(map.layout.floor, shape);
+  assert.equal(map.layout.landmarks.length, 3);
+  for (const landmark of map.layout.landmarks) assert.deepEqual(landmark.rect, shape);
+  assert.equal(map.layout.rows[0].labelSide, "left");
+  assert.equal(map.layout.accessPoints[0].kind, "both");
 });
 
 test("a space mark cannot replace an imported booth required for publication", async () => {

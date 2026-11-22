@@ -24,6 +24,6 @@
 - URL 的 `selectedCircle` 使用 canonical circle ID；`selectedBooth` 保留實際配置定位。兩者必須互相驗證。
 - 收藏與行程的 identity 判定必須用 `CIRCLE_CATALOG_BY_ID` / `isKnownCircleId()`，**不是**以 placement `recordId` 為 key 的 `CIRCLE_RECORDS_BY_ID`。用錯 seam 會讓有效收藏被誤列為「目前無法匹配」——這個 bug 實際發生過。
 - **代價：ID 對上游列號敏感。** 上游插入一列或社團改名會讓其後所有 ID 改變。因此：
-  - 重建場刊後、commit 之前必須跑 `npm run claims:check`，見[社團資料更新](../runbooks/catalog-data-update.md)。
+  - 重建場刊後、commit 之前必須跑 `npm run claims:check`，見[社團資料更新](https://github.com/dekkmarsvin/tw_doujin_event/blob/08ac8a5268507f3caa938f80a4374c09b9035083/docs/runbooks/catalog-data-update.md)。
   - 社團名稱不開放社團自行編輯，見 [ADR-0007](./0007-circle-name-is-not-circle-editable.md)。
 - 搜尋 facet 必須以 `CircleRecord.id` 為鍵，不以攤位代碼作為社團身分。

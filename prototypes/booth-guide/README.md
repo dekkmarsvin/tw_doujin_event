@@ -9,7 +9,7 @@ npm run data:stage -- --fixture
 npm run dev:booth-guide
 ```
 
-開啟 http://127.0.0.1:4182/prototypes/booth-guide/ 。驗看已 pin 的活動，可先依本機開發 runbook 執行該活動的 `data:fetch` 與 `data:stage`，再啟動伺服器。
+開啟 http://127.0.0.1:4182/prototypes/booth-guide/ 。要看 FF47，先執行 `node scripts/fetch-published-event.mjs ff47` 再啟動伺服器。
 
 選日期、場地及攤位，加入本機 JPG／PNG／WebP，選入口並沿走道點選轉彎點。可拖曳轉彎點、退一步、清除；手動畫的路線只用於這張卡。切換日期、場地或攤位會開始一張新卡。沒有自動尋路、公尺換算或草稿保存。
 

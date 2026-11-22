@@ -3,9 +3,9 @@
 社團身分、活動配置與社團自填內容的權威邊界。
 
 **實作**：[`app/circle-records.ts`](../../app/circle-records.ts)、[`app/circle-overrides.ts`](../../app/circle-overrides.ts)
-**身分權威**：`data/circle-identities/allocations.json` + `evidence.json`
-**活動資料**：公開 data repo，由 `data/event-data-pins/<event>.json` 固定版本
-**流程**：[社團資料更新](../runbooks/catalog-data-update.md)
+**身分權威**：活動資料 bucket 的 `registry/<version>/allocations.json` + `evidence.json`
+**活動資料**：活動資料 bucket，見[部署 runbook](../runbooks/deployment.md#活動資料r2)
+**流程**：[主辦單位工作區](./organizer-workspace.md)
 
 ## 權威順序
 
@@ -64,7 +64,6 @@ type CircleCatalogPayload = {
 - 來源的唯一性限制現任歸屬；同一攤位換手後，原社團的退役證據可與新社團的現任來源共存，連續換手可保留多位舊社團。這些已發布結果可以作為下一次明確修正的 baseline，不重播已套用的 transitions。
 - 同一社團移回舊攤位再移出時，evidence 保留歷次退役宣告；Reader 每個社團／攤位只投影最新退役狀態，攤位沿用大小寫不敏感的 location 比對。如果該社團目前仍持有此攤，僅投影 active，不同時呈現其歷史失效 placement。其他舊社團仍保留各自的失效 placement 與 Circle ID。
 - 新修正的 transition 以選填 `areaId` 固定 baseline 來源展區，並保存於 `retirement.areaId`；Reader 依該展區投影，未知展區拒絕。舊宣告未含 `areaId` 時沿用第一展區，不猜補或改寫歷史 pin。
-- 已裁決的 migration 例外保存在 `ff47-official-migration-decisions.json`；它是稽核紀錄，不是執行期 fallback。
 - 舊 `ff47-<hash>` ID 沒有相容路徑，見 [ADR-0013](../adr/0013-drop-the-legacy-circle-id-compatibility-path.md)。攤位 scoped ID 只由當前 records 即時解析。
 
 ### 新活動配號流程
@@ -73,10 +72,10 @@ type CircleCatalogPayload = {
 - 新活動的每個同活動 identity group 配發新 ID；不得因其他活動有相同名稱而沿用或要求 adjudication。
 - 一個 identity group 可以包含同活動不同日期的主辦攤位群組，但必須由主辦來源的穩定鍵或人工確認的主辦證據明確連結。主辦匯入預覽可按跨日同名自動分組並確認，核准 snapshot 固定此宣告與來源（ADR-0071）；一般 generator 不從名稱自行猜測，沒有 grouping 證據時仍 fail closed。
 - 同一活動已存在的 reviewed source 重跑必須回到原 ID；一個 identity group 的所有 `<day>:<booth>` sources 只配發一個 ID，並逐一保存 source。
-- 現行 repository pipeline 把新活動的 `allocations.json`／`evidence.json` 差異與該活動 pin 放在同一張 main PR；builder 的 evidence exact-coverage gate 不變。
-- 首次公開發布前，registry 與 pin 都是候選，可一起捨棄並由同一份 reviewed source 重建；不得把工作樹中間配號誤寫成已發布相容性承諾。公開後若主辦名單退出、換手、移動或重編號，generator 不由差異推論，而要求人工宣告後套用（[ADR-0045](../adr/0045-list-changes-are-declared-not-inferred.md)）；宣告由[主辦單位工作區的修正候選](./organizer-workspace.md#已發布名單的明確修正宣告)填寫，維護者的 JSON／CLI 路徑見[社團資料更新](../runbooks/catalog-data-update.md)。
+- 核准發布時，新活動的配號與 evidence 和活動檔案一起寫入活動資料 bucket 的新版本（#546）。
+- 公開後若主辦名單退出、換手、移動或重編號，generator 不由差異推論，而要求人工宣告後套用（[ADR-0045](../adr/0045-list-changes-are-declared-not-inferred.md)）；宣告由[主辦單位工作區的修正候選](./organizer-workspace.md#已發布名單的明確修正宣告)填寫。
 
-[主辦單位工作區](./organizer-workspace.md)核准後的自動發布同樣經過上述 main PR、pin 與 generator；evidence、validation 與發布後相容性規則一樣成立，且不把 repository workflow 暴露給主辦單位（[ADR-0046](../adr/0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md)）。
+[主辦單位工作區](./organizer-workspace.md)核准後直接發布到活動資料 bucket；evidence、validation 與發布後相容性規則一樣成立。
 
 data repo 的 `events/<eventId>/circle-identity-groups.json` 明列每個 identity group 的完整 booth sources：
 
@@ -117,8 +116,8 @@ data repo 的 `events/<eventId>/circle-identity-groups.json` 明列每個 identi
 
 - 主 repo 不追蹤真實活動的 `event.json`、`official-booths.json`、`circles.json` 或 `map.json`。
 - `npm run build` 使用 repo 內最小 fictional fixture，確保共同 gate 不依賴網路或真實活動資料。
-- `npm run data:fetch -- --published` 與 `npm run data:stage -- --published` 依 [`data/published-events.json`](../../data/published-events.json) 逐一下載並核對逐檔 SHA-256，再由主辦 booth evidence 生成 v3 catalog，staging **每一個已發布活動**；`npm run event-data:upload` 把整組上傳成活動資料 bucket 的新版本（#546）。該檔案是 production 唯一列出活動的地方：新增活動是加一筆 pin 與一個 id，不改 `package.json`、不改 workflow、不新增活動專屬 constant。部署的 build 不含活動資料。
-- **pin 存在不等於已發布。** 未列在 `published-events.json` 的活動即使已有 pin 也不會被上傳，對讀者不存在。這條界線對應 [ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md) 的草稿／已發布分界。
+- 已發布的活動與讀者看到的順序只由活動資料 bucket 的 `index.json` 決定，部署的 build 不含活動資料。
+- **只有經核准發布的活動會出現在 `index.json`。** 草稿與送審中的候選對讀者不存在，對應 [ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md) 的草稿／已發布分界。
 - 讀者端的活動選擇器與 `event` 定址由 [ADR-0042](../adr/0042-the-public-entry-is-an-event-chooser.md) 定案並已實作：只有一個已發布活動時直接進入該活動，多個時先顯示選擇器，`?event=` deep link 一律直達。依日期狀態分組見 [URL 檢視狀態契約](./url-state.md#規則)。
 - **退出或移動的社團留在 catalog 裡**，而不是消失：它們是 `status` 為 `cancelled` 或 `moved` 的 placement，社團本身仍列在 `circles`。直接刪除會讓收藏與分享連結指向不存在的東西，讀起來像連結壞掉而不是「這個社團沒有參加」。Reader 如何呈現見下方「失效 placement 的呈現」。
 - placement id：沒有新主人的攤位保留 `<day>-<code>`，換手的攤位由新主人取得該 id，離開的社團改用帶自己 ID 的形式，因此兩者都仍可被連結定址。

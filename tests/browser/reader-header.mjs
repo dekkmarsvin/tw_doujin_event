@@ -1,6 +1,6 @@
 // staged-data: pinned
-// CI uses pinned FF47. To compare the two published events, stage --published
-// and run against that server with HEADER_TEST_EVENTS=ff47,ch-20.
+// CI copies the published FF47. To compare two published events, run against
+// production (MAP_TEST_URL=https://tw-catalog.pages.dev) with HEADER_TEST_EVENTS=ff47,ch-20.
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";

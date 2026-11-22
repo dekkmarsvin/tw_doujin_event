@@ -1,5 +1,5 @@
 import { verifyOverlayReadiness } from "./overlay-readiness.mjs";
-import { MAP_MANIFEST_FILE, eventUsesScopedMaps } from "./event-data-pin-utils.mjs";
+import { MAP_MANIFEST_FILE, eventUsesScopedMaps } from "../app/event-data-pin.mjs";
 
 const baseUrl = process.argv[2];
 if (!baseUrl) throw new Error("Usage: node scripts/smoke-published-events.mjs <base-url>");

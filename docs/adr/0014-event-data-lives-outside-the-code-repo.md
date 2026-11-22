@@ -5,7 +5,7 @@
 - 部分取代：[ADR-0011：FF47 期間全站不公開](./0011-ff47-is-not-a-public-launch.md) 的「FF47 的資料與地圖留在 repo 內」一句
 - 延續：[ADR-0008](./0008-static-public-reading-path.md)、[ADR-0010](./0010-circle-identity-is-an-allocated-serial.md)、[ADR-0012](./0012-first-party-sources-only.md)
 - 相關契約：[社團目錄契約](../contracts/circle-catalog.md)、[資料傳輸與離線契約](../contracts/delivery-and-offline.md)
-- 相關流程：[社團資料更新](../runbooks/catalog-data-update.md)、[地圖 authoring](../runbooks/map-authoring.md)、[本機開發與驗證](../runbooks/local-development.md)
+- 相關流程：[社團資料更新](https://github.com/dekkmarsvin/tw_doujin_event/blob/08ac8a5268507f3caa938f80a4374c09b9035083/docs/runbooks/catalog-data-update.md)、[地圖 authoring](../runbooks/map-authoring.md)、[本機開發與驗證](../runbooks/local-development.md)
 
 ## 脈絡
 
