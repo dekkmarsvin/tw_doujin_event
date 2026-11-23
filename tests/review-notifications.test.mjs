@@ -190,13 +190,8 @@ test("organizer and independent map submissions enqueue and resubmit separately"
   await db.prepare("UPDATE organizer_event_candidates SET event_id = 'sample' WHERE id = 'event'").run();
   assert.equal((await repo.submitOrganizerCandidate({ candidateId: "event", actorAccountId: owner, expectedVersion: 1, now })).ok, true);
   assert.equal((await repo.submitOrganizerCandidate({ candidateId: "event", actorAccountId: owner, expectedVersion: 1, now })).ok, false);
-  await repo.manageMapContributor({ email: "owner@example.test", action: "grant", by: ADMIN, now });
-  await repo.createMapDraft({ id: "map", eventId: "sample", periodKey: "day-1", venueSpaceId: "hall", ownerAccountId: owner, contentJson: "{}", now });
-  assert.equal(await repo.submitMapDraft({ draftId: "map", eventId: "sample", ownerAccountId: owner, expectedRevision: 1, now }), true);
-  await db.prepare("UPDATE map_drafts SET status = 'changes_requested' WHERE id = 'map'").run();
-  assert.equal(await repo.submitMapDraft({ draftId: "map", eventId: "sample", ownerAccountId: owner, expectedRevision: 1, now }), true);
   now = nextNotificationSlot("five_minutes", now); await tick();
-  assert.equal(sent.length, 2); assert.match(sent[0].text, /活動內容送審.*：1 筆/); assert.match(sent[0].text, /地圖貢獻.*：1 筆/);
+  assert.equal(sent.length, 2); assert.match(sent[0].text, /活動內容送審.*：1 筆/);
 });
 
 test("preview sink end-to-end and thirty day purge retain pending work", async () => {

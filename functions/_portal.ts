@@ -9,11 +9,8 @@ import { createIdentityRepository, type IdentityRepository } from "../db/identit
 import { parseEventDefinition, type EventDefinition } from "../app/event-catalog";
 import type { HostedThumbnailStore } from "../app/hosted-thumbnails";
 import type { MapContributionFileStore } from "../app/map-contribution-files";
-import { isPublishedEventMap } from "../app/event-map";
-import { resolveCanonicalMapPeriod } from "../app/map-contribution-draft";
-import { resolvePublishedAuthoringScope } from "../app/event-authoring-scope";
 import { createPublicationDispatcher } from "../app/publication-dispatch";
-import { readEntryJson, readEventIndex, readEventJson } from "./_event-data";
+import { readEntryJson, readEventIndex } from "./_event-data";
 import { createR2AmendmentBaselineLoader } from "../app/event-data-publisher";
 import { readEventIndexObject } from "../app/event-data-store";
 
@@ -292,11 +289,6 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     delete: (keys) => env.MAP_CONTRIBUTIONS!.delete(keys),
     list: (prefix) => listBucketKeys(env.MAP_CONTRIBUTIONS!, prefix),
   } : undefined;
-  const readPublishedEventMap = async (targetPath: string) => {
-    const value = await readEventJson(env, eventId, targetPath);
-    if (value === null) return null;
-    return isPublishedEventMap(value) && value.eventId === eventId ? value : null;
-  };
   // A failed job may be reopened only while readers do not see its approval.
   const publicationAuditor = async (jobId: string) => {
     const job = await repository.getOrganizerPublicationJob(jobId);
@@ -345,40 +337,6 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     turnstileSitekey: () => requireSecret(env, "TURNSTILE_SITEKEY"),
     thumbnailStore,
     mapContributionStore,
-    resolveMapContributionScope: async ({ periodKey, venueSpaceId }) => {
-      const { payload, event } = await catalog(env, request, eventId);
-      const resolvedPeriod = resolveCanonicalMapPeriod(event.days, periodKey);
-      const venue = event.venueAssignments.find((assignment) => assignment.venueSpaceId === venueSpaceId);
-      if (!resolvedPeriod || !venue) return null;
-      const { periodKey: canonicalPeriodKey, periodAliases } = resolvedPeriod;
-      // The resolver owns the artifact path, so the snapshot is read through it
-      // rather than through a second copy of the rule here -- a local copy is
-      // how a per-day event ends up reading another day's floor. Resolving
-      // twice is the price of that: the path has to be known before the
-      // snapshot can be read, and the snapshot before the codes are complete.
-      const input = { event, placements: payload.placements };
-      const located = resolvePublishedAuthoringScope(input, canonicalPeriodKey, venueSpaceId);
-      if (!located) return null;
-      const published = await readPublishedEventMap(located.targetPath);
-      // Empty official booth slots have no placement row but are still valid
-      // geometry. The reviewed public snapshot is authoritative for those
-      // codes; placements add newly announced occupied/moved booths.
-      const resolved = resolvePublishedAuthoringScope({
-        ...input,
-        existingBoothCodes: published?.layout.rows.flatMap((row) => row.slots.map(({ code }) => code)) ?? [],
-      }, canonicalPeriodKey, venueSpaceId);
-      if (!resolved) return null;
-      const circles = new Map(payload.circles.map(circle => [circle.id, circle.name]));
-      const groups = new Map<string, { circleName: string; codes: string[] }>();
-      for (const placement of payload.placements) {
-        if (placement.status === "cancelled" || String(placement.day) !== canonicalPeriodKey || !venue.areaIds.includes(placement.area)) continue;
-        const group = groups.get(placement.circleId) ?? { circleName: circles.get(placement.circleId) ?? placement.circleId, codes: [] };
-        group.codes.push(placement.boothCode);
-        groups.set(placement.circleId, group);
-      }
-      return { ...resolved, periodAliases, groups: [...groups.values()] };
-    },
-    readPublishedEventMap,
     publicationAuditor,
     dispatchOrganizerPublication,
     projectCircle: async (circleId, fields, updatedAt = new Date().toISOString()) => {

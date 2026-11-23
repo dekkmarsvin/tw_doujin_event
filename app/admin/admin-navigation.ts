@@ -1,8 +1,8 @@
 export type AdminSection = "overview" | "events" | "circles" | "accounts" | "data" | "settings" | "notifications";
-export type AdminRoute = { section: AdminSection; view: string; event: string; draft: string; claim: string; circle: string; q: string; email: string; unavailable: boolean };
+export type AdminRoute = { section: AdminSection; view: string; event: string; claim: string; circle: string; q: string; email: string; unavailable: boolean };
 
 const defaults: Record<AdminSection, string> = { overview: "", events: "list", circles: "claims", accounts: "search", data: "venues", settings: "", notifications: "" };
-const views: Record<AdminSection, string[]> = { overview: [""], events: ["list", "publication", "maps"], circles: ["claims", "search"], accounts: ["search", "admins"], data: ["venues", "organizers", "categories"], settings: [""], notifications: [""] };
+const views: Record<AdminSection, string[]> = { overview: [""], events: ["list", "publication"], circles: ["claims", "search"], accounts: ["search", "admins"], data: ["venues", "organizers", "categories"], settings: [""], notifications: [""] };
 const legacy: Record<string, [AdminSection, string]> = {
   "#overview": ["overview", ""], "#admin": ["circles", "claims"], "#map-review": ["events", "maps"],
   "#takedown": ["circles", "search"], "#accounts": ["accounts", "admins"], "#review-notifications": ["notifications", ""],
@@ -20,11 +20,11 @@ export function readAdminRoute(url: URL): AdminRoute {
   const known = Object.hasOwn(defaults, section);
   const target = (known ? section : "overview") as AdminSection;
   view ||= defaults[target];
-  return { section: target, view, event: p.get("event") ?? "", draft: p.get("draft") ?? "", claim: p.get("claim") ?? "",
+  return { section: target, view, event: p.get("event") ?? "", claim: p.get("claim") ?? "",
     circle: p.get("circle") ?? "", q: (p.get("q") ?? "").slice(0, 100), email: p.get("email") ?? "", unavailable: !known || !views[target].includes(view) };
 }
 
-export function adminHref(section: AdminSection, params: Partial<Pick<AdminRoute, "view" | "event" | "draft" | "claim" | "circle" | "q" | "email">> = {}) {
+export function adminHref(section: AdminSection, params: Partial<Pick<AdminRoute, "view" | "event" | "claim" | "circle" | "q" | "email">> = {}) {
   const p = new URLSearchParams();
   if (section !== "overview") p.set("section", section);
   for (const [key, value] of Object.entries(params)) if (value) p.set(key, value);

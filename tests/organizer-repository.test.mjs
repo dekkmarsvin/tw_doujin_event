@@ -1315,10 +1315,6 @@ test("a candidate map never enters the public map-contribution pipeline", async 
     eventId: "ff47", draftJson: JSON.stringify({ ...initialDraft, event: { ...initialDraft.event, id: "ff47" } }),
     now: NOW + 2,
   }), { ok: true, version: 2 });
-  // The same person is also a map contributor for the published event.
-  assert.equal(await repository.manageMapContributor({
-    email: "owner@example.test", action: "grant", by: adminId, now: NOW + 3,
-  }), "granted");
 
   const content = JSON.stringify({ schema: "map-contribution-draft/1", layout: {
     version: 2, template: "TAIWAN_GENERIC_V1", width: 100, height: 80,
@@ -1331,28 +1327,6 @@ test("a candidate map never enters the public map-contribution pipeline", async 
   const stored = await database.prepare("SELECT event_id, candidate_id FROM map_drafts WHERE id = 'map-crossover'").first();
   assert.deepEqual(stored, { event_id: "ff47", candidate_id: "candidate-crossover" });
 
-  // Invisible to every contributor and admin read scoped by that event id.
-  assert.deepEqual(await repository.listMapDraftsForOwner(ownerId, "ff47"), []);
-  assert.deepEqual(await repository.listMapDraftsForAdmin("ff47"), []);
-  assert.equal(await repository.getMapDraft("map-crossover", "ff47"), null);
-  assert.equal(await repository.getMapDraft("map-crossover"), null);
-  assert.equal(await repository.getActiveApprovedMapDraft("ff47", "1", "hall-a"), null);
-
-  // And unwritable through them: the candidate's own API stays the only door.
-  assert.equal(await repository.writeMapDraftRevision({
-    draftId: "map-crossover", eventId: "ff47", ownerAccountId: ownerId,
-    expectedRevision: 1, contentJson: content, now: NOW + 5,
-  }), null);
-  assert.equal(await repository.submitMapDraft({
-    draftId: "map-crossover", eventId: "ff47", ownerAccountId: ownerId,
-    expectedRevision: 1, now: NOW + 6,
-  }), false);
-  assert.equal(await repository.addMapDraftFile({
-    id: "file-crossover", draftId: "map-crossover", eventId: "ff47", revision: 1,
-    objectKey: "raw/crossover", sourceUrl: "https://example.test/plan.png", documentDate: "2026-08-31",
-    pageNumber: null, sha256: "0".repeat(64), mime: "image/png", sizeBytes: 10,
-    width: 10, height: 10, pageCount: null, uploadedBy: ownerId, now: NOW + 7,
-  }), false);
   assert.equal((await repository.getOrganizerMapDraft("candidate-crossover", "map-crossover")).current_revision, 1);
 });
 

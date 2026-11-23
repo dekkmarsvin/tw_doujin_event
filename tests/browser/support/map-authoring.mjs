@@ -19,7 +19,7 @@ export async function openSurface(journey, surface, initialLayout = source, opti
     await page.route("**/api/**", async route => {
       const request = route.request(), path = new URL(request.url()).pathname, method = request.method();
       const reply = (body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-      if (path === "/api/auth/session") return reply({ email: "map@example.test", isAdmin: false, isMapContributor: true, hasOrganizerAccess: true, expiresAt: now + 86400000 });
+      if (path === "/api/auth/session") return reply({ email: "map@example.test", isAdmin: false, hasOrganizerAccess: true, expiresAt: now + 86400000 });
       if (path === "/api/auth/config") return reply({ turnstileSitekey: "" });
       if (path === "/api/account/notification-preferences" && method === "GET") return reply({ cadence: "daily", version: 1, locale: "zh-Hant" });
       if (path.endsWith("/claims")) return reply({ claims: [], eventId: "sample" });
@@ -39,17 +39,10 @@ export async function openSurface(journey, surface, initialLayout = source, opti
         if (method === "PATCH") { if (state.failSaves-- > 0) return reply({ error: "save_failed" }, 500); state.layout = request.postDataJSON().layout; state.authoring = request.postDataJSON().authoring ?? { guides: [] }; state.saves++; return reply({ ok: true, version: 1, mapRevision: 1 }); }
         return reply({ map });
       }
-      const draft = { id: "test-map", event_id: "sample", period_key: "1", venue_space_id: "test-space", status: "draft", current_revision: 1, updated_at: now, content: { schema: "map-contribution-draft/1", layout: state.layout, authoring: state.authoring } };
-      if (path === "/api/map-contributions/drafts") return reply({ drafts: [draft] });
-      if (path === "/api/map-contributions/drafts/test-map") {
-        if (method === "PUT") { if (state.failSaves-- > 0) return reply({ error: "save_failed" }, 500); state.layout = request.postDataJSON().content.layout; state.authoring = request.postDataJSON().content.authoring ?? { guides: [] }; state.saves++; return reply({ ok: true, revision: 1 }); }
-        return reply({ draft, files: [], reviews: [], comments: [] });
-      }
       throw new Error(`Unexpected API: ${method} ${path}`);
     });
   } });
-  if (surface === "organizer") await page.getByRole("button", { name: "第一天", exact: true }).click();
-  else await page.locator("#map-contribution").getByRole("button", { name: "開啟", exact: true }).click();
+  await page.getByRole("button", { name: "第一天", exact: true }).click();
   const editor = page.getByRole("region", { name: "活動地圖編輯器" });
   await editor.waitFor();
   return { page, editor, state };

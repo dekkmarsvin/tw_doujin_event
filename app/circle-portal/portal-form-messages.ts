@@ -15,8 +15,6 @@ const rows: readonly (readonly [string, string, string])[] = [
   ["個資與著作權爭議請寄", "For privacy and copyright concerns, email ", "個人情報・著作権に関するお問い合わせ："],
   ["，網站操作問題請寄", "; for help using the site, email ", "。サイトの操作に関するお問い合わせ："],
   ["・管理者", " · Administrator", "・管理者"],
-  ["・地圖貢獻者", " · Map contributor", "・配置マップ協力者"],
-  ["地圖草稿", "Map drafts", "配置マップの下書き"],
   ["網站管理", "Site administration", "サイト管理"],
   ["返回活動地圖", "Back to the event map", "イベントの配置マップに戻る"],
   ["通知語言尚未儲存。", "The notification language has not been saved.", "通知言語はまだ保存されていません。"],

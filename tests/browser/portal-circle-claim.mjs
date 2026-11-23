@@ -492,15 +492,7 @@ try {
   const accountPanel = admin.locator('section[aria-labelledby="account-query-heading"]');
   await accountPanel.getByRole("heading", { name: CIRCLE, exact: true }).waitFor();
   await accountPanel.locator('section[aria-labelledby="account-claims-heading"]').getByText(CIRCLE_NAME, { exact: true }).waitFor();
-  const mapQualification = accountPanel.locator('section[aria-labelledby="account-map-heading"]');
-  await mapQualification.getByText("未授權", { exact: true }).waitFor();
-  const grantResponse = admin.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/admin/map-contributors");
-  await mapQualification.getByRole("button", { name: "授予", exact: true }).click();
-  assert.equal((await grantResponse).status(), 200);
-  await mapQualification.getByText("有效", { exact: true }).waitFor();
   await journey.capture(admin, "admin-account-real-detail");
-  await mapQualification.getByRole("button", { name: "撤銷", exact: true }).click();
-  await mapQualification.getByText("已撤銷", { exact: true }).waitFor();
   await verifyCircleLocales(journey, admin);
   await admin.close();
 

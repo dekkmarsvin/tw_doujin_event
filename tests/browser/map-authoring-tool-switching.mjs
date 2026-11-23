@@ -6,7 +6,7 @@ import { encodePng, ruledPlan } from "../support/map-recognition-fixture.mjs";
 
 const journey = await start("map-authoring-tool-switching");
 try {
-  for (const surface of ["organizer", "circle"]) {
+  for (const surface of ["organizer"]) {
     for (const expanded of [false, true]) {
       // Experimental recognition is enabled only on the Organizer surface.
       const nextGroup = surface === "organizer" ? "辨識（實驗）" : "底圖與畫布";

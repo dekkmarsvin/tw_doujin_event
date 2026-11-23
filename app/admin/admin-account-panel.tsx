@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { disableAccount, manageMapContributor, readAdminAccountDetail, searchAdminAccountsByCircle, type AdminAccountCircleMatch, type AdminAccountDetail } from "../circle-editor-client";
+import { disableAccount, readAdminAccountDetail, searchAdminAccountsByCircle, type AdminAccountCircleMatch, type AdminAccountDetail } from "../circle-editor-client";
 import { isEmailShaped, normalizeEmail } from "../portal-crypto";
 import { useModalFocus } from "../use-modal-focus";
 import { adminHref } from "./admin-navigation";
@@ -8,7 +8,6 @@ import styles from "../circle-portal/portal.module.css";
 import ui from "./admin-app.module.css";
 
 const accountStatus = { active: "可使用", disabled: "已停用", deleting: "刪除中" };
-const mapStatus = { none: "未授權", active: "有效", revoked: "已撤銷", suspended: "已停權" };
 const claimStatus = { pending: "待審", verified: "已認領", rejected: "未核准", revoked: "已撤銷", withdrawn: "已撤回" };
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : "操作失敗，請稍後再試。";
 
@@ -94,11 +93,6 @@ export function AdminAccountPanel({ initialEmail, initialCircle, onSearchChange,
   };
   const available = detail?.status === "active" && !loading && !pending && !readError;
   const rosterHref = adminHref("accounts", { view: "admins", email: target });
-  const mapAction = (action: "grant" | "revoke" | "suspend") => {
-    if (!detail || !available) return;
-    const message = action === "grant" ? "已授予地圖貢獻資格。" : action === "revoke" ? "地圖貢獻資格已撤銷。" : "地圖貢獻資格已停權。";
-    void mutate(() => manageMapContributor(detail.email, action), message);
-  };
 
   return <section className={`${styles.card} ${styles.admin} ${ui.accountDetail}`} aria-labelledby="account-query-heading">
     <h3 id="account-query-heading">帳號查詢</h3>
@@ -149,19 +143,6 @@ export function AdminAccountPanel({ initialEmail, initialCircle, onSearchChange,
       </div>
       <section className={ui.detailSection} aria-labelledby="account-admin-heading"><h4 id="account-admin-heading">網站管理者</h4>
         <p>{detail.isAdmin ? "在管理者名單中" : "未列為管理者"}</p><a href={rosterHref}>管理網站管理者</a>
-      </section>
-      <section className={ui.detailSection} aria-labelledby="account-map-heading"><h4 id="account-map-heading">地圖貢獻者</h4>
-        <div className={ui.actionRow}>
-          <div><p>{mapStatus[detail.mapContributor.status]}</p>
-            {detail.status !== "active" ? <p className={styles.muted}>帳號{accountStatus[detail.status]}，無法變更地圖貢獻資格。</p>
-              : detail.mapContributor.status !== "none" && detail.mapContributor.status !== "active" && <p className={styles.muted}>重新授予會恢復地圖貢獻資格。</p>}</div>
-          {detail.status === "active" && <div className={ui.actionButtons}>
-            {detail.mapContributor.status === "active" ? <>
-              <button type="button" className={styles.secondaryButton} disabled={!available} onClick={() => mapAction("revoke")}>撤銷</button>
-              <button type="button" className={styles.secondaryButton} disabled={!available} onClick={() => mapAction("suspend")}>停權</button>
-            </> : <button type="button" disabled={!available} onClick={() => mapAction("grant")}>{detail.mapContributor.status === "none" ? "授予" : "重新授予"}</button>}
-          </div>}
-        </div>
       </section>
       <section className={ui.detailSection} aria-labelledby="account-workspaces-heading"><h4 id="account-workspaces-heading">活動工作區</h4>
         {detail.organizerGrants.length ? <ul className={ui.detailList}>{detail.organizerGrants.map(grant => <li key={grant.candidateId}>

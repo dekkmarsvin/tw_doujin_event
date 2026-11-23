@@ -43,9 +43,9 @@ const readiness = {
 };
 
 const sessionFor = {
-  owner: { email: "owner@example.test", isAdmin: false, isMapContributor: false, hasOrganizerAccess: true },
-  admin: { email: "admin@example.test", isAdmin: true, isMapContributor: false, hasOrganizerAccess: true },
-  editor: { email: "editor@example.test", isAdmin: false, isMapContributor: false, hasOrganizerAccess: true },
+  owner: { email: "owner@example.test", isAdmin: false, hasOrganizerAccess: true },
+  admin: { email: "admin@example.test", isAdmin: true, hasOrganizerAccess: true },
+  editor: { email: "editor@example.test", isAdmin: false, hasOrganizerAccess: true },
 };
 
 function eventFor(role, state) {

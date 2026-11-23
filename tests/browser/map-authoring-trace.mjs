@@ -30,7 +30,7 @@ function initialLayout() {
 }
 
 try {
-  for (const surface of ["organizer", "circle"]) {
+  for (const surface of ["organizer"]) {
     const { page, editor, state } = await openSurface(journey, surface, initialLayout());
     const svg = editor.locator("svg[tabindex='0']");
     const viewport = editor.locator("#map-layout-editor-canvas");
@@ -416,7 +416,7 @@ try {
   }
   // Six independent columns, including two columns in one logical row, with
   // reverse numbering and untouched booths beyond the marquee.
-  for (const surface of ["organizer", "circle"]) {
+  for (const surface of ["organizer"]) {
     const columns = Array.from({ length: 6 }, (_, col) => Array.from({ length: 10 }, (_, i) => ({
       code: `C${col}-${10 - i}`, rect: { x: 80 + col * 110, y: 100 + col * 2 + i * (25 + col), width: 35, height: 25 + col },
     })));

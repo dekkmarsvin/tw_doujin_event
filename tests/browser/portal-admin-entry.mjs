@@ -2,13 +2,11 @@
 // Real moved UI and transport; synthetic replies exercise the entry boundary.
 // Authorization/data-integrity invariants stay in circle-portal-route tests.
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import { start, base, output } from "./support/journey.mjs";
 
 const journey = await start("portal-admin-entry");
-const map = JSON.parse(await readFile("fixtures/events/sample/map.json", "utf8"));
 const now = Date.now();
-async function open(role, entry = "/admin", implicitMapDraft = false, pendingService = false, viewport, eventOverview = false) {
+async function open(role, entry = "/admin", pendingService = false, viewport, eventOverview = false) {
   const requests = [];
   const pending = [
     { id: "claim-one", eventId: "sample", circleId: "c-900001", circleName: "待審測試社", evidenceUrl: null, evidenceNote: "本人申請", targetUrl: null, createdAt: now, circleClaimed: false },
@@ -45,18 +43,16 @@ async function open(role, entry = "/admin", implicitMapDraft = false, pendingSer
     { ...job, id: "job-two", candidateId: "candidate-two", eventName: "已排程的活動", status: "queued", step: "preparing_data" },
   ];
   const siteState = () => ({ settings: siteSettings, publicationMode: eventOverview ? "disabled" : "github", services: serviceChecks, publicationActivities });
-  let draftStatus = "submitted", failure = 0, settingsFailure = false;
+  let failure = 0, settingsFailure = false;
   let detailFailure = 0, partialTakedown = false;
-  let accountFailure = 0, grantFailure = 0, candidateFailure = 0, queueFailure = 0;
+  let accountFailure = 0, candidateFailure = 0, queueFailure = 0;
   const accountStatuses = new Map();
-  const mapGrants = new Map();
   const accountDetail = email => {
     if (email === "missing@example.test") return { email, account: null };
     const related = email === "contributor@example.test";
     return { email, account: { email, status: accountStatuses.get(email) ?? (email === "deleting@example.test" ? "deleting" : "active"),
       createdAt: now, disabledAt: accountStatuses.get(email) === "disabled" ? now : null, deletionStartedAt: email === "deleting@example.test" ? now : null,
       isAdmin: admins.some(admin => admin.email === email),
-      mapContributor: mapGrants.get(email) ?? { status: "none", grantedAt: null, revokedAt: null, suspendedAt: null },
       organizerGrants: related ? [
         { candidateId: "target-owner", eventId: "sample", name: "範例工作區", edition: 2, role: "owner", membersHref: "/organizer?candidate=target-owner&section=members" },
         { candidateId: "target-editor", eventId: null, name: "範例工作區", edition: 1, role: "editor", membersHref: "/organizer?candidate=target-editor&section=members" },
@@ -80,9 +76,6 @@ async function open(role, entry = "/admin", implicitMapDraft = false, pendingSer
         verifiedAt: now, reviewedAt: now, reviewedBy: "admin@example.test", reviewHref: null }], supplemental,
       history: supplemental.takedown ? [{ action: "override.takendown", at: now, claimId: null, reason: supplemental.takedown.reason, by: "admin@example.test", retryCleanup: false }] : [] };
   };
-  const comments = [];
-  const draft = (eventId = "sample") => ({ id: "map-one", event_id: eventId, period_key: eventId === "sample" ? "1" : "thu", venue_space_id: eventId === "sample" ? "sample-hall" : "sample-two-floor", status: draftStatus, current_revision: 3,
-    created_at: now, updated_at: now, decision_at: null, owner_email: "contributor@example.test", content: { schema: "map-contribution-draft/1", layout: map.layout } });
   const page = await journey.page({ url: `${base}${entry}`, viewport, routes: async page => {
     if (pendingService) await page.clock.install({ time: now });
     await page.route("**/api/**", async route => {
@@ -91,7 +84,7 @@ async function open(role, entry = "/admin", implicitMapDraft = false, pendingSer
       requests.push({ path, method, event: url.searchParams.get("event"), ...(url.searchParams.has("circle") ? { circle: url.searchParams.get("circle") } : {}), body });
       const reply = (body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
       if (path === "/api/auth/session") return role === "anonymous" ? reply({ error: "尚未登入。" }, 401)
-        : reply({ email: `${role}@example.test`, isAdmin: role === "admin", isMapContributor: false, expiresAt: now + 86400000 });
+        : reply({ email: `${role}@example.test`, isAdmin: role === "admin", expiresAt: now + 86400000 });
       if (path === "/api/auth/config") return reply({ turnstileSitekey: "" });
       if (path === "/api/account/notification-preferences" && method === "GET") return reply({ cadence: "daily", version: 1, locale: "zh-Hant" });
       if (path === "/api/claims") return reply({ claims: [], eventId: url.searchParams.get("event") });
@@ -110,7 +103,7 @@ async function open(role, entry = "/admin", implicitMapDraft = false, pendingSer
         const scoped = pending.filter(item => !eventId || item.eventId === eventId);
         return reply({ claims: scoped.filter(item => !claimId || item.id === claimId), pendingClaimCount: pending.length,
           claimCounts: ["sample", "sample-two"].map(eventId => ({ eventId, pending: eventOverview && eventId === "sample" ? 123 : pending.filter(item => item.eventId === eventId).length })),
-          mapDrafts: [{ eventId: "sample", submitted: draftStatus === "submitted" ? 1 : 0 }], organizer: { applications: 2, submissions: 1 } });
+          organizer: { applications: 2, submissions: 1 } });
       }
       if (path === "/api/organizer/events") return candidateFailure ? reply({ error: "無法取得活動工作版次。" }, candidateFailure) : reply({ events: candidates });
       if (path === "/api/organizer/events/sample-failed-amend") {
@@ -164,30 +157,11 @@ async function open(role, entry = "/admin", implicitMapDraft = false, pendingSer
         accountStatuses.set(body.email, "disabled");
         return reply({ ok: true });
       }
-      if (path === "/api/admin/map-contributors") {
-        if (grantFailure) return reply({ error: "權限已變更，請重新讀取。" }, grantFailure);
-        if (accountDetail(body.email).account.status !== "active") return reply({ error: "帳號目前無法使用。" }, 409);
-        mapGrants.set(body.email, { status: body.action === "grant" ? "active" : body.action === "revoke" ? "revoked" : "suspended",
-          grantedAt: now, revokedAt: body.action === "revoke" ? now : null, suspendedAt: body.action === "suspend" ? now : null });
-        return reply({ ok: true });
-      }
-      if (path === "/api/admin/map-contributions/drafts") return reply({ drafts: implicitMapDraft || url.searchParams.get("event") === "sample" ? [draft(url.searchParams.get("event"))] : [] });
-      if (path === "/api/admin/map-contributions/drafts/map-one") {
-        if (!implicitMapDraft && url.searchParams.get("event") !== "sample") return reply({ error: "找不到這份草稿。" }, 404);
-        return reply({ draft: draft(url.searchParams.get("event")), files: [{ id: "file-one", revision: 3, document_date: "2026-10-01", source_url: "https://example.test/map",
-          mime: "image/png", raw_deleted_at: null, sha256: "b".repeat(64), review_result: "approved_official_source" }], reviews: [], comments, scope: null });
-      }
-      if (path === "/api/map-contributions/drafts/map-one/comments") {
-        comments.push({ id: `comment-${comments.length}`, revision: 3, author_role: "admin", target_kind: null, target_ref: null, body: body.body, at: now });
-        return reply({ ok: true });
-      }
-      if (path.endsWith("/map-one/review")) { draftStatus = "approved"; return reply({ ok: true }); }
-      if (path.endsWith("/map-one/export")) return reply({ ok: true, candidate: map, diff: { previousRevision: 1, candidateRevision: 2, dimensionsChanged: false, floorChanged: false, addedBoothCodes: ["A01"], removedBoothCodes: [], movedBoothCodes: [], changedRowLabels: [], changedPillarIds: [], changedAccessPointIds: [], changedLandmarkIds: [] }, targetPath: "events/sample/map.json", candidateSha256: "a".repeat(64) });
       throw new Error(`Unexpected ${method} ${path}`);
     });
   } });
   return { page, requests, expire: () => { failure = 401; }, failSettings: () => { settingsFailure = true; },
-    failAccount: status => { accountFailure = status; }, failGrant: status => { grantFailure = status; },
+    failAccount: status => { accountFailure = status; },
     failEvents: status => { candidateFailure = status; }, failQueue: status => { queueFailure = status; },
     failDetail: status => { detailFailure = status; }, partialCleanup: enabled => { partialTakedown = enabled; }, completeChecks: () => {
     serviceChecks = { requestedAt: now, checkedAt: now + 1, mail: { status: "available", source: "Mailgun", reason: "測試檢查已完成。" },
@@ -212,15 +186,14 @@ async function assertNoOverflow(page) {
 
 try {
   for (const role of ["anonymous", "member"]) {
-    const { page, requests } = await open(role, "/admin?section=events&view=maps&event=sample&draft=map-one");
+    const { page, requests } = await open(role, "/admin?section=circles&view=claims&event=sample");
     await page.getByRole("heading", { name: role === "anonymous" ? "請先登入" : "需要管理者權限", exact: true }).waitFor();
     assert.equal(requests.filter(x => x.path.startsWith("/api/admin/")).length, 0);
     assert.equal(await page.getByRole("button", { name: "寄出登入連結", exact: true }).count(), 0);
-    assert.equal(await page.locator("#admin, #map-review").count(), 0);
+    assert.equal(await page.locator("#admin").count(), 0);
     if (role === "anonymous") {
       const login = new URL(await page.getByRole("link", { name: "前往社團入口登入", exact: true }).getAttribute("href"), base);
       assert.equal(login.pathname, "/circle");
-      assert.equal(login.searchParams.get("adminDraft"), "map-one");
       assert.equal(login.searchParams.get("adminEvent"), "sample");
     }
     await journey.capture(page, `admin-${role}`);
@@ -229,7 +202,7 @@ try {
   const legacy = await open("admin", "/admin?event=sample");
   await legacy.page.locator("#admin").getByText("待審測試社", { exact: true }).waitFor();
   assert.equal(await legacy.page.getByText("第二場待審社", { exact: true }).count(), 0);
-  assert.equal(await legacy.page.locator("#map-review, #takedown, #accounts").count(), 0);
+  assert.equal(await legacy.page.locator("#takedown, #accounts").count(), 0);
   await legacy.page.locator("#admin").getByRole("button", { name: /第二範例活動/ }).click();
   await legacy.page.locator("#admin").getByText("第二場待審社", { exact: true }).waitFor();
   assert.equal(new URL(legacy.page.url()).searchParams.get("event"), "sample-two");
@@ -244,18 +217,6 @@ try {
   assert.equal(await preciseClaim.page.locator("[data-targeted]").evaluate(element => element === document.activeElement), true);
   await preciseClaim.page.close();
 
-  const implicit = await open("admin", "/admin?section=events&view=maps", true);
-  const implicitReview = implicit.page.locator("#map-review");
-  const effectiveEvent = await implicitReview.getByLabel("活動", { exact: true }).inputValue();
-  await implicitReview.getByRole("button", { name: "開啟", exact: true }).click();
-  await implicitReview.getByLabel("審閱說明", { exact: true }).waitFor();
-  assert.equal(new URL(implicit.page.url()).searchParams.get("event"), effectiveEvent, "opening a draft makes the default activity explicit in its URL");
-  assert.equal(new URL(implicit.page.url()).searchParams.get("draft"), "map-one");
-  await implicit.page.reload();
-  await implicitReview.getByLabel("審閱說明", { exact: true }).waitFor();
-  assert.equal(await implicitReview.getByLabel("活動", { exact: true }).inputValue(), effectiveEvent);
-  await implicit.page.close();
-
   const { page, requests, expire } = await open("admin", "/circle?event=sample");
   await page.getByRole("banner").getByRole("button", { name: "帳號", exact: true }).click();
   await page.getByRole("link", { name: "網站管理", exact: true }).waitFor();
@@ -264,11 +225,10 @@ try {
   await page.getByRole("link", { name: "網站管理", exact: true }).click();
   await page.getByRole("heading", { name: "管理總覽", exact: true }).waitFor();
   const summary = page.locator('[aria-label="待審工作"]');
-  for (const name of [/活動申請2/, /活動內容1/, /社團認領2/, /地圖投稿1/]) await summary.getByRole("link", { name }).waitFor();
+  for (const name of [/活動申請2/, /活動內容1/, /社團認領2/]) await summary.getByRole("link", { name }).waitFor();
   const tasks = page.locator('section[aria-labelledby="tasks-heading"]');
   assert.equal(await tasks.locator("li", { hasText: "待審活動內容" }).getByRole("link").getAttribute("href"), "/organizer?candidate=submitted-one&section=review");
-  assert.equal(await tasks.getByRole("link", { name: "查看草稿", exact: true }).getAttribute("href"), "/admin?section=events&view=maps&event=sample");
-  assert.equal(await page.locator("#admin, #map-review, #takedown, #accounts").count(), 0);
+  assert.equal(await page.locator("#admin, #takedown, #accounts").count(), 0);
   await page.getByText("第 1 版 · 發布中 · 更新網站", { exact: true }).waitFor();
   await page.getByText("第 1 版 · 已排程 · 等待開始", { exact: true }).waitFor();
   assert.equal(await page.getByRole("button", { name: "重新整理", exact: true }).count(), 0, "the overview refreshes in the background");
@@ -377,13 +337,6 @@ try {
   const accountClaims = accountPanel.locator('section[aria-labelledby="account-claims-heading"]');
   assert.deepEqual(await accountClaims.getByRole("link", { name: "查看社團明細", exact: true }).evaluateAll(links => links.map(link => new URL(link.href).searchParams.get("event"))), ["sample", "sample-two"]);
   assert.equal(new URL(await accountClaims.getByRole("link", { name: "前往認領審核", exact: true }).getAttribute("href"), base).searchParams.get("claim"), "target-pending");
-  const mapGrant = accountPanel.locator('section[aria-labelledby="account-map-heading"]');
-  await mapGrant.getByText("未授權", { exact: true }).waitFor();
-  await mapGrant.getByRole("button", { name: "授予", exact: true }).click();
-  await mapGrant.getByText("有效", { exact: true }).waitFor();
-  const targetGrantPost = requests.filter(x => x.path === "/api/admin/map-contributors" && x.method === "POST").at(-1);
-  assert.deepEqual(targetGrantPost.body, { email: "contributor@example.test", action: "grant" });
-  assert.equal(targetGrantPost.event, null, "global map qualification does not inherit the circle event");
   const accountTabs = page.getByRole("navigation", { name: "帳號管理頁籤", exact: true });
   await accountTabs.getByRole("link", { name: "網站管理者", exact: true }).click();
   const accounts = page.locator("#accounts");
@@ -396,7 +349,6 @@ try {
   assert.equal(await accounts.getByRole("button", { name: "停用", exact: true }).count(), 0, "disabling is only available from a confirmed account detail");
   await accountTabs.getByRole("link", { name: "帳號查詢", exact: true }).click();
   await accountPanel.getByRole("heading", { name: "contributor@example.test", exact: true }).waitFor();
-  await mapGrant.getByText("有效", { exact: true }).waitFor();
   await journey.capture(page, "admin-account-detail-desktop");
   await page.screenshot({ path: `${output}/issue509-desktop.png`, fullPage: true,
     mask: [page.locator('[class*="identityWho"]'), accountPanel.getByLabel("Email 或社團名稱", { exact: true }), accountPanel.getByRole("heading", { name: "contributor@example.test", exact: true })] });
@@ -408,67 +360,16 @@ try {
   await accountPanel.getByRole("dialog").getByRole("button", { name: "確認停用", exact: true }).click();
   await accountPanel.locator('section[aria-labelledby="account-disable-heading"]').getByText("帳號已停用。", { exact: true }).waitFor();
   assert.equal(requests.find(x => x.path === "/api/admin/accounts" && x.method === "POST").body.email, "disabled@example.test");
-  assert.equal(await accountPanel.getByRole("button", { name: "授予", exact: true }).count(), 0, "disabled accounts cannot receive a map qualification");
 
-  await navigate(page, "管理總覽");
-  await page.getByRole("link", { name: "查看草稿", exact: true }).click();
-  const review = page.locator("#map-review");
-  await review.getByRole("button", { name: "開啟", exact: true }).click();
-  await review.getByLabel("審閱說明", { exact: true }).waitFor();
-  assert.equal(new URL(page.url()).searchParams.get("draft"), "map-one");
-  assert.equal(await review.getByRole("link", { name: "下載上傳檔", exact: true }).getAttribute("href"), "/api/map-contributions/files/file-one?event=sample");
-  assert.equal(await review.getByRole("link", { name: "預覽上傳檔", exact: true }).getAttribute("href"), "/api/map-contributions/files/file-one/preview?event=sample");
-  await review.getByLabel("留言", { exact: true }).fill("請確認攤位位置。");
-  await review.getByRole("button", { name: "送出留言", exact: true }).click();
-  await review.getByText("留言已送出。", { exact: true }).waitFor();
-  assert.equal(requests.find(x => x.path.endsWith("/map-one/comments")).event, "sample");
-  await review.getByRole("checkbox").check();
-  await review.getByRole("button", { name: "核准", exact: true }).click();
-  await review.getByRole("button", { name: "匯出地圖候選", exact: true }).click();
-  await review.getByRole("button", { name: "下載地圖檔案", exact: true }).waitFor();
-  await review.getByText("新增攤位：A01", { exact: true }).waitFor();
-  const approval = requests.find(x => x.path.endsWith("/review"));
-  assert.equal(approval.event, "sample");
-  assert.equal(approval.body.expectedRevision, 3);
-  assert.equal(approval.body.confirmOfficialSource, true);
-  assert.deepEqual(requests.find(x => x.path.endsWith("/export")).body, { expectedRevision: 3 });
-  assert.equal(requests.find(x => x.path.endsWith("/export")).event, "sample");
-  await assertNoOverflow(page);
-  await journey.capture(page, "admin-map-candidate");
-  await review.getByLabel("活動", { exact: true }).selectOption("sample-two");
-  await review.getByText("目前沒有草稿。", { exact: true }).waitFor();
-  assert.equal(await review.getByRole("button", { name: "下載地圖檔案", exact: true }).count(), 0);
-  assert.equal(new URL(page.url()).searchParams.has("draft"), false);
-  assert.ok(requests.some(x => x.path === "/api/admin/map-contributions/drafts" && x.event === "sample-two"));
-  await page.reload();
-  assert.equal(await review.getByLabel("活動", { exact: true }).inputValue(), "sample-two");
   await navigate(page, "管理總覽");
   await summary.getByRole("link", { name: /社團認領0/ }).waitFor();
   expire();
   await refreshInBackground(page);
   await page.getByRole("link", { name: "前往社團入口登入", exact: true }).waitFor();
-  assert.equal(await page.locator("#admin, #map-review").count(), 0);
+  assert.equal(await page.locator("#admin").count(), 0);
   assert.equal(await page.getByRole("button", { name: "登出", exact: true }).count(), 0);
   await journey.capture(page, "admin-expired");
 
-  const direct = await open("admin", "/admin?section=events&view=maps&event=sample&draft=map-one");
-  const directReview = direct.page.locator("#map-review");
-  await directReview.getByLabel("審閱說明", { exact: true }).waitFor();
-  assert.ok(direct.requests.some(x => x.path === "/api/admin/map-contributions/drafts/map-one" && x.event === "sample"));
-  await directReview.getByLabel("審閱說明", { exact: true }).fill("尚未送出的說明");
-  direct.page.once("dialog", dialog => dialog.accept());
-  await directReview.getByLabel("活動", { exact: true }).selectOption("sample-two");
-  await directReview.getByText("目前沒有草稿。", { exact: true }).waitFor();
-  await directReview.getByLabel("活動", { exact: true }).selectOption("sample");
-  await directReview.getByRole("button", { name: "開啟", exact: true }).click();
-  await directReview.getByLabel("審閱說明", { exact: true }).waitFor();
-  assert.equal(await directReview.getByLabel("審閱說明", { exact: true }).inputValue(), "");
-  await direct.page.close();
-  const wrongDraft = await open("admin", "/admin?section=events&view=maps&event=sample-two&draft=map-one");
-  await wrongDraft.page.getByText("找不到這份草稿。", { exact: true }).waitFor();
-  assert.equal(await wrongDraft.page.getByLabel("審閱說明", { exact: true }).count(), 0);
-  assert.equal(new URL(wrongDraft.page.url()).searchParams.get("event"), "sample-two");
-  await wrongDraft.page.close();
   const localFailure = await open("admin");
   await localFailure.page.locator('[aria-label="待審工作"]').getByRole("link", { name: /社團認領2/ }).waitFor();
   localFailure.failSettings();
@@ -479,7 +380,7 @@ try {
   assert.equal(localFailure.requests.filter(x => x.path === "/api/admin/service-check").length, 0);
   await localFailure.page.close();
 
-  const pendingCheck = await open("admin", "/admin", false, true);
+  const pendingCheck = await open("admin", "/admin", true);
   const services = pendingCheck.page.locator('section[aria-labelledby="services-heading"]');
   await services.getByText("檢查中", { exact: true }).first().waitFor();
   assert.equal(await services.getByRole("button", { name: "檢查中…", exact: true }).isDisabled(), true);
@@ -493,7 +394,7 @@ try {
   assert.equal(pendingCheck.requests.filter(x => x.path === "/api/admin/service-check").length, 0);
   await pendingCheck.page.close();
 
-  const timedOutCheck = await open("admin", "/admin", false, true);
+  const timedOutCheck = await open("admin", "/admin", true);
   const timedOutServices = timedOutCheck.page.locator('section[aria-labelledby="services-heading"]');
   await timedOutServices.getByText("檢查中", { exact: true }).first().waitFor();
   await timedOutCheck.page.clock.fastForward(91_000);
@@ -536,7 +437,7 @@ try {
   await journey.capture(settingsPage.page, "admin-claims-mobile");
   await settingsPage.page.close();
 
-  const circleMobile = await open("admin", "/admin?section=circles&view=search&event=sample-two&q=待審測試社&circle=c-900001", false, false, { width: 390, height: 844 });
+  const circleMobile = await open("admin", "/admin?section=circles&view=search&event=sample-two&q=待審測試社&circle=c-900001", false, { width: 390, height: 844 });
   await circleMobile.page.locator('nav[aria-label="管理項目"] details:not([open])').waitFor();
   const mobileCircle = circleMobile.page.locator("#takedown");
   await mobileCircle.getByText("第二場作者", { exact: true }).waitFor();
@@ -575,34 +476,13 @@ try {
   assert.equal(new URL(missingCircle.page.url()).searchParams.get("circle"), "missing-circle");
   await missingCircle.page.close();
 
-  const accountMobile = await open("admin", "/admin?section=accounts&view=search&event=sample-two&email=contributor%40example.test", false, false, { width: 390, height: 844 });
+  const accountMobile = await open("admin", "/admin?section=accounts&view=search&event=sample-two&email=contributor%40example.test", false, { width: 390, height: 844 });
   const mobileAccount = accountMobile.page.locator('section[aria-labelledby="account-query-heading"]');
-  const mobileGrant = mobileAccount.locator('section[aria-labelledby="account-map-heading"]');
   await mobileAccount.getByRole("heading", { name: "contributor@example.test", exact: true }).waitFor();
   await assertNoOverflow(accountMobile.page);
   assert.ok(accountMobile.requests.filter(x => x.path === "/api/admin/accounts").every(x => x.event === null), "account reads ignore an unrelated activity filter even on a deep link");
-  await mobileGrant.getByRole("button", { name: "授予", exact: true }).click();
-  await mobileGrant.getByText("有效", { exact: true }).waitFor();
-  accountMobile.failGrant(409);
-  await mobileGrant.getByRole("button", { name: "撤銷", exact: true }).click();
-  await mobileAccount.getByText("權限已變更，請重新讀取。", { exact: true }).waitFor();
-  await mobileGrant.getByText("有效", { exact: true }).waitFor();
-  assert.equal(await mobileAccount.getByLabel("Email 或社團名稱", { exact: true }).inputValue(), "contributor@example.test", "a failed grant operation keeps its target");
-  accountMobile.failGrant(0);
-  await mobileGrant.getByRole("button", { name: "停權", exact: true }).click();
-  await mobileGrant.getByText("已停權", { exact: true }).waitFor();
-  await mobileGrant.getByRole("button", { name: "重新授予", exact: true }).click();
-  await mobileGrant.getByText("有效", { exact: true }).waitFor();
-  await mobileGrant.getByRole("button", { name: "撤銷", exact: true }).click();
-  await mobileGrant.getByText("已撤銷", { exact: true }).waitFor();
-  await mobileGrant.getByRole("button", { name: "重新授予", exact: true }).click();
-  await mobileGrant.getByText("有效", { exact: true }).waitFor();
-  const grantPosts = accountMobile.requests.filter(x => x.path === "/api/admin/map-contributors" && x.method === "POST");
-  assert.deepEqual(grantPosts.map(x => x.body.action), ["grant", "revoke", "suspend", "grant", "revoke", "grant"]);
-  assert.ok(grantPosts.every(x => x.event === null && x.body.email === "contributor@example.test"));
   await accountMobile.page.reload();
   await mobileAccount.getByRole("heading", { name: "contributor@example.test", exact: true }).waitFor();
-  await mobileGrant.getByText("有效", { exact: true }).waitFor();
   await accountMobile.page.locator('nav[aria-label="管理項目"] details:not([open])').waitFor();
   await journey.capture(accountMobile.page, "admin-account-detail-mobile");
   await accountMobile.page.screenshot({ path: `${output}/issue509-mobile.png`, fullPage: true,
@@ -613,7 +493,7 @@ try {
   assert.equal(await mobileAccount.getByText("查無此帳號。", { exact: true }).count(), 0, "a read failure does not become a missing account");
   accountMobile.failAccount(0);
   await mobileAccount.getByRole("button", { name: "重新讀取", exact: true }).click();
-  await mobileGrant.getByText("有效", { exact: true }).waitFor();
+  await mobileAccount.getByRole("heading", { name: "contributor@example.test", exact: true }).waitFor();
   for (const [email, expected] of [["empty@example.test", "無活動工作區權限。"], ["missing@example.test", "查無此帳號。"], ["deleting@example.test", "帳號正在刪除，無法停用。"], ["admin@example.test", "請先移出管理者名單。"]]) {
     await mobileAccount.getByLabel("Email 或社團名稱", { exact: true }).fill(email);
     await mobileAccount.getByRole("button", { name: "查詢", exact: true }).click();
@@ -623,7 +503,7 @@ try {
   assert.equal(await adminRestriction.getByRole("button", { name: "停用帳號", exact: true }).count(), 0);
   const rosterDestination = new URL(await adminRestriction.getByRole("link", { name: "前往網站管理者", exact: true }).getAttribute("href"), base);
   assert.equal(rosterDestination.searchParams.get("view"), "admins");
-  assert.equal(accountMobile.requests.filter(x => x.path === "/api/admin/accounts" && x.method === "POST").length, 0, "read-only lookups and map grants do not create or disable accounts");
+  assert.equal(accountMobile.requests.filter(x => x.path === "/api/admin/accounts" && x.method === "POST").length, 0, "read-only lookups do not create or disable accounts");
   await accountMobile.page.close();
 
   const legacyAccounts = await open("admin", "/admin#accounts");
@@ -631,7 +511,7 @@ try {
   assert.equal(legacyAccounts.requests.filter(x => x.path === "/api/admin/accounts").length, 0, "the old roster link remains a roster destination");
   await legacyAccounts.page.close();
 
-  const eventDesktop = await open("admin", "/admin?section=events", false, false, { width: 1440, height: 900 }, true);
+  const eventDesktop = await open("admin", "/admin?section=events", false, { width: 1440, height: 900 }, true);
   const index = eventDesktop.page.locator('[aria-label="完整活動總表"]');
   await index.getByRole("article", { name: "同名草稿", exact: true }).first().waitFor();
   assert.equal(await index.getByRole("article").count(), 5, "public-only activities and unidentified drafts join one activity index without duplicating amendments");
@@ -695,7 +575,7 @@ try {
   assert.equal(await publicVersion.getByText("已公開", { exact: true }).count(), 1, "a candidate read failure still leaves the known public edition available");
   await eventDesktop.page.close();
 
-  const eventMobile = await open("admin", "/admin?section=events&view=list", false, false, { width: 390, height: 844 }, true);
+  const eventMobile = await open("admin", "/admin?section=events&view=list", false, { width: 390, height: 844 }, true);
   const mobileIndex = eventMobile.page.locator('[aria-label="完整活動總表"]');
   await mobileIndex.getByRole("article", { name: "範例創作市集", exact: true }).getByText("認領待審 123", { exact: true }).waitFor();
   await assertNoOverflow(eventMobile.page);

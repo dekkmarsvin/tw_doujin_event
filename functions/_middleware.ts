@@ -40,8 +40,7 @@ export const onRequest: PagesFunction<PortalEnv> = async (context) => {
     const contentType = (request.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
     const privateFileUpload = contentType === "multipart/form-data" && (
       (request.method === "POST"
-        && (/^\/api\/circle\/[^/]+\/(?:thumbnail|catalog-image)$/.test(url.pathname)
-          || url.pathname === "/api/map-contributions/files"))
+        && /^\/api\/circle\/[^/]+\/(?:thumbnail|catalog-image)$/.test(url.pathname))
       // Replace-in-place, hence PUT: a candidate map has one layout plan, and
       // an event has one picture.
       || (request.method === "PUT"

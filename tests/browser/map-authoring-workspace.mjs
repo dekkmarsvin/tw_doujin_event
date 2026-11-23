@@ -5,7 +5,7 @@ import { openSurface, source } from "./support/map-authoring.mjs";
 // Keep classic scrollbars enabled to exercise their effect on fitted sizes.
 const journey = await start("map-authoring-workspace", { showScrollbars: true });
 try {
-  for (const surface of ["organizer", "circle"]) {
+  for (const surface of ["organizer"]) {
     const initial = { ...structuredClone(source), width: 1200, height: 900, floor: { x: 0, y: 0, width: 1200, height: 900 }, pillars: [], landmarks: [], accessPoints: [], rows: [{ label: "A", orientation: "vertical", confidence: 1, slots: Array.from({ length: 16 }, (_, i) => ({ code: `A${String(i + 1).padStart(2, "0")}`, rect: { x: i < 8 ? 240 : 180, y: 200 + (i < 8 ? 7 - i : i - 8) * 55, width: 60, height: 55 } })) }] };
     const { page, editor, state } = await openSurface(journey, surface, initial, { failSaves: 1 });
     // A narrow inline editor points to full window; a wide one stays quiet. The Organizer editor sits between
@@ -185,7 +185,7 @@ try {
   }
   // A portrait map at the horizontal overflow boundary used to alternate
   // between two fitted sizes as the scrollbar appeared and disappeared.
-  for (const surface of ["organizer", "circle"]) {
+  for (const surface of ["organizer"]) {
     const portrait = { ...structuredClone(source), width: 1280, height: 1807, floor: { x: 0, y: 0, width: 1280, height: 1807 } };
     const { page, editor } = await openSurface(journey, surface, portrait);
     await page.setViewportSize({ width: 2560, height: 1215 });

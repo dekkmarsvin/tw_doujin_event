@@ -57,7 +57,7 @@ function fixtureRoutes(role, existing = false, delayStart = false) {
     await page.route("**/api/**", async (route) => {
       const req = route.request(); const path = new URL(req.url()).pathname; const method = req.method();
       const reply = (body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-      if (path === "/api/auth/session") return reply({ email: `${role}@example.test`, isAdmin: role === "admin", hasOrganizerAccess: true, isMapContributor: false });
+      if (path === "/api/auth/session") return reply({ email: `${role}@example.test`, isAdmin: role === "admin", hasOrganizerAccess: true });
       if (path === "/api/organizer/events") return reply({ events: [...(state.created ? [summary("amendment"), summary("source")] : [summary("source")]), ...(delayStart ? [summary("other")] : [])] });
       if (path.endsWith("/source/amendments")) {
         assert.equal(method, "POST"); assert.deepEqual(req.postDataJSON(), { expectedVersion: 1 });

@@ -382,7 +382,7 @@ data／main 的 PR、核准 check、allowlist 與 expected SHA merge 由 driver 
 
 ## 與地圖貢獻流程的邊界
 
-`map_drafts` 由 organizer 與公開[地圖貢獻控制面](./map-contributions.md)共用，而候選活動的 `event_id` 可能正是某個已發布活動的 id。**唯一能分開兩條管線的是 `candidate_id`**：
+`map_drafts` 由 organizer 與公開[地圖貢獻控制面](https://github.com/dekkmarsvin/tw_doujin_event/blob/ea03bcd723344296514201cb44c832dbdee3a05d/docs/contracts/map-contributions.md)共用，而候選活動的 `event_id` 可能正是某個已發布活動的 id。**唯一能分開兩條管線的是 `candidate_id`**：
 
 - organizer 的地圖草稿 `candidate_id` 非 NULL，且只能經 `/api/organizer/**` 讀寫。
 - 公開地圖貢獻流程的每一句 SQL 都要求 `candidate_id IS NULL`。

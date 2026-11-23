@@ -126,7 +126,7 @@
 | POST | `/api/organizer/events/:candidateId/reopen` | 活動成員 | 主辦 `reopenOrganizerEvent` | 保留：核對 R2 尚未公開這筆核准後，把失敗的候選退回修改 |
 | POST | `/api/admin/organizer/events/:candidateId/abandon` | 管理者 | 主辦 `abandonOrganizerAmendment` | 已刪除（階段 4b） |
 
-## 地圖貢獻（階段 5 整組刪除）
+## 地圖貢獻（階段 5a 已刪除）
 
 依 #546 決策移除地圖貢獻者角色。以下端點、`PortalSession.isMapContributor`，以及社團入口與管理頁的對應畫面一起刪除：
 

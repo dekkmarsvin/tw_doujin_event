@@ -126,7 +126,7 @@ try {
   let applicationSignedIn = false;
   let applicationStatus = "pending";
   const applicationEntry = await journey.page({ url: `${base}/organizer?application`, viewport: { width: 390, height: 844 }, routes: async page => {
-    const adminSession = { email: "reviewer@example.test", isAdmin: true, isMapContributor: false, hasOrganizerAccess: true,
+    const adminSession = { email: "reviewer@example.test", isAdmin: true, hasOrganizerAccess: true,
       canApplyForEvent: false, hasEventApplications: false, expiresAt: Date.now() + 86_400_000 };
     await page.route("https://challenges.cloudflare.com/turnstile/**", route => route.fulfill({ contentType: "text/javascript", body: `
       window.turnstile = { render: (host, options) => { setTimeout(() => options.callback("journey-token")); return "widget"; }, remove: () => {} };
@@ -181,7 +181,7 @@ try {
   let requested = null;
   const outsider = await journey.page({ url: `${base}/organizer`, viewport: { width: 390, height: 844 }, routes: async (target) => {
     await target.route("**/api/auth/session", (route) => route.fulfill({ json: {
-      email: "circle@example.test", isAdmin: false, isMapContributor: false, hasOrganizerAccess: false,
+      email: "circle@example.test", isAdmin: false, hasOrganizerAccess: false,
       canApplyForEvent: false, hasEventApplications: false, expiresAt: Date.now() + 86_400_000 } }));
     // Cloudflare's script stands in for itself: a widget that passes at once.
     await target.route("https://challenges.cloudflare.com/turnstile/**", (route) => route.fulfill({ contentType: "text/javascript", body: `

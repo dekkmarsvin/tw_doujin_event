@@ -27,7 +27,7 @@ try {
     await page.route("**/api/**", async route => {
       const req = route.request(), url = new URL(req.url()), path = url.pathname;
       const reply = value => route.fulfill({ json: value });
-      if (path === "/api/auth/session") return reply({ email: "editor@example.test", hasOrganizerAccess: true, isAdmin: false, isMapContributor: false, expiresAt: now + 86400000 });
+      if (path === "/api/auth/session") return reply({ email: "editor@example.test", hasOrganizerAccess: true, isAdmin: false, expiresAt: now + 86400000 });
       if (path === "/api/organizer/events") return reply({ events: summaries });
       if (path.endsWith("/claims")) {
         if (req.method() === "POST") {

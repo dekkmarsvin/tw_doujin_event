@@ -11,7 +11,7 @@ const initial = { ...structuredClone(source), width: 600, height: 400, floor: { 
 const text = "社團入場 9:30–10:30\n一般入場 10:30–15:30";
 let published;
 try {
-  for (const surface of ["organizer", "circle"]) {
+  for (const surface of ["organizer"]) {
     const { page, editor, state } = await openSurface(journey, surface, initial, { codes: ["S01", "S02"] });
     const svg = editor.locator("svg[tabindex='0']"), picker = editor.getByRole("combobox", { name: "選取地圖元素" });
     const point = async (x, y) => { await svg.scrollIntoViewIfNeeded(); const box = await svg.boundingBox(); return { x: box.x + x * box.width, y: box.y + y * box.height }; };
