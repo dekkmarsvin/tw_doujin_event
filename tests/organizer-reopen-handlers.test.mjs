@@ -43,7 +43,6 @@ let sent = [];
 let handlers;
 let adminId;
 let ownerId;
-let editorId;
 
 function request(path, method = "GET", body, cookie) {
   return new Request(`${ORIGIN}${path}`, {
@@ -168,21 +167,6 @@ async function failedCandidate() {
   return { candidateId: CANDIDATE_ID, jobId: JOB_ID, snapshotId: snapshot.snapshotId };
 }
 
-async function grantEditor(candidateId) {
-  const result = await repository.manageOrganizerCollaborator({
-    candidateId,
-    actorAccountId: ownerId,
-    email: "editor@example.test",
-    role: "editor",
-    action: "invite",
-    now,
-  });
-  assert.deepEqual(result, { ok: true, result: "invited" });
-  await repository.acceptOrganizerInvitations({
-    accountId: editorId, email: "editor@example.test", now,
-  });
-}
-
 async function ageSession(cookie) {
   const value = cookie.slice(cookie.indexOf("=") + 1);
   const sessionId = value.slice(0, value.lastIndexOf("."));
@@ -248,7 +232,6 @@ beforeEach(async () => {
   await resetSiteSettings(database);
   adminId = await repository.upsertAccount("admin@example.test", NOW);
   ownerId = await repository.upsertAccount("owner@example.test", NOW);
-  editorId = await repository.upsertAccount("editor@example.test", NOW);
   await repository.addAdmin("admin@example.test", "bootstrap", NOW);
   handlers = createHandlers();
 });
@@ -313,26 +296,6 @@ for (const actor of ["owner", "admin"]) {
     assert.equal(before.reviews.length, 1);
   });
 }
-
-test("an Editor cannot reopen a failed candidate and cannot trigger the remote audit", async () => {
-  const candidate = await failedCandidate();
-  now = NOW + 10;
-  await grantEditor(candidate.candidateId);
-  const calls = [];
-  handlers = createHandlers(async (jobId) => {
-    calls.push(jobId);
-    throw new Error("Editor must not reach remote audit");
-  });
-  const editorCookie = await signIn("editor@example.test");
-  const before = await readBusinessState();
-
-  const response = await reopen(candidate, editorCookie, { expectedVersion: 1, reason: REASON });
-  assert.equal(response.status, 403);
-  assert.match((await response.json()).error, /負責人或網站管理者/);
-  assert.deepEqual(calls, []);
-  assert.deepEqual(await readBusinessState(), before);
-  assert.equal(await readGlobalLease(), null);
-});
 
 for (const actor of ["owner", "admin"]) {
   test(`a stale ${actor} session is rejected before remote audit`, async () => {

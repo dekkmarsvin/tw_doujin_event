@@ -9,7 +9,7 @@ const now = Date.now();
 const summaries = [
   { id: "social-latest", edition: 2, createdAt: now, status: "submitted", operation: "AMEND" },
   { id: "social-original", edition: 1, createdAt: now - 1, status: "published", operation: "CREATE" },
-].map(event => ({ ...event, eventId: "sample", tentativeName: "社團處置測試", version: 1, updatedAt: now, updatedByRole: "owner", role: "editor", workspaceMode: "binder" }));
+].map(event => ({ ...event, eventId: "sample", tentativeName: "社團處置測試", version: 1, updatedAt: now, updatedByRole: "owner", role: "owner", workspaceMode: "binder" }));
 const detail = id => ({ claimReviewAvailable: true, event: { ...summaries.find(event => event.id === id), eventIdLocked: true },
   draft: { schema: "organizer-event-draft/1", event: { id: "sample", name: "社團處置測試", days: [] }, venue: { assignments: [] }, officialSource: { label: "", url: null } },
   venueCatalog: { venues: [] }, revisions: [], import: null, publication: null,
@@ -80,7 +80,7 @@ try {
   claimsUnavailable = false;
   await page.getByRole("button", { name: "重新整理", exact: true }).click();
   await header.getByText("待審 0 筆", { exact: true }).waitFor();
-  assert.equal(await page.getByRole("heading", { name: "撤銷已通過的認領", exact: true }).count(), 0, "an editor is not offered revoke");
+  assert.equal(await page.getByRole("heading", { name: "撤銷已通過的認領", exact: true }).count(), 1, "every member is offered revoke");
   await page.getByRole("combobox", { name: "活動版本", exact: true }).selectOption("social-original");
   await page.getByLabel("活動審核與發布狀態").getByText("已發布", { exact: true }).waitFor();
   await page.getByRole("heading", { name: "社團認領", exact: true }).waitFor();
@@ -105,7 +105,7 @@ try {
   await journey.capture(page, "organizer-social-takedown-done");
   await page.getByRole("button", { name: "成員與權限", exact: true }).click();
   await page.getByRole("heading", { name: "成員與權限", exact: true }).waitFor();
-  assert.equal(await page.getByRole("button", { name: "邀請協作者", exact: true }).isDisabled(), true, "an editor cannot manage members");
+  assert.equal(await page.getByRole("button", { name: "邀請成員", exact: true }).isEnabled(), true, "every member can manage members");
   await page.getByRole("button", { name: "返回活動資料", exact: true }).click();
   await page.getByRole("heading", { name: "檢查與發布", exact: true }).waitFor();
   // Each header status leads to the panel that changes it, and is marked there.

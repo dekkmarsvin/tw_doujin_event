@@ -302,7 +302,7 @@ export function organizerInvitationLetter({ href, origin, requestedAt, expiresAt
     paragraphs: ["登入後會進入主辦工作區。連結只能使用一次。"],
     facts: [
       { label: "活動", value: eventName },
-      { label: "邀請者", value: inviterRole === "admin" ? "網站管理者" : "活動負責人" },
+      { label: "邀請者", value: inviterRole === "admin" ? "網站管理者" : "活動成員" },
       { label: "有效至", value: formatTaipeiTime(expiresAt), data: true },
     ],
     action: { label: "登入主辦工作區", href },

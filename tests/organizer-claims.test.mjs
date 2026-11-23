@@ -53,7 +53,7 @@ beforeEach(async () => {
   await candidate("candidate-b", "event-b");
   await database.prepare("UPDATE organizer_event_candidates SET status='published', published_version=1, published_at=?1, event_id_locked_at=?1 WHERE id IN ('candidate-a','candidate-b')").bind(now).run();
   await grant("candidate-a", ids.ownerId, "owner");
-  await grant("candidate-a", ids.editorId, "editor");
+  await grant("candidate-a", ids.editorId, "owner");
   await claim("claim-a", "event-a", "c-1");
   await claim("claim-b", "event-b", "c-1");
 });
@@ -61,7 +61,7 @@ beforeEach(async () => {
 for (const [email, account] of [["owner@example.test", "ownerId"], ["editor@example.test", "editorId"]]) {
   test(`${email} cannot turn an editable CREATE draft into a static event's moderation authority`, async () => {
     await candidate("attacker", "new-event");
-    await grant("attacker", ids[account], account === "ownerId" ? "owner" : "editor");
+    await grant("attacker", ids[account], "owner");
     const eventId = "static-target", deleted = [];
     await claim("target-pending", eventId, "pending-circle");
     await claim("self-pending", eventId, "self-circle", ids[account]);
@@ -131,7 +131,7 @@ const publicOverlay = (etag) => handlers.publicOverrides(new Request(`${origin}/
   headers: etag ? { "if-none-match": etag } : {},
 }), "event-a");
 
-for (const [email, role] of [["owner@example.test", "organizer_owner"], ["editor@example.test", "organizer_editor"], ["admin@example.test", "admin"]]) {
+for (const [email, role] of [["owner@example.test", "organizer_owner"], ["admin@example.test", "admin"]]) {
   test(`${role} publishes, reads, updates and clears the candidate event notice with audit`, async () => {
     const cookie = await signIn(email);
     assert.deepEqual(await (await handlers.readOrganizerNotice(noticeRequest(cookie), "candidate-a")).json(), { notice: null });
@@ -260,7 +260,7 @@ function takedownHandlers(extra = {}) {
     ...extra });
 }
 
-for (const [email, role] of [["owner@example.test", "organizer_owner"], ["editor@example.test", "organizer_editor"], ["admin@example.test", "admin"]]) {
+for (const [email, role] of [["owner@example.test", "organizer_owner"], ["admin@example.test", "admin"]]) {
   test(`${role} searches and withdraws only the candidate event supplement`, async () => {
     await supplement("event-a"); await supplement("event-b");
     const cookie = await signIn(email);
@@ -326,7 +326,7 @@ test("takedown refuses a concurrent supplement edit without deleting its images"
 
 test("authorized takedown clears media references, removes scoped objects and preserves after-event hiding", async () => {
   const key = await supplement("event-b", "c-1", true), deleted = [];
-  await grant("candidate-b", ids.editorId, "editor");
+  await grant("candidate-b", ids.editorId, "owner");
   await claim("hidden-claim", "event-b", "c-hidden", ids.ownerId);
   await repo.markClaimVerified("hidden-claim", "admin", now, "admin@example.test");
   await repo.putOverride({ eventId: "event-b", circleId: "c-hidden", fieldsJson: '{"saleInfo":"隱藏內容"}', updatedBy: "owner@example.test", now, accountId: ids.ownerId });
@@ -378,7 +378,7 @@ test("a cleanup retry cannot delete R2 after its organizer grant was revoked", a
   assert.deepEqual(deleted, []);
 });
 
-for (const [email, role] of [["owner@example.test", "organizer_owner"], ["editor@example.test", "organizer_editor"], ["admin@example.test", "admin"]]) {
+for (const [email, role] of [["owner@example.test", "organizer_owner"], ["admin@example.test", "admin"]]) {
   test(`${role} reads only its event and can approve a pending claim`, async () => {
     const cookie = await signIn(email);
     const response = await handlers.organizerListClaims(request("candidate-a", cookie), "candidate-a");
@@ -425,11 +425,10 @@ test("anonymous, strangers, other events, and unpublished events cannot be revie
   assert.equal((await repo.getClaim("claim-b")).status, "pending");
 });
 
-test("rejection cannot withdraw an approved owner, and editors cannot revoke", async () => {
+test("rejection cannot withdraw an approved owner", async () => {
   const cookie = await signIn("editor@example.test");
   assert.equal((await handlers.organizerDecideClaim(request("candidate-a", cookie, "approve"), "candidate-a")).status, 200);
   assert.equal((await handlers.organizerDecideClaim(request("candidate-a", cookie, "reject"), "candidate-a")).status, 409);
-  assert.equal((await handlers.organizerDecideClaim(request("candidate-a", cookie, "revoke"), "candidate-a")).status, 403);
   assert.equal((await repo.getClaim("claim-a")).status, "verified");
   await claim("reject-me", "event-a", "c-2");
   assert.equal((await handlers.organizerDecideClaim(request("candidate-a", cookie, "reject", "reject-me"), "candidate-a")).status, 200);
@@ -472,17 +471,6 @@ test("an organizer revoke rebuilds the candidate's event, whatever event the req
   assert.doesNotMatch(JSON.stringify(doc), /wrong owner/);
 });
 
-test("revoke rechecks the Owner grant at the SQL write", async () => {
-  await repo.markClaimVerified("claim-a", "admin", now, "admin@example.test");
-  const cookie = await signIn("owner@example.test");
-  handlers = createCirclePortalHandlers({ ...options, repository: { ...repo, setClaimStatus: async (...args) => {
-    await database.prepare("UPDATE organizer_event_grants SET role = 'editor' WHERE account_id = ?1").bind(ids.ownerId).run();
-    return repo.setClaimStatus(...args);
-  } } });
-  assert.equal((await handlers.organizerDecideClaim(request("candidate-a", cookie, "revoke"), "candidate-a")).status, 403);
-  assert.equal((await repo.getClaim("claim-a")).status, "verified", "a grant downgraded mid-request leaves the owner in place");
-});
-
 test("approval races preserve one owner and report circleClaimed in the shared queue", async () => {
   await claim("duplicate", "event-a", "c-1", ids.ownerId);
   const cookie = await signIn("editor@example.test");
@@ -507,7 +495,7 @@ for (const decision of ["approve", "reject"]) {
 
 test("edition numbers remain chronological when earlier work is edited or only a later grant is visible", async () => {
   await candidate("amend-a", "event-a", now + 100, "AMEND");
-  await grant("amend-a", ids.editorId, "editor");
+  await grant("amend-a", ids.editorId, "owner");
   await database.prepare("UPDATE organizer_event_candidates SET updated_at = ?1 WHERE id = 'candidate-a'").bind(now + 200).run();
   let rows = await repo.listOrganizerCandidatesForAccount(ids.editorId, false);
   assert.equal(rows.find(c => c.id === "candidate-a").edition, 1);

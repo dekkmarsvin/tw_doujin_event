@@ -107,7 +107,7 @@
 | POST | `…/:candidateId/validate` | 活動成員 | 主辦 `validateOrganizerEvent` | 保留。不寫入 |
 | POST | `…/:candidateId/preview` | 活動成員 | 主辦 `previewOrganizerEvent` | 保留。不寫入 |
 | POST | `…/:candidateId/submit` | 活動成員 | 主辦 `submitOrganizerEvent` | 修改：目前限 Owner，改為任何成員都能送審 |
-| POST | `…/:candidateId/collaborators` | 活動成員 | 主辦 `manageOrganizerEditor`、`manageOrganizerOwner` | 修改：合併為單一「成員」的邀請與移除 |
+| POST | `…/:candidateId/collaborators` | 活動成員 | 主辦 `manageOrganizerMember` | 階段 5b 起：單一「成員」的邀請、重寄與移除，`role` 欄位不再使用；每個活動至少保留一位成員 |
 | GET／POST | `…/:candidateId/claims` | 活動成員 | 主辦 `listOrganizerClaims`、`decideOrganizerClaim` | 保留 |
 | GET／POST | `…/:candidateId/overrides` | 活動成員 | 主辦 `searchOrganizerTakedownCircles`、`takedownOrganizerOverride` | 保留 |
 | GET／PUT／DELETE | `…/:candidateId/notice` | 活動成員 | 主辦 `readOrganizerNotice`、`saveOrganizerNotice`、`clearOrganizerNotice` | 保留 |

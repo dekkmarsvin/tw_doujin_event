@@ -101,10 +101,6 @@ export function ReviewPanel({ session, detail, onChanged, onSection }: {
     {needsLogin && <p><a href="/organizer?reauth=1">重新登入並返回這個活動</a></p>}
     <div className={styles.statusBoard}><span>目前狀態</span><strong>{STATUS_LABEL[detail.event.status]}</strong><span>活動代碼</span><strong>{detail.draft.event.id ?? "尚未設定"}</strong></div>
     <CheckSection detail={detail} onChanged={onChanged} onSection={onSection} />
-    {/* Stated once, above the control it governs. #216 was this panel going
-        blank on an admin who never got the owner grant: nothing on the page
-        said what was missing, so the work looked finished and stuck. */}
-    {submittable && !owner && !session.isAdmin && <p className={styles.warning}>送出審閱需要負責人身分，請聯絡這個活動的負責人。</p>}
     {submittable && <SubmitSection {...section} blocked={!owner && !session.isAdmin} />}
     {session.isAdmin && detail.event.status === "submitted" && <AdminReviewSection {...section} />}
     {(session.isAdmin || owner) && detail.event.status === "failed" && !historicalPublication && <ReopenSection {...section} reopenBlockedByRemoteState={reopenBlockedByRemoteState} />}

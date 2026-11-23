@@ -30,10 +30,11 @@ export type OverridesPhase = "during" | "after";
 /** `withdrawn` is the claimant's own doing; reviewers reject, only admins revoke. */
 type ClaimStatus = "pending" | "verified" | "rejected" | "revoked" | "withdrawn";
 export type ClaimMethod = "email_domain" | "link_token" | "admin" | "organizer";
-/** `ownerOnly` limits the organizer side to Owner grants: revoking an approved claim is an Owner decision. */
-type OrganizerClaimAuthority = { candidateId: string; accountId: string; ownerOnly?: boolean };
+type OrganizerClaimAuthority = { candidateId: string; accountId: string };
 export type MapDraftStatus = "draft" | "submitted" | "changes_requested" | "approved" | "rejected" | "exported" | "withdrawn";
-export type OrganizerRole = "owner" | "editor";
+/** An event member (#546). Stored as `owner`: every member has the full role,
+ * and the editor role that existed before is gone. */
+export type OrganizerRole = "owner";
 export type OrganizerCandidateStatus = "draft" | "changes_requested" | "submitted" | "approved" | "publishing" | "published" | "failed" | "abandoned";
 
 type IdentityAuditEntry = {
@@ -172,7 +173,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9 FROM organizer_event_candidates c
         WHERE c.id = ?10 AND c.current_version = ?11 AND c.status IN ('draft', 'changes_requested')
           AND (?12 = 1 OR EXISTS (SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = c.id
-            AND g.account_id = ?9 AND g.revoked_at IS NULL AND g.role IN ('owner', 'editor')))
+            AND g.account_id = ?9 AND g.revoked_at IS NULL AND g.role = 'owner'))
           AND (?4 IS NULL OR EXISTS (SELECT 1 FROM organizer_reference_records r WHERE r.kind = 'organizer' AND r.reference_id = ?4))
           AND (?2 NOT IN ('venue', 'venue-space') OR EXISTS (
             SELECT 1 FROM json_each(c.current_draft_json, '$.venue.assignments') a
@@ -213,7 +214,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
           AND EXISTS (SELECT 1 FROM organizer_event_candidates c
             WHERE c.id = ?5 AND c.current_version = ?6 AND c.status IN ('draft', 'changes_requested')
               AND (?7 = 1 OR EXISTS (SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = c.id
-                AND g.account_id = ?8 AND g.revoked_at IS NULL AND g.role IN ('owner', 'editor')))
+                AND g.account_id = ?8 AND g.revoked_at IS NULL AND g.role = 'owner'))
               AND EXISTS (SELECT 1 FROM json_each(c.current_draft_json, '$.venue.assignments') a
                 WHERE json_extract(a.value, '$.venueId') = ?2))`)
         .bind(input.record.path, input.record.id, input.record.publicReferenceJson, input.previous.publicReferenceJson,
@@ -809,7 +810,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       .bind(eventId).first<{ id: string }>();
   }
 
-  function organizerClaimAuthoritySql(candidateParam: number, accountParam: number, eventColumn = "circle_claims.event_id", ownerOnly = false) {
+  function organizerClaimAuthoritySql(candidateParam: number, accountParam: number, eventColumn = "circle_claims.event_id") {
     return `EXISTS (SELECT 1 FROM organizer_event_candidates candidate
       JOIN accounts actor ON actor.id = ?${accountParam}
       WHERE candidate.id = ?${candidateParam} AND candidate.event_id = ${eventColumn}
@@ -817,7 +818,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
         AND actor.disabled_at IS NULL AND actor.deletion_started_at IS NULL
         AND (EXISTS (SELECT 1 FROM admins WHERE email = actor.email)
           OR EXISTS (SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = candidate.id
-            AND g.account_id = actor.id AND g.role IN (${ownerOnly ? "'owner'" : "'owner', 'editor'"}) AND g.revoked_at IS NULL)))`;
+            AND g.account_id = actor.id AND g.role = 'owner' AND g.revoked_at IS NULL)))`;
   }
 
   /** Counts discover every event with work, without a bounded list hiding it. */
@@ -903,7 +904,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     await ensureTables();
     const [result] = await database.batch([database.prepare(
       `UPDATE circle_claims SET status = ?1, reviewed_by = ?2, reviewed_at = ?3 WHERE id = ?4 AND status <> ?1 AND (?5 IS NULL OR status = ?5)
-        ${authority ? `AND ${organizerClaimAuthoritySql(6, 7, undefined, authority.ownerOnly)}` : ""}`,
+        ${authority ? `AND ${organizerClaimAuthoritySql(6, 7)}` : ""}`,
     ).bind(status, reviewedBy, now, id, from ?? null, ...(authority ? [authority.candidateId, authority.accountId] : [])),
       ...(status === "rejected" || status === "revoked" ? notify({ kind: status === "rejected" ? "claim.rejected" : "claim.revoked", occurrence: crypto.randomUUID(), now },
         `${claimNotificationSource} WHERE c.id = ?1 AND changes() = 1`, [id]) : []),
@@ -1349,7 +1350,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       `SELECT role FROM organizer_event_grants
        WHERE candidate_id = ?1 AND account_id = ?2 AND revoked_at IS NULL`,
     ).bind(candidateId, accountId).first<{ role: string }>();
-    return row?.role === "owner" || row?.role === "editor" ? row.role : null;
+    return row?.role === "owner" ? "owner" : null;
   }
 
   async function hasOrganizerAccess(accountId: string) {
@@ -1456,7 +1457,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
         database.prepare(
           `INSERT INTO organizer_event_grants (
              id, candidate_id, account_id, role, granted_by, granted_at, revoked_by, revoked_at
-           ) SELECT ?1, candidate_id, ?2, role, invited_by, ?3, NULL, NULL
+           ) SELECT ?1, candidate_id, ?2, 'owner', invited_by, ?3, NULL, NULL
              FROM organizer_event_invitations WHERE id = ?4 AND accepted_by = ?2 AND changes() = 1
            ON CONFLICT(candidate_id, account_id) DO UPDATE SET
              role = excluded.role, granted_by = excluded.granted_by, granted_at = excluded.granted_at,
@@ -1469,7 +1470,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
           [invitation.candidate_id, input.accountId]),
       ]);
       if (results.slice(0, 2).every((result) => result.meta.changes === 1)) {
-        accepted.push({ candidateId: invitation.candidate_id, role: invitation.role });
+        accepted.push({ candidateId: invitation.candidate_id, role: "owner" as const });
       }
     }
     return accepted;
@@ -1507,7 +1508,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
        FROM organizer_event_candidates c
        JOIN organizer_event_grants g ON g.candidate_id = c.id
        LEFT JOIN organizer_workspace_state w ON w.candidate_id = c.id
-       WHERE g.account_id = ?1 AND g.revoked_at IS NULL
+       WHERE g.account_id = ?1 AND g.role = 'owner' AND g.revoked_at IS NULL
        ORDER BY c.updated_at DESC, c.id`,
     ).bind(accountId).all<{
       id: string; tentative_name: string; event_id: string | null; status: OrganizerCandidateStatus;
@@ -1692,14 +1693,13 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       `SELECT g.role FROM organizer_event_grants g JOIN accounts a ON a.id = g.account_id
        WHERE g.candidate_id = ?1 AND a.email = ?2 AND g.revoked_at IS NULL`,
     ).bind(candidateId, email).first<{ role: OrganizerRole }>();
-    // Check before pending invitations so an old Editor invitation cannot be
-    // resent to someone who is now an Owner. Editor-to-Owner promotion remains valid.
-    if (role === "editor" && grant?.role === "owner") return "already_owner" as const;
     const pending = await database.prepare(
       `SELECT role FROM organizer_event_invitations
        WHERE candidate_id = ?1 AND email = ?2 AND accepted_at IS NULL AND revoked_at IS NULL`,
     ).bind(candidateId, email).first<{ role: string }>();
-    if (pending) return pending.role === role ? "pending" as const : "other_role" as const;
+    // There is one member role; a pending invitation written as an Editor one
+    // before the roles merged is the same invitation.
+    if (pending) return "pending" as const;
     return grant?.role === role ? "active" as const : "missing" as const;
   }
 
@@ -1717,81 +1717,6 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     )`;
   const ownerOrAdminAllowed = async (actorAccountId: string, candidateId: string) => !!await database
     .prepare(`SELECT 1 AS allowed WHERE ${ownerOrAdmin("?1", "?2")}`).bind(actorAccountId, candidateId).first();
-
-  async function manageOrganizerCollaborator(input: {
-    candidateId: string;
-    actorAccountId: string;
-    email: string;
-    role: OrganizerRole;
-    action: "invite" | "resend" | "revoke";
-    now: number;
-  }) {
-    await ensureTables();
-    if (!await ownerOrAdminAllowed(input.actorAccountId, input.candidateId)) {
-      return { ok: false as const, reason: "forbidden" as const };
-    }
-    if (input.action !== "revoke") {
-      if (input.role !== "editor") return { ok: false as const, reason: "owner_requires_admin" as const };
-      const state = await organizerInvitationState(input.candidateId, input.email, input.role);
-      if (state === "already_owner") return { ok: false as const, reason: state };
-      if (input.action === "resend") {
-        // Resending mints a login link, so authority is read again just before
-        // it, as owner management does.
-        if (!await ownerOrAdminAllowed(input.actorAccountId, input.candidateId)) return { ok: false as const, reason: "forbidden" as const };
-        return state === "pending" ? { ok: true as const, result: "resent" as const }
-          : { ok: false as const, reason: "not_pending" as const };
-      }
-      if (state !== "missing") return { ok: false as const, reason: state };
-    }
-    if (input.action === "invite") {
-      if (input.role !== "editor") return { ok: false as const, reason: "owner_requires_admin" as const };
-      try {
-        const result = await database.prepare(
-          `INSERT INTO organizer_event_invitations (
-             id, candidate_id, email, role, invited_by, created_at
-           ) SELECT ?1, ?2, ?3, 'editor', ?4, ?5
-             WHERE NOT EXISTS (
-               SELECT 1 FROM organizer_event_grants g JOIN accounts a ON a.id = g.account_id
-               WHERE g.candidate_id = ?2 AND a.email = ?3 AND g.role = 'owner' AND g.revoked_at IS NULL
-             ) AND ${ownerOrAdmin("?4", "?2")}`,
-        ).bind(crypto.randomUUID(), input.candidateId, input.email, input.actorAccountId, input.now).run();
-        if (result.meta.changes === 1) return { ok: true as const, result: "invited" as const };
-        return await ownerOrAdminAllowed(input.actorAccountId, input.candidateId)
-          ? { ok: false as const, reason: "already_owner" as const }
-          : { ok: false as const, reason: "forbidden" as const };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (/unique constraint/i.test(message)) return { ok: false as const, reason: "unchanged" as const };
-        throw error;
-      }
-    }
-    // An editor who has not signed in yet exists only as an invitation, so the
-    // revoke has to succeed on either row. Reporting the grant alone would tell
-    // the Owner nothing changed while the pending invitation was in fact
-    // withdrawn — see manageOrganizerOwner, which draws the same distinction.
-    const outcomes = await database.batch([
-      database.prepare(
-        `UPDATE organizer_event_grants SET revoked_by = ?1, revoked_at = ?2
-         WHERE candidate_id = ?3 AND role = 'editor' AND revoked_at IS NULL
-           AND account_id = (SELECT id FROM accounts WHERE email = ?4)
-           AND ${ownerOrAdmin("?1", "?3")}`,
-      ).bind(input.actorAccountId, input.now, input.candidateId, input.email),
-      ...notify({ kind: "member.revoked", occurrence: crypto.randomUUID(), now: input.now },
-        `${memberNotificationSource} WHERE target.candidate_id = ?1 AND target.account_id = (SELECT id FROM accounts WHERE email = ?2) AND changes() = 1`,
-        [input.candidateId, input.email]),
-      database.prepare(
-        `UPDATE organizer_event_invitations SET revoked_by = ?1, revoked_at = ?2
-         WHERE candidate_id = ?3 AND email = ?4 AND role = 'editor'
-           AND accepted_at IS NULL AND revoked_at IS NULL
-           AND ${ownerOrAdmin("?1", "?3")}`,
-      ).bind(input.actorAccountId, input.now, input.candidateId, input.email),
-    ]);
-    const grant = outcomes[0], invitation = outcomes[outcomes.length - 1];
-    if (grant.meta.changes === 1 || invitation.meta.changes === 1) return { ok: true as const, result: "revoked" as const };
-    return await ownerOrAdminAllowed(input.actorAccountId, input.candidateId)
-      ? { ok: false as const, reason: "missing" as const }
-      : { ok: false as const, reason: "forbidden" as const };
-  }
 
   async function manageOrganizerOwner(input: {
     candidateId: string;
@@ -1852,6 +1777,11 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       ).bind(input.actorAccountId, input.candidateId, target.account_id, input.now),
         ...notify({ kind: "member.revoked", occurrence: crypto.randomUUID(), now: input.now },
           `${memberNotificationSource} WHERE target.candidate_id = ?1 AND target.account_id = ?2 AND changes() = 1`, [input.candidateId, target.account_id]),
+        database.prepare(
+          `UPDATE organizer_event_invitations SET revoked_by = ?1, revoked_at = ?4
+           WHERE candidate_id = ?2 AND email = ?3 AND accepted_at IS NULL AND revoked_at IS NULL
+             AND EXISTS (SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = ?2 AND g.account_id = ?5 AND g.revoked_at = ?4)`,
+        ).bind(input.actorAccountId, input.candidateId, input.email, input.now, target.account_id),
       ]);
       if (result.meta.changes === 1) return { ok: true as const, result: "revoked" as const };
       if (!await authorized()) return { ok: false as const, reason: "forbidden" as const };
@@ -1866,7 +1796,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     }
     const invitation = await database.prepare(
       `UPDATE organizer_event_invitations SET revoked_by = ?1, revoked_at = ?4
-       WHERE candidate_id = ?2 AND email = ?3 AND role = 'owner'
+       WHERE candidate_id = ?2 AND email = ?3
          AND accepted_at IS NULL AND revoked_at IS NULL AND ${authority}`,
     ).bind(input.actorAccountId, input.candidateId, input.email, input.now).run();
     if (invitation.meta.changes === 0 && !await authorized()) return { ok: false as const, reason: "forbidden" as const };
@@ -3125,7 +3055,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     countOrganizerInvitationsSince,
     listOrganizerCandidatesForAccount, listAccountOrganizerGrantsForAdmin, getOrganizerCandidate, listOrganizerCandidateRevisions,
     getOrganizerWorkspace, saveOrganizerWorkspacePreference, completeOrganizerOnboarding, markOrganizerValidated,
-    manageOrganizerCollaborator, manageOrganizerOwner,
+    manageOrganizerOwner,
     listOrganizerMapDrafts, getOrganizerMapDraft, createOrganizerMapDraft, saveOrganizerMapDraft,
     getOrganizerImport, replaceOrganizerImport,
     saveOrganizerCandidate, submitOrganizerCandidate, reviewOrganizerCandidate,

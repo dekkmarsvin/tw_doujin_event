@@ -1292,7 +1292,7 @@ export function createCirclePortalHandlers({
   }
 
   async function decideReviewClaim(request: Request, session: { accountId: string; email: string },
-    actorRole: "admin" | "organizer_owner" | "organizer_editor", eventId: string,
+    actorRole: "admin" | "organizer_owner", eventId: string,
     authority?: { candidateId: string; accountId: string }) {
 
     const body = await readJson(request);
@@ -1300,11 +1300,6 @@ export function createCirclePortalHandlers({
     const decision = body?.decision;
     if (decision !== "approve" && decision !== "reject" && decision !== "revoke") {
       return json({ error: authority ? "請選擇核准或婉拒。" : "decision 必須是 approve、reject 或 revoke。" }, 400);
-    }
-    // Withdrawing an approved owner is an Owner decision on the organizer side;
-    // the SQL write rechecks the Owner grant so a downgrade cannot slip through.
-    if (authority && decision === "revoke" && actorRole === "organizer_editor") {
-      return json({ error: "只有活動負責人可以撤銷認領。" }, 403);
     }
 
     const claim = await repository.getClaim(claimId);
@@ -1332,7 +1327,7 @@ export function createCirclePortalHandlers({
     const ok = decision === "approve"
       ? await repository.markClaimVerified(claimId, method, now, session.email, authority)
       : await repository.setClaimStatus(claimId, decision === "reject" ? "rejected" : "revoked", now, session.email,
-        decision === "reject" ? "pending" : "verified", authority && decision === "revoke" ? { ...authority, ownerOnly: true } : authority);
+        decision === "reject" ? "pending" : "verified", authority);
 
     // Revoking ownership withdraws that circle's content in the same step. The
     // phase has to be the current one: rebuilding as "during" after the event
@@ -1352,7 +1347,6 @@ export function createCirclePortalHandlers({
       const access = await organizerClaimAccess(request, authority.candidateId);
       if (!access.ok) return access.response;
       if (access.eventId !== eventId) return json({ error: "找不到這筆認領。" }, 404);
-      if (decision === "revoke" && organizerAuditRole(access) === "organizer_editor") return json({ error: "只有活動負責人可以撤銷認領。" }, 403);
     }
     return json({ error: decision === "revoke" ? "這筆認領已不是通過狀態。"
       : claim.status !== "pending" ? "這筆認領已不在待審中。" : "此社團已有通過的認領。" }, 409);
@@ -1628,7 +1622,7 @@ export function createCirclePortalHandlers({
   }
 
   async function applyTakedown(request: Request, session: { accountId: string; email: string },
-    actorRole: "admin" | "organizer_owner" | "organizer_editor", eventId: string,
+    actorRole: "admin" | "organizer_owner", eventId: string,
     authority?: { candidateId: string; accountId: string }) {
 
     const body = await readJson(request);
@@ -1749,12 +1743,7 @@ export function createCirclePortalHandlers({
     return { ok: true as const, current, admin, role };
   }
 
-  const organizerAuditRole = (access: {
-    admin: boolean;
-    role: "owner" | "editor" | "admin";
-  }) => access.admin ? "admin" as const
-    : access.role === "owner" ? "organizer_owner" as const
-      : "organizer_editor" as const;
+  const organizerAuditRole = (access: { admin: boolean }) => access.admin ? "admin" as const : "organizer_owner" as const;
 
   async function listOrganizerVenues(request: Request, candidateId: string) {
     const access = await organizerAccess(request, candidateId);
@@ -1798,7 +1787,7 @@ export function createCirclePortalHandlers({
   }
 
   /** Adds the address to a venue whose public record predates addresses (#395). */
-  async function completeOrganizerVenueAddressEntry(access: { admin: boolean; role: "owner" | "editor" | "admin"; current: { accountId: string } },
+  async function completeOrganizerVenueAddressEntry(access: { admin: boolean; role: "owner" | "admin"; current: { accountId: string } },
     body: Record<string, unknown>, candidateId: string, now: number) {
     const address = normalizeOrganizerVenueAddress(body.address);
     if (!address) return json({ error: "請填寫場館地址。" }, 400);
@@ -1912,7 +1901,7 @@ export function createCirclePortalHandlers({
     const tentativeName = typeof body?.tentativeName === "string" ? body.tentativeName.normalize("NFKC").trim() : "";
     const ownerEmail = typeof body?.ownerEmail === "string" ? normalizeEmail(body.ownerEmail) : "";
     if (!tentativeName || tentativeName.length > 120 || !isEmailShaped(ownerEmail)) {
-      return json({ error: "暫定活動名稱與有效的負責人 Email 為必填。" }, 400);
+      return json({ error: "暫定活動名稱與有效的成員 Email 為必填。" }, 400);
     }
     // Asked before the candidate exists. The invitation is the only way the
     // owner reaches this workspace, so an address this environment cannot write
@@ -2003,7 +1992,6 @@ export function createCirclePortalHandlers({
   async function createOrganizerAmendment(request: Request, candidateId: string) {
     const access = await organizerAccess(request, candidateId);
     if (!access.ok) return access.response;
-    if (!access.admin && access.role !== "owner") return json({ error: "只有負責人或管理者可以開始修正。" }, 403);
     const body = await readJson(request);
     if (!Number.isSafeInteger(body?.expectedVersion) || Object.keys(body!).some((key) => key !== "expectedVersion")) {
       return json({ error: "請從目前已發布版本開始修正，不能自行指定基準內容。" }, 400);
@@ -2248,7 +2236,7 @@ export function createCirclePortalHandlers({
     }
     await repository.writeAudit({
       at: config.now(), actorAccountId: access.current.accountId,
-      actorRole: access.admin ? "admin" : access.role === "owner" ? "organizer_owner" : "organizer_editor",
+      actorRole: organizerAuditRole(access),
       action: "organizer_event.updated", subjectType: "organizer_event", subjectId: candidateId,
       detail: { version: result.version }, ipHash: await clientIpHash(request),
     });
@@ -2317,7 +2305,7 @@ export function createCirclePortalHandlers({
     if (!result.alreadyCompleted) {
       await repository.writeAudit({
         at: config.now(), actorAccountId: access.current.accountId,
-        actorRole: access.admin ? "admin" : access.role === "owner" ? "organizer_owner" : "organizer_editor",
+        actorRole: organizerAuditRole(access),
         action: "organizer_event.onboarding_completed", subjectType: "organizer_event", subjectId: candidateId,
         detail: { version: expectedVersion }, ipHash: await clientIpHash(request),
       });
@@ -2498,7 +2486,7 @@ export function createCirclePortalHandlers({
     }
     await repository.writeAudit({
       at: config.now(), actorAccountId: access.current.accountId,
-      actorRole: access.admin ? "admin" : access.role === "owner" ? "organizer_owner" : "organizer_editor",
+      actorRole: organizerAuditRole(access),
       action: "organizer_event.import_replaced", subjectType: "organizer_event", subjectId: candidateId,
       // The source hash is what provenance needs. A private workbook's file and
       // sheet names are the organizer's own data and would outlive the import
@@ -2578,7 +2566,7 @@ export function createCirclePortalHandlers({
     }
     await repository.writeAudit({
       at: config.now(), actorAccountId: access.current.accountId,
-      actorRole: access.admin ? "admin" : access.role === "owner" ? "organizer_owner" : "organizer_editor",
+      actorRole: organizerAuditRole(access),
       action: "organizer_event.map_created", subjectType: "organizer_event", subjectId: candidateId,
       detail: { version: result.version, draftId, periodKey, venueSpaceId }, ipHash: await clientIpHash(request),
     });
@@ -2607,7 +2595,7 @@ export function createCirclePortalHandlers({
     if (!result.ok) return json({ error: result.reason === "not_found" ? "找不到地圖草稿。" : "版本或狀態已變更。", conflict: result }, result.reason === "not_found" ? 404 : 409);
     await repository.writeAudit({
       at: config.now(), actorAccountId: access.current.accountId,
-      actorRole: access.admin ? "admin" : access.role === "owner" ? "organizer_owner" : "organizer_editor",
+      actorRole: organizerAuditRole(access),
       action: "organizer_event.map_updated", subjectType: "organizer_event", subjectId: candidateId,
       detail: { version: result.version, draftId, mapRevision: result.mapRevision }, ipHash: await clientIpHash(request),
     });
@@ -2869,12 +2857,9 @@ export function createCirclePortalHandlers({
     const body = await readJson(request);
     const email = typeof body?.email === "string" ? normalizeEmail(body.email) : "";
     const action = body?.action;
-    const role = body?.role === "owner" ? "owner" : "editor";
     if (!isEmailShaped(email) || (action !== "invite" && action !== "resend" && action !== "revoke")) {
       return json({ error: "Email 與動作（邀請／重寄／移除）為必填。" }, 400);
     }
-    if (role === "owner" && !access.admin && access.role !== "owner") return json({ error: "只有這個活動的負責人或網站管理者可以管理負責人。" }, 403);
-    if (role === "editor" && !access.admin && access.role !== "owner") return json({ error: "只有負責人或網站管理者可以管理協作者。" }, 403);
     const candidate = await repository.getOrganizerCandidate(candidateId);
     if (!candidate) return json({ error: "找不到活動。" }, 404);
     const ipHash = await clientIpHash(request);
@@ -2884,30 +2869,22 @@ export function createCirclePortalHandlers({
     if (action !== "revoke" && !await organizerInvitationAllowed(email, access.current.accountId, ipHash, config.now())) {
       return json({ error: "邀請寄送過於頻繁，請稍後再試。" }, 429);
     }
-    const result = role === "owner"
-      ? await repository.manageOrganizerOwner({
-        candidateId, actorAccountId: access.current.accountId, email, action, now: config.now(),
-      })
-      : await repository.manageOrganizerCollaborator({
-        candidateId, actorAccountId: access.current.accountId, email,
-        role: "editor", action, now: config.now(),
-      });
+    const result = await repository.manageOrganizerOwner({
+      candidateId, actorAccountId: access.current.accountId, email, action, now: config.now(),
+    });
     if (!result.ok) {
-      const error = result.reason === "forbidden" ? role === "owner"
-        ? "只有這個活動的負責人或網站管理者可以管理負責人。" : "只有負責人或網站管理者可以管理協作者。"
-        : result.reason === "last_owner" ? "每個活動至少需要一位負責人。"
-        : result.reason === "already_owner" ? "這個信箱已是活動負責人，不需要再邀請為協作者。"
+      const error = result.reason === "forbidden" ? "只有這個活動的成員或網站管理者可以管理成員。"
+        : result.reason === "last_owner" ? "每個活動至少需要一位成員。"
         : result.reason === "pending" ? "這個信箱已有待接受的邀請，請按「重寄邀請信」。"
-        : result.reason === "other_role" ? "這個信箱已有另一種角色的待接受邀請。"
-        : result.reason === "active" ? "這個信箱已具備這項活動角色，不需要再邀請。"
-        : result.reason === "not_pending" ? "找不到這項角色的待接受邀請，無法重寄。" : "協作者狀態沒有變更。";
+        : result.reason === "active" ? "這個信箱已是活動成員，不需要再邀請。"
+        : result.reason === "not_pending" ? "找不到這個信箱的待接受邀請，無法重寄。" : "成員狀態沒有變更。";
       return json({ error }, result.reason === "forbidden" ? 403 : 409);
     }
     const audit = {
       at: config.now(), actorAccountId: access.current.accountId,
       actorRole: access.admin ? "admin" as const : "organizer_owner" as const,
-      action: `organizer_event.${role}_${action}`, subjectType: "organizer_event", subjectId: candidateId,
-      detail: { role, emailHash: await emailAuditSubjectId(config.hashPepper, email) }, ipHash,
+      action: `organizer_event.owner_${action}`, subjectType: "organizer_event", subjectId: candidateId,
+      detail: { role: "owner", emailHash: await emailAuditSubjectId(config.hashPepper, email) }, ipHash,
     };
     if (action !== "resend") await repository.writeAudit(audit);
     if (action === "revoke") return json({ ok: true, result: result.result });
@@ -2915,8 +2892,8 @@ export function createCirclePortalHandlers({
     try {
       await sendOrganizerInvitation(email, config.now(), ipHash, access.current.accountId,
         // The letter names who is inviting: an admin acting without this
-        // event's Owner grant is the site, not the event's Owner.
-        { eventName: candidate.tentative_name, inviterRole: access.admin && (role === "owner" || access.role !== "owner") ? "admin" : "owner" });
+        // event's member grant is the site, not one of the event's members.
+        { eventName: candidate.tentative_name, inviterRole: access.role === "admin" ? "admin" : "owner" });
     } catch (error) {
       const failure = mailFailure(error);
       invitationDelivery = failure.delivery;
@@ -2930,7 +2907,6 @@ export function createCirclePortalHandlers({
   async function submitOrganizerCandidate(request: Request, candidateId: string) {
     const access = await organizerAccess(request, candidateId);
     if (!access.ok) return access.response;
-    if (access.role !== "owner" && !access.admin) return json({ error: "只有負責人或網站管理者可以送審。" }, 403);
     const body = await readJson(request);
     const expectedVersion = body?.expectedVersion;
     if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1) return json({ error: "版本資訊無效，請重新載入。" }, 400);
@@ -2997,7 +2973,7 @@ export function createCirclePortalHandlers({
       candidateId, actorAccountId: access.current.accountId,
       expectedVersion: expectedVersion as number, now: config.now(),
     });
-    if (!result.ok) return json({ error: result.reason === "forbidden" ? "只有負責人或網站管理者可以送審。" : "版本或狀態已變更。", conflict: result }, result.reason === "forbidden" ? 403 : 409);
+    if (!result.ok) return json({ error: result.reason === "forbidden" ? "只有活動成員或網站管理者可以送審。" : "版本或狀態已變更。", conflict: result }, result.reason === "forbidden" ? 403 : 409);
     await repository.writeAudit({
       at: config.now(), actorAccountId: access.current.accountId, actorRole: access.role === "owner" ? "organizer_owner" : "admin",
       action: "organizer_event.submitted", subjectType: "organizer_event", subjectId: candidateId,
@@ -3115,7 +3091,6 @@ export function createCirclePortalHandlers({
     if (!job) return json({ error: "找不到發布工作。" }, 404);
     const access = await organizerAccess(request, job.candidate_id);
     if (!access.ok) return access.response;
-    if (!access.admin && access.role !== "owner") return json({ error: "只有負責人或網站管理者可以重試發布。" }, 403);
     if (!(await repository.getSiteSettings())?.publicationEnabled) return json({ error: "發布作業已暫停，請稍後再試。", code: "publication_paused" }, 503);
     if ((config.organizerPublicationMode ?? "disabled") === "disabled" || !dispatchOrganizerPublication) {
       return json({ error: "發布功能尚未啟用。" }, 503);
@@ -3141,7 +3116,6 @@ export function createCirclePortalHandlers({
   async function reopenOrganizerCandidate(request: Request, candidateId: string) {
     const access = await organizerAccess(request, candidateId);
     if (!access.ok) return access.response;
-    if (!access.admin && access.role !== "owner") return json({ error: "只有負責人或網站管理者可以退回修改。" }, 403);
     const body = await readJson(request);
     const expectedVersion = body?.expectedVersion;
     const reason = typeof body?.reason === "string" ? body.reason.normalize("NFKC").trim() : "";

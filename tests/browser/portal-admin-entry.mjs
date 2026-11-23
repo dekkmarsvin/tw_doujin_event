@@ -55,7 +55,7 @@ async function open(role, entry = "/admin", pendingService = false, viewport, ev
       isAdmin: admins.some(admin => admin.email === email),
       organizerGrants: related ? [
         { candidateId: "target-owner", eventId: "sample", name: "範例工作區", edition: 2, role: "owner", membersHref: "/organizer?candidate=target-owner&section=members" },
-        { candidateId: "target-editor", eventId: null, name: "範例工作區", edition: 1, role: "editor", membersHref: "/organizer?candidate=target-editor&section=members" },
+        { candidateId: "target-editor", eventId: null, name: "範例工作區", edition: 1, role: "owner", membersHref: "/organizer?candidate=target-editor&section=members" },
       ] : [],
       claims: related ? [
         { id: "target-verified", eventId: "sample", eventName: "範例創作市集", circleId: "c-900001", circleName: "待審測試社", status: "verified", createdAt: now,
@@ -329,8 +329,8 @@ try {
   assert.equal(new URL(page.url()).searchParams.get("email"), "contributor@example.test");
   assert.equal(new URL(page.url()).searchParams.get("event"), null, "account lookup clears an unrelated event selector");
   const workspaces = accountPanel.locator('section[aria-labelledby="account-workspaces-heading"]');
-  await workspaces.getByText("負責人・第 2 版", { exact: true }).waitFor();
-  await workspaces.getByText("協作者・第 1 版", { exact: true }).waitFor();
+  await workspaces.getByText("成員・第 2 版", { exact: true }).waitFor();
+  await workspaces.getByText("成員・第 1 版", { exact: true }).waitFor();
   assert.equal(await workspaces.getByRole("link", { name: "管理成員", exact: true }).count(), 2, "same-name candidates remain distinct target grants");
   assert.deepEqual(await workspaces.getByRole("link", { name: "管理成員", exact: true }).evaluateAll(links => links.map(link => link.getAttribute("href"))),
     ["/organizer?candidate=target-owner&section=members", "/organizer?candidate=target-editor&section=members"]);

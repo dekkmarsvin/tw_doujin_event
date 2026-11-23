@@ -313,20 +313,6 @@ try {
   await capture(audit, "organizer-reopen-remote-audit-error", { panel: auditReview });
   await audit.close();
 
-  // Editor: can inspect the failed publication but has no recovery control.
-  const editor = await journey.page({
-    url: `${base}/organizer`,
-    viewport: { width: 1440, height: 900 },
-    routes: async (page) => { await routeOrganizer(page, { role: "editor", reopen: "expired" }); },
-  });
-  await editor.getByRole("button", { name: "登出", exact: true }).waitFor();
-  const editorReview = await reviewPanel(editor);
-  assert.equal(await editorReview.getByRole("heading", { name: "退回修改", exact: true }).count(), 0, "Editor cannot see the recovery panel");
-  assert.equal(await editorReview.getByRole("textbox", { name: "退回理由", exact: true }).count(), 0, "Editor cannot enter a recovery reason");
-  assert.equal(await editorReview.getByRole("button", { name: "退回修改", exact: true }).count(), 0, "Editor cannot trigger recovery");
-  await capture(editor, "organizer-reopen-editor-hidden");
-  await editor.close();
-
   // A remote-write intent or confirmed checkpoint makes the recovery unsafe.
   // The owner may still inspect the failed job, but must not be offered a
   // reason field or a button that could imply a safe reopen.

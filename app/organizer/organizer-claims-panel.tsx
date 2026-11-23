@@ -8,8 +8,8 @@ import styles from "../circle-portal/portal.module.css";
 
 /** 社團管理: claims and supplemental takedowns of the published activity. The
  * roster and booths themselves are activity data, so the intro points there. */
-export function OrganizerCirclePanel({ candidateId, eventId, canRevoke, onQueueLoaded }: {
-  candidateId: string; eventId: string; canRevoke: boolean; onQueueLoaded: (queue: ReviewQueue | null) => void;
+export function OrganizerCirclePanel({ candidateId, eventId, onQueueLoaded }: {
+  candidateId: string; eventId: string; onQueueLoaded: (queue: ReviewQueue | null) => void;
 }) {
   const claimScope = useMemo<ClaimReviewScope>(() => ({
     eventId,
@@ -22,7 +22,7 @@ export function OrganizerCirclePanel({ candidateId, eventId, canRevoke, onQueueL
       <p>社團名單和攤位的新增、刪除或調整屬於活動資料，請在「活動資料」匯入；活動已發布後，由負責人建立修正版，送審並發布後生效。</p>
     </section>
     <AdminReviewQueue initialEventId={eventId} claimScope={claimScope} onQueueLoaded={onQueueLoaded} />
-    {canRevoke && <OrganizerClaimRevoke candidateId={candidateId} />}
+    <OrganizerClaimRevoke candidateId={candidateId} />
     <OrganizerTakedownPanel candidateId={candidateId} eventId={eventId} />
   </div>;
 }

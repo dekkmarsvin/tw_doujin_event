@@ -1,6 +1,6 @@
 import type { OrganizerNormalizedImportRow } from "../app/organizer-import";
 
-type Actor = { accountId: string; role: "owner" | "editor" | "admin"; admin: boolean; now: number };
+type Actor = { accountId: string; role: "owner" | "admin"; admin: boolean; now: number };
 type AmendmentRow = {
   candidate_id: string; source_candidate_id: string; source_version: number; source_job_id: string;
   baseline_json: string; baseline_sha256: string; created_at: number; changes_json: string; settings_json: string | null;
