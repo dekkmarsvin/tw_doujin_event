@@ -1,10 +1,8 @@
-import { getPublishedEvent } from "./event-catalog";
+import { eventDataPath, getPublishedEvent } from "./event-catalog";
 import { isPublishedEventMap, type PublishedEventMap } from "./event-map";
 import { parseEventMapManifest } from "./event-map-manifest";
 
-function eventDataEndpoint(eventId: string, relativePath: string) {
-  return `/data/events/${encodeURIComponent(eventId)}/${relativePath.split("/").map(encodeURIComponent).join("/")}`;
-}
+const eventDataEndpoint = eventDataPath;
 
 async function readMap(eventId: string, relativePath: string) {
   const response = await fetch(eventDataEndpoint(eventId, relativePath), {

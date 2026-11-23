@@ -44,14 +44,15 @@ function isStorable(response) {
 
 /**
  * The published events change without a deploy (#546), so their files are not
- * in the build's manifest. The server's index lists each event's current files.
+ * in the build's manifest. The server's index lists each event's current files,
+ * at the versioned URLs the Reader asks for.
  */
 async function publishedEventFiles() {
   try {
     const response = await fetch("/data/events/index.json", { cache: "reload" });
     if (!isStorable(response) || !isJson(response)) return [];
     const index = await response.json();
-    return (index.events ?? []).flatMap(({ eventId, files }) => (files ?? []).map((file) => `/data/events/${eventId}/${file}`));
+    return (index.events ?? []).flatMap(({ eventId, version, files }) => (files ?? []).map((file) => `/data/events/${eventId}/v/${version}/${file}`));
   } catch {
     return [];
   }

@@ -1,4 +1,4 @@
-import { eventUsesScopedMaps, getPublishedEvent } from "./event-catalog";
+import { eventDataPath, eventUsesScopedMaps, getPublishedEvent } from "./event-catalog";
 import { parseEventMapManifest } from "./event-map-manifest";
 import type { EventDayKey } from "./planning-store";
 
@@ -44,6 +44,24 @@ function accepts(path: string, response: Response) {
   return contentType.includes("javascript") || contentType.includes("ecmascript");
 }
 
+/**
+ * An offline reload opens the reader shell the worker cached last, and another
+ * tab may have refreshed it after a correction. Its data block names the
+ * version that reload will read, which can be newer than this page's (#546).
+ */
+async function offlineShellVersion(eventId: string) {
+  if (typeof caches === "undefined") return undefined;
+  const shell = await cachedResponse("/index.html", await workerCacheNames());
+  if (!shell) return undefined;
+  try {
+    const block = /<script type="application\/json" id="published-events">([\s\S]*?)<\/script>/.exec(await shell.text())?.[1];
+    const entry = block ? (JSON.parse(block) as { definition?: { id?: unknown }; version?: unknown }[]).find((item) => item.definition?.id === eventId) : undefined;
+    return typeof entry?.version === "string" ? entry.version : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function resolveRequirements(scope: OfflineScope) {
   const event = getPublishedEvent(scope.eventId);
   if (!event || !event.days.some(({ id }) => String(id) === String(scope.day))) {
@@ -60,14 +78,15 @@ async function resolveRequirements(scope: OfflineScope) {
     const url = new URL(source, document.baseURI);
     if (url.origin === location.origin && url.pathname.startsWith("/assets/")) required.add(url.pathname + url.search);
   }
-  const base = `/data/events/${encodeURIComponent(event.id)}`;
-  required.add(`${base}/circles.json`);
+  const shellVersion = await offlineShellVersion(event.id);
+  const path = (file: string) => eventDataPath(event.id, file, shellVersion);
+  required.add(path("circles.json"));
   if (!eventUsesScopedMaps(event)) {
-    required.add(`${base}/map.json`);
+    required.add(path("map.json"));
     return { required: [...required], unresolved: [] as string[] };
   }
 
-  const manifestPath = `${base}/map-manifest.json`;
+  const manifestPath = path("map-manifest.json");
   required.add(manifestPath);
   try {
     const cached = typeof caches === "undefined" ? undefined : await cachedResponse(manifestPath, await workerCacheNames());
@@ -79,7 +98,7 @@ async function resolveRequirements(scope: OfflineScope) {
       if (event.venueAssignments.length !== 1) throw error;
       // Match the Reader's network-error fallback, but require a usable shared
       // artifact before replacing the unresolved manifest requirement.
-      const mapPath = `${base}/map.json`;
+      const mapPath = path("map.json");
       const map = await cachedResponse(mapPath, await workerCacheNames())
         ?? await fetch(mapPath, { headers: { accept: "application/json" } });
       if (!accepts(mapPath, map)) throw new Error("Shared map response is not an artifact.");
@@ -90,13 +109,13 @@ async function resolveRequirements(scope: OfflineScope) {
     // A reachable manifest still selects the shared map only on an actual 404.
     if (response.status === 404) {
       required.delete(manifestPath);
-      required.add(`${base}/map.json`);
+      required.add(path("map.json"));
     } else {
       if (!accepts(manifestPath, response)) throw new Error("Map manifest response is not an artifact.");
       const manifest = parseEventMapManifest(await response.json(), event.id);
       const entry = manifest.maps.find((map) => map.periodKey === String(scope.day) && map.venueSpaceId === venueSpaceId);
       if (!entry) throw new Error("Map manifest has no map for the offline scope.");
-      required.add(`${base}/${entry.path.split("/").map(encodeURIComponent).join("/")}`);
+      required.add(path(entry.path));
     }
     return { required: [...required], unresolved: [] as string[] };
   } catch {

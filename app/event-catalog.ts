@@ -273,7 +273,7 @@ export function parseEventDefinition(value: unknown, references: unknown): Event
   };
 }
 
-type InjectedEvent = { definition: unknown; references: unknown };
+type InjectedEvent = { definition: unknown; references: unknown; version?: string };
 
 /**
  * In a deployed page the server writes the published events into a JSON data
@@ -296,8 +296,25 @@ function injectedEvents(): readonly InjectedEvent[] {
  * The set comes from the published data, so adding an event is a data change:
  * no event is named in code, and nothing here is a per-event constant.
  */
-export const PUBLISHED_EVENTS: readonly EventDefinition[] = injectedEvents()
+const INJECTED_EVENTS = injectedEvents();
+export const PUBLISHED_EVENTS: readonly EventDefinition[] = INJECTED_EVENTS
   .map(({ definition, references }) => parseEventDefinition(definition, references));
+
+const PUBLISHED_VERSIONS = new Map(INJECTED_EVENTS.flatMap(({ definition, version }) => {
+  const id = (definition as { id?: unknown } | null)?.id;
+  return typeof id === "string" && typeof version === "string" ? [[id, version] as const] : [];
+}));
+
+/**
+ * Where a published event file is read from. A deployed page knows each
+ * event's version, and every file of one version has its own URL, so the
+ * offline cache can never pair one version's catalog with another's map
+ * (#546). Staged development data has no version and keeps the plain path.
+ */
+export function eventDataPath(eventId: string, relativePath: string, version = PUBLISHED_VERSIONS.get(eventId)) {
+  const file = relativePath.split("/").map(encodeURIComponent).join("/");
+  return `/data/events/${encodeURIComponent(eventId)}/${version ? `v/${encodeURIComponent(version)}/` : ""}${file}`;
+}
 
 const PUBLISHED_IDS = new Set(PUBLISHED_EVENTS.map((event) => event.id));
 // Fixtures stay resolvable so tests and the dev server can name them, but they
