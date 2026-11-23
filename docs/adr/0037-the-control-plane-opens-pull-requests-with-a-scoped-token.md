@@ -5,7 +5,7 @@
 - **部分被取代**：本 ADR 兩張表點名的 repository 由 [ADR-0039](./0039-one-data-repo-for-events-and-references.md) 決策第 5 點逐條改寫——憑證範圍表的「目標 repository」列與發行前置的 ruleset 表，對象都改為 `dekkmarsvin/tw_doujin_event` 與 `dekkmarsvin/tw_doujin_event-data` 兩個；「event-data 是每場活動一個 repository」整段（含逐活動更新 token 選取那道人工關卡）刪除。**下方兩張表的 `tw_doujin_event-reference-data` 與 `tw_doujin_event-data-ff47` 在遷移後是 archive 的 repository，照字面執行會保護錯的對象。**其餘各列、不可讓步的邊界與外洩分析不變
 - 相關 issue：[#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) §5、[#112](https://github.com/dekkmarsvin/tw_doujin_event/issues/112)、[#118](https://github.com/dekkmarsvin/tw_doujin_event/issues/118)
 - 延續：[ADR-0014](./0014-event-data-lives-outside-the-code-repo.md)、[ADR-0032](./0032-shared-reference-data-is-public-and-pinned.md)、[ADR-0033](./0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md)、[ADR-0035](./0035-new-event-onboarding-is-data-driven.md)
-- 部分取代：[地圖貢獻控制面基礎契約](../contracts/map-contributions.md)「候選匯出不呼叫 GitHub」一句
+- 部分取代：[地圖貢獻控制面基礎契約](https://github.com/dekkmarsvin/tw_doujin_event/blob/ea03bcd723344296514201cb44c832dbdee3a05d/docs/contracts/map-contributions.md)「候選匯出不呼叫 GitHub」一句
 
 ## 脈絡
 
@@ -13,7 +13,7 @@
 
 `npm run event:onboard` 已消除最後一段的手抄雜湊值。但它的輸入前提是 event-data repository 已由人工準備完成——也就是維護者仍要在三個 repository 之間手動搬檔案、開分支、開 PR。這正是 ADR-0035 想移除的機械勞動的最後一段。
 
-現行的[地圖貢獻控制面基礎契約](../contracts/map-contributions.md)明文：候選匯出「不呼叫 GitHub、不寫 event-data repository，也不改變任何匿名公開 endpoint」。讓控制面自己開 PR 會推翻這句話，並新增一個信任面：一份存在於 Cloudflare Pages 環境、可寫入三個 repository 的憑證。
+現行的[地圖貢獻控制面基礎契約](https://github.com/dekkmarsvin/tw_doujin_event/blob/ea03bcd723344296514201cb44c832dbdee3a05d/docs/contracts/map-contributions.md)明文：候選匯出「不呼叫 GitHub、不寫 event-data repository，也不改變任何匿名公開 endpoint」。讓控制面自己開 PR 會推翻這句話，並新增一個信任面：一份存在於 Cloudflare Pages 環境、可寫入三個 repository 的憑證。
 
 ## 決策
 
@@ -77,7 +77,7 @@ fine-grained personal access token，逐項限定：
 
 ## 後果
 
-- [地圖貢獻控制面基礎契約](../contracts/map-contributions.md)「不呼叫 GitHub」一句必須改寫，寫明控制面可開 PR、不可合併，以及此能力只在管理者身分後方可達。改寫由 [#118](https://github.com/dekkmarsvin/tw_doujin_event/issues/118) 執行。
+- [地圖貢獻控制面基礎契約](https://github.com/dekkmarsvin/tw_doujin_event/blob/ea03bcd723344296514201cb44c832dbdee3a05d/docs/contracts/map-contributions.md)「不呼叫 GitHub」一句必須改寫，寫明控制面可開 PR、不可合併，以及此能力只在管理者身分後方可達。改寫由 [#118](https://github.com/dekkmarsvin/tw_doujin_event/issues/118) 執行。
 - 「候選匯出不改變任何匿名公開 endpoint」一句**不變**。開 PR 不改變任何匿名可達的回應。
 - 稽核邊界不變：要回答「這格攤位為什麼屬於這個社團」，需要的仍是 `main` 的那份 diff。控制面只是把 diff 的產生自動化，diff 本身仍是紀錄。
 - **`branch_main` ruleset 目前是 disabled**，且其規則不含 pull request 要求；各活動的 event-data repository 沒有任何 ruleset。這在本 ADR 之前只是「沒設定」，在本 ADR 之後是**發行憑證的阻擋項**。[#118](https://github.com/dekkmarsvin/tw_doujin_event/issues/118) 不得在它到位前發行 token。

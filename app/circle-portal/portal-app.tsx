@@ -30,7 +30,6 @@ import { AccountNotificationSettings } from "../account-notification-settings";
 import { adminLoginDestination } from "../notification-navigation";
 import { ContactLink, WorkspaceSwitch } from "../workspace-nav";
 import { SignInFinePrint, SignInScreen } from "../portal-sign-in";
-import { MapContributorPanel } from "./map-contribution-panel";
 import { CirclePageShare } from "./circle-page-share";
 import { selectedCircleShareImage } from "../circle-share-image";
 import { CatalogImagesField } from "./catalog-images-field";
@@ -368,7 +367,7 @@ export default function CirclePortalApp() {
         {/* Shows which identity the server resolved, so a mismatch against
             ADMIN_EMAILS is visible rather than silently hiding the panel. */}
         <p className={styles.identityWho}>
-          <span>{session.email}{session.isAdmin ? t("・管理者") : ""}{session.isMapContributor ? t("・地圖貢獻者") : ""}</span>
+          <span>{session.email}{session.isAdmin ? t("・管理者") : ""}</span>
         </p>
         <LanguageSwitcher onChange={preferences.chooseLocale} />
         <AccountMenu>
@@ -377,7 +376,6 @@ export default function CirclePortalApp() {
           <WorkspaceSwitch current="circle" />
           <AccountNotificationSettings key={session.email} session={session} preferences={preferences} />
           <ContactLink url={session.contactUrl} />
-          {session.isMapContributor && <a href="#map-contribution">{t("地圖草稿")}</a>}
           {session.isAdmin && <a href="/admin">{t("網站管理")}</a>}
           <button type="button" className={styles.accountMenuEnd} onClick={() => void signOut().then(forgetSession)}>{t("登出")}</button>
         </AccountMenu>
@@ -429,7 +427,6 @@ export default function CirclePortalApp() {
               </div>
             </div>
             {claims.filter((claim) => claim.status === "verified").sort((a, b) => Number(b.circleId === targetCircleId) - Number(a.circleId === targetCircleId)).map((claim) => <CircleEditor key={claim.circleId} event={event} claim={claim} />)}
-            {session.isMapContributor && <div lang="zh-Hant"><MapContributorPanel event={event} /></div>}
           </Fragment>
           {/* Account-wide, so after the event's work rather than inside it
               (ADR-0043); still keyed on the event so its notice never outlives

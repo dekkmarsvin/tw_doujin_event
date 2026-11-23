@@ -5,7 +5,7 @@
 **實作**：[`app/map-annotations.ts`](../../app/map-annotations.ts)、[`app/map-annotation-drawing.tsx`](../../app/map-annotation-drawing.tsx)
 **測試**：`tests/map-annotations.test.mjs`、`tests/browser/map-authoring-annotations.mjs`、`tests/browser/map-roster-coverage.mjs`
 
-主辦單位工作區與地圖貢獻控制面共用同一個 `MapLayoutEditor`。本契約管兩個入口共同的畫布編輯行為；草稿的保存、權限、版本與審閱各見[主辦單位工作區契約](./organizer-workspace.md#地圖)與[地圖貢獻控制面契約](./map-contributions.md)，操作順序見[地圖 authoring](../runbooks/map-authoring.md)。
+主辦單位工作區使用 `MapLayoutEditor`。本契約管畫布編輯行為；草稿的保存、權限、版本與審閱見[主辦單位工作區契約](./organizer-workspace.md#地圖)，操作順序見[地圖 authoring](../runbooks/map-authoring.md)。
 
 **實作**：[`app/map-layout-editor.tsx`](../../app/map-layout-editor.tsx)、[`app/map-layout-editor-geometry.ts`](../../app/map-layout-editor-geometry.ts)、[`app/map-layout-editor-selection.ts`](../../app/map-layout-editor-selection.ts)、[`app/map-segment-edit.ts`](../../app/map-segment-edit.ts)、[`app/map-placement-tool.ts`](../../app/map-placement-tool.ts)、[`app/map-editor-history.ts`](../../app/map-editor-history.ts)、[`app/map-editor-preferences.ts`](../../app/map-editor-preferences.ts)、[`app/map-authoring-state.ts`](../../app/map-authoring-state.ts)、[`app/map-booth-list.tsx`](../../app/map-booth-list.tsx)、[`app/map-booth-coverage.ts`](../../app/map-booth-coverage.ts)、[`app/map-recognition.ts`](../../app/map-recognition.ts)、[`app/map-template-registry.ts`](../../app/map-template-registry.ts)
 **測試**：`tests/map-authoring-state.test.mjs`、`tests/map-editor-preferences.test.mjs`、`tests/map-placement-tool.test.mjs`、`tests/map-segment-edit.test.mjs`、`tests/map-import.test.mjs`、`tests/map-template-shape.test.mjs`
@@ -89,7 +89,7 @@
 - 矩形外緣與出入口、服務設施中心吸附手動線及既有向量元素，8 螢幕 px 內取最小位移，同距離優先手動線。多選移動用整組外框，保留成員相對位置；排段縮放只改所拖角的邊，內部再等分並保持無縫。
 - 顯示輔助線與啟用吸附是分開的控制，Alt 暫停目前手勢的吸附。吸附時顯示命中線及其 X／Y 座標；不從圖片偵測邊線，也不為每個攤位自動建立輔助線。
 
-Organizer 與地圖貢獻皆把 authoring 跟隨 map revision 保存、重開，沿用原有角色／狀態與 expected version／revision 檢查；不新增資料表或另一條保存路徑。核准 snapshot 保留私人草稿內容，但 publication／候選匯出僅取 `content.layout`，公開地圖與 Reader 不含輔助線。顯示／吸附開關不推進候選版本。
+Organizer 把 authoring 跟隨 map revision 保存、重開，沿用原有角色／狀態與 expected version／revision 檢查；不新增資料表或另一條保存路徑。核准 snapshot 保留私人草稿內容，但 publication／候選匯出僅取 `content.layout`，公開地圖與 Reader 不含輔助線。顯示／吸附開關不推進候選版本。
 
 ## 描摹顯示與精準操作
 
@@ -132,7 +132,7 @@ Organizer 與地圖貢獻皆把 authoring 跟隨 map revision 保存、重開，
 
 切換工具分組會取消尚未放置的元素及待套用預覽，不改變已完成的地圖與復原歷史。點選「辨識」直接顯示底圖與辨識操作，不需再展開第二層面板，預覽隨可用高度延伸；離開再返回時保留辨識輸入及尚未失效的結果。
 
-從主辦地圖步驟與地圖貢獻入口可展開同一個編輯器至全視窗。展開／返回不重建 layout、選取或復原歷史；返回只收合，真正離開及切換範圍仍須處理未儲存變更。全視窗隔離外層控制項、保留儲存動作與結果，儲存失敗不關閉或丟棄草稿。Escape 優先取消待套用預覽及放置工具，其次收起工具分組，最後返回地圖步驟。返回恢復展開按鈕的焦點。
+從主辦地圖步驟可展開編輯器至全視窗。展開／返回不重建 layout、選取或復原歷史；返回只收合，真正離開及切換範圍仍須處理未儲存變更。全視窗隔離外層控制項、保留儲存動作與結果，儲存失敗不關閉或丟棄草稿。Escape 優先取消待套用預覽及放置工具，其次收起工具分組，最後返回地圖步驟。返回恢復展開按鈕的焦點。
 
 ## 多邊形
 

@@ -15,7 +15,7 @@ const detail = { event: { ...event, eventIdLocked: false }, publicationAvailable
     readiness: { completed: 0, total: 5, suggestedNextSection: "review", blockers: [],
       sections: ["event", "venue", "import", "map", "review"].map(id => ({ id, state: "available" })) } } };
 const actions = [];
-let session = { email: "admin@example.test", isAdmin: true, isMapContributor: false, hasOrganizerAccess: true };
+let session = { email: "admin@example.test", isAdmin: true, hasOrganizerAccess: true };
 let canAccess = true;
 
 try {
@@ -144,7 +144,7 @@ try {
   const memberNow = Date.now(), week = 7 * 24 * 60 * 60 * 1000;
   let signedIn = false, allowed = true, requestedLink, memberExpiresAt = memberNow + week;
   const readCandidates = [];
-  const memberSession = () => ({ email: "member-manager@example.test", isAdmin: true, isMapContributor: false, hasOrganizerAccess: true, expiresAt: memberExpiresAt });
+  const memberSession = () => ({ email: "member-manager@example.test", isAdmin: true, hasOrganizerAccess: true, expiresAt: memberExpiresAt });
   const memberDetail = { ...detail, event: { ...detail.event, role: "admin", status: "draft" }, publicationAvailable: false,
     workspace: { ...detail.workspace, resume: { ...detail.workspace.resume, section: "event" } } };
   const members = await journey.page({ url: `${base}${memberPath}`, routes: async page => {

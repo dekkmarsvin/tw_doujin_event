@@ -5,7 +5,7 @@
 - **取代**：[ADR-0035](./0035-new-event-onboarding-is-data-driven.md) 決策第 4 點（選項 B 的優先序與定位），並裁決該 ADR「未決」章最後一項
 - 相關 issue：[#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) §4、[#112](https://github.com/dekkmarsvin/tw_doujin_event/issues/112)、[#117](https://github.com/dekkmarsvin/tw_doujin_event/issues/117)
 - 延續：[ADR-0008](./0008-static-public-reading-path.md)、[ADR-0033](./0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md)
-- 相關文件：[地圖 authoring runbook](../runbooks/map-authoring.md)、[地圖貢獻控制面基礎契約](../contracts/map-contributions.md)
+- 相關文件：[地圖 authoring runbook](../runbooks/map-authoring.md)、[地圖貢獻控制面基礎契約](https://github.com/dekkmarsvin/tw_doujin_event/blob/ea03bcd723344296514201cb44c832dbdee3a05d/docs/contracts/map-contributions.md)
 
 ## 脈絡
 

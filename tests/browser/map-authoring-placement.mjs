@@ -11,7 +11,7 @@ journey.report.synthetic = true;
 journey.report.productionWrites = 0;
 
 try {
-  for (const surface of ["organizer", "circle"]) {
+  for (const surface of ["organizer"]) {
     const { page, editor, state } = await openSurface(journey, surface);
     const svg = editor.locator("svg[tabindex='0']");
     const picker = editor.getByRole("combobox", { name: "選取地圖元素" });
@@ -124,18 +124,6 @@ try {
     await editor.getByRole("button", { name: "復原上一步編輯" }).click();
     assert.equal(await count(), beforeMarks + 2);
     await journey.capture(page, `${surface}-canvas-facility-placement`);
-    if (surface === "circle") {
-      // With unsaved changes 提交審閱 is held back by 儲存新版本; pressing it
-      // leads there instead of doing nothing. Forced: Playwright will not
-      // press an aria-disabled button, and that press is what is under test.
-      await page.getByRole("button", { name: "提交審閱", exact: true }).click({ force: true });
-      await page.waitForFunction(() => document.activeElement?.textContent === "儲存新版本");
-      // The upload is held back by its empty fields: the press lands on the
-      // first one and rings each that is still missing.
-      await page.getByRole("button", { name: "上傳私人來源檔", exact: true }).click({ force: true });
-      await page.waitForFunction(() => document.activeElement?.getAttribute("type") === "date");
-      assert.match(await page.getByLabel("來源檔", { exact: true }).getAttribute("class"), /calledOut/);
-    }
     await page.getByRole("button", { name: surface === "organizer" ? "儲存地圖變更" : "儲存新版本", exact: true }).click();
     await page.getByText(surface === "organizer" ? "地圖已儲存，尚未公開。" : "草稿已儲存。", { exact: true }).waitFor();
     assert.equal(state.saves, 1);

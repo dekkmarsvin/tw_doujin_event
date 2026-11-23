@@ -8,7 +8,7 @@
 
 **schema 權威**：[`db/identity-runtime-schema.ts`](../../db/identity-runtime-schema.ts)（runtime tables 由 `identity-runtime-initializer.ts` 於資料庫首次使用或版本落後時建立；既有資料庫用同檔案的 additive column migrations 升級。表名與數量直接以該檔為準，不在本文複製一個會漂移的計數）
 **寫入端**：[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`functions/`](../../functions)
-**行為契約**：[社團自助控制面](./circle-portal.md)、[主辦單位工作區](./organizer-workspace.md)、[地圖貢獻控制面](./map-contributions.md)。權限、可編輯範圍、狀態機與來源邊界只寫在契約，本文不重複。
+**行為契約**：[社團自助控制面](./circle-portal.md)、[主辦單位工作區](./organizer-workspace.md)。權限、可編輯範圍、狀態機與來源邊界只寫在契約，本文不重複。
 **外部對照**：[性質相近的服務如何公開自己的資料收集](../research/data-collection-policies-in-comparable-projects.md)
 
 ## Runtime 初始化狀態
@@ -184,13 +184,15 @@
 
 ### `map_contributor_grants` — 地圖貢獻授權
 
+> 地圖貢獻者角色已在 #546 階段 5a 移除，這張表不再寫入，隨 D1 migration 刪除。
+
 `account_id`、授權者／時間，以及撤銷或停權者／時間。有效角色是撤銷與停權時間都為 NULL 的列；管理者可再次授權同一帳號。
 
 **目的**：讓管理者明確控制誰可整理主辦官方配置證據。**保存期**：帳號存在期間不設期限；刪除帳號時刪除資料列。授權、撤銷與停權另寫入 `audit_log`。
 
 ### `map_drafts` 與 `map_draft_revisions` — 私人地圖草稿
 
-`map_drafts` 保存活動、period、場地、owner、狀態、目前 revision、活動／決定時間、內部 transition token、清除 claim 與 `candidate_id`。**`candidate_id` 是兩條管線的分界**：非 NULL 的列屬於主辦單位工作區的候選活動，公開地圖貢獻流程的每一句 SQL 都要求它是 NULL（見[地圖貢獻控制面契約](./map-contributions.md)）。`map_draft_revisions` 保存每版私人 JSON、作者與建立時間。每次修改新增 revision；落後版本不得覆寫。partial unique index 保證同一 `event_id + period_key + venue_space_id` 最多一份仍有效的 `approved`／`exported`；核准替代稿時，同一 D1 batch 會先把明確指定的既有稿轉為 `withdrawn`。
+`map_drafts` 保存活動、period、場地、owner、狀態、目前 revision、活動／決定時間、內部 transition token、清除 claim 與 `candidate_id`。**`candidate_id` 是兩條管線的分界**：非 NULL 的列屬於主辦單位工作區的候選活動，公開地圖貢獻流程的每一句 SQL 都要求它是 NULL（見[地圖貢獻控制面契約](https://github.com/dekkmarsvin/tw_doujin_event/blob/ea03bcd723344296514201cb44c832dbdee3a05d/docs/contracts/map-contributions.md)）。`map_draft_revisions` 保存每版私人 JSON、作者與建立時間。每次修改新增 revision；落後版本不得覆寫。partial unique index 保證同一 `event_id + period_key + venue_space_id` 最多一份仍有效的 `approved`／`exported`；核准替代稿時，同一 D1 batch 會先把明確指定的既有稿轉為 `withdrawn`。
 
 **目的**：允許平行整理與可重現審閱，不直接改寫公開快照。**保存期**：`draft` 180 天無活動後整份刪除；`changes_requested` 180 天無活動後刪除 revisions 並將 owner 去識別化；`submitted` 審閱前不自動刪除。已審內容的後續處置見下兩類。
 

@@ -64,7 +64,6 @@ function AdminDashboard({ queueState, mode }: { queueState?: ReturnType<typeof u
       <a href="/organizer?application">活動申請<strong>{queue ? queue.organizer.applications : "—"}</strong></a>
       <a href={adminHref("events", { view: "publication" })}>活動內容<strong>{queue ? queue.organizer.submissions : "—"}</strong></a>
       <a href={adminHref("circles", { view: "claims" })}>社團認領<strong>{queue?.pendingClaimCount ?? "—"}</strong></a>
-      <a href={adminHref("events", { view: "maps" })}>地圖投稿<strong>{queue ? queue.mapDrafts.reduce((sum, item) => sum + item.submitted, 0) : "—"}</strong></a>
     </div>}
     <div className={mode === "list" ? ui.eventDashboard : ui.dashboard} id={overview ? "overview" : undefined}>
       <div>
@@ -84,8 +83,6 @@ function AdminDashboard({ queueState, mode }: { queueState?: ReturnType<typeof u
               <a href={candidateHref(item.id, true)}>前往審核</a></li>)}
             {overview && counts.filter(item => item.pending > 0).map(item => <li key={`claim:${item.eventId}`}><div><strong>{getPublishedEvent(item.eventId)?.name ?? item.eventId}</strong><small>社團認領 {item.pending} 件</small></div>
               <a href={adminHref("circles", { view: "claims", event: item.eventId })}>審核認領</a></li>)}
-            {overview && queue?.mapDrafts.filter(item => item.submitted > 0).map(item => <li key={`map:${item.eventId}`}><div><strong>{getPublishedEvent(item.eventId)?.name ?? item.eventId}</strong><small>地圖投稿 {item.submitted} 件</small></div>
-              <a href={adminHref("events", { view: "maps", event: item.eventId })}>查看草稿</a></li>)}
           </ul>
           {!candidates && !error && <p>活動內容載入中…</p>}
           {error && <><p className={styles.error} role="alert">活動內容更新失敗：{error}</p>{updatedAt && <p className={ui.status}>活動內容更新於 {adminDate(updatedAt)}</p>}</>}
@@ -146,11 +143,9 @@ function AdminEventList({ candidates, readFailed, queue, today, failures }: { ca
       </div>
       <div className={ui.eventWork}><p className={ui.eventCounts}><span>內容待審 {candidates ? group.editions.filter(item => item.status === "submitted").length : "—"}</span>
         <span>認領待審 {queue?.claimCounts ? queue.claimCounts.find(item => item.eventId === group.eventId)?.pending ?? 0 : "—"}</span>
-        <span>地圖投稿 {queue ? queue.mapDrafts.find(item => item.eventId === group.eventId)?.submitted ?? 0 : "—"}</span>
       </p>
       {group.eventId && <div className={ui.detailActions}>
         {!!queue?.claimCounts?.find(item => item.eventId === group.eventId)?.pending && <a href={adminHref("circles", { view: "claims", event: group.eventId })}>審核認領</a>}
-        {!!queue?.mapDrafts.find(item => item.eventId === group.eventId)?.submitted && <a href={adminHref("events", { view: "maps", event: group.eventId })}>查看地圖投稿</a>}
       </div>}</div>
     </article></Fragment>;
     })}

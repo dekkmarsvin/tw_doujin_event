@@ -11,7 +11,6 @@ export function requestAdminServiceCheck() {
   return call<{ services: ServiceChecks }>("/api/admin/service-check", { method: "POST", body: "{}" });
 }
 import { notificationParameters } from "./notification-navigation";
-import type { MapAuthoringState } from "./map-authoring-state";
 import type { NotificationPreferences } from "./review-notifications";
 import type { AdminCircleDetail } from "./admin-circle-detail";
 export type { AdminCircleDetail, AdminCircleClaim, AdminCircleHistory } from "./admin-circle-detail";
@@ -33,9 +32,6 @@ export function saveNotificationPreferences(preferences: NotificationPreferences
   return call<NotificationPreferences>("/api/admin/notification-preferences", { method: "PUT", body: JSON.stringify(preferences) });
 }
 import type { CircleOverrideFields, CircleRetentionChoice } from "./circle-overrides";
-import type { MapBoothScope } from "./map-booth-coverage";
-import type { EventMapLayout, PublishedEventMap } from "./event-map";
-import { parseMapDraftConflict, type MapCandidateDiff, type MapDraftProblem } from "./map-contribution-draft";
 
 /**
  * Every authenticated write in one place, so the boundary is auditable: the
@@ -43,7 +39,7 @@ import { parseMapDraftConflict, type MapCandidateDiff, type MapDraftProblem } fr
  * anonymous, edge-cacheable read namespace.
  */
 
-export type PortalSession = { email: string; isAdmin: boolean; isMapContributor: boolean; hasOrganizerAccess: boolean; expiresAt?: number; canApplyForEvent?: boolean; hasEventApplications?: boolean;
+export type PortalSession = { email: string; isAdmin: boolean; hasOrganizerAccess: boolean; expiresAt?: number; canApplyForEvent?: boolean; hasEventApplications?: boolean;
   contactUrl?: string; claimReviewNotice?: string };
 
 export type ClaimSummary = {
@@ -74,7 +70,6 @@ export type ReviewQueue = {
   claims: QueuedClaim[];
   pendingClaimCount?: number;
   claimCounts?: { eventId: string; pending: number }[];
-  mapDrafts: { eventId: string; submitted: number }[];
   organizer: { applications: number; submissions: number };
 };
 
@@ -337,158 +332,3 @@ export function searchAdminAccountsByCircle(circleName: string) {
   return call<AdminAccountCircleSearchResponse>(`/api/admin/accounts?circle=${encodeURIComponent(circleName)}`, undefined, "");
 }
 
-export function manageMapContributor(email: string, action: "grant" | "revoke" | "suspend") {
-  return call<{ ok: true; result: "granted" | "revoked" | "suspended" }>(
-    "/api/admin/map-contributors", { method: "POST", body: JSON.stringify({ email, action }) }, "",
-  );
-}
-
-export type MapDraftStatus = "draft" | "submitted" | "changes_requested" | "approved" | "rejected" | "exported" | "withdrawn";
-export type MapDraftSummary = {
-  id: string;
-  event_id: string;
-  period_key: string;
-  venue_space_id: string;
-  status: MapDraftStatus;
-  current_revision: number;
-  created_at: number;
-  updated_at: number;
-  decision_at: number | null;
-  owner_email?: string | null;
-};
-export type MapDraftFile = {
-  id: string;
-  revision: number;
-  source_url: string;
-  document_date: string;
-  page_number: number | null;
-  sha256: string;
-  mime: string;
-  width: number | null;
-  height: number | null;
-  review_result: string | null;
-  raw_deleted_at: number | null;
-};
-export type MapDraftDetail = MapDraftSummary & {
-  owner_account_id: string;
-  content: { schema: "map-contribution-draft/1"; layout: EventMapLayout; authoring?: MapAuthoringState };
-};
-export type MapDraftReview = {
-  revision: number;
-  from_status: MapDraftStatus;
-  to_status: MapDraftStatus;
-  actor_role: string;
-  note: string | null;
-  at: number;
-};
-
-/** One message on a draft's review thread. `target_kind` marks it as a request
- * to change one element rather than the draft as a whole, and `target_ref` is
- * the booth code or landmark id it points at. Authors are named by role only:
- * participants on a draft are never identified to one another. */
-export type MapDraftComment = {
-  id: string;
-  revision: number;
-  author_role: string;
-  target_kind: "slot" | "landmark" | null;
-  target_ref: string | null;
-  body: string;
-  at: number;
-};
-
-/** Field names are the wire contract the review endpoint parses, so a panel
- * that builds one of these cannot drift from what the server reads. */
-export type MapDraftCommentTarget = { targetKind: "slot" | "landmark"; targetRef: string; body: string };
-
-export function listMyMapDrafts() {
-  return call<{ drafts: MapDraftSummary[] }>("/api/map-contributions/drafts");
-}
-
-export function readMapDraft(draftId: string, admin = false, eventId?: string) {
-  const base = admin ? "/api/admin/map-contributions/drafts" : "/api/map-contributions/drafts";
-  return call<{ draft: MapDraftDetail; files: MapDraftFile[]; reviews: MapDraftReview[]; comments: MapDraftComment[]; scope: MapBoothScope | null }>(`${base}/${encodeURIComponent(draftId)}`, undefined, eventId);
-}
-
-export function createMapContributionDraft(periodKey: string, venueSpaceId: string, layout: EventMapLayout) {
-  return call<{ ok: true; draftId: string; revision: number }>("/api/map-contributions/drafts", {
-    method: "POST",
-    body: JSON.stringify({ periodKey, venueSpaceId, content: { schema: "map-contribution-draft/1", layout } }),
-  });
-}
-
-export function saveMapContributionDraft(draftId: string, expectedRevision: number, layout: EventMapLayout, authoring?: MapAuthoringState) {
-  return call<{ ok: true; draftId: string; revision: number }>(`/api/map-contributions/drafts/${encodeURIComponent(draftId)}`, {
-    method: "PUT",
-    body: JSON.stringify({ expectedRevision, content: { schema: "map-contribution-draft/1", layout, authoring } }),
-  });
-}
-
-export function submitMapContributionDraft(draftId: string, expectedRevision: number) {
-  return call<{ ok: true; draftId: string; revision: number }>(`/api/map-contributions/drafts/${encodeURIComponent(draftId)}/submit`, {
-    method: "POST",
-    body: JSON.stringify({ expectedRevision }),
-  });
-}
-
-export function uploadMapContributionEvidence(input: {
-  draftId: string; revision: number; file: File; sourceUrl: string; documentDate: string; pageNumber?: number | null;
-}) {
-  const body = new FormData();
-  body.set("draftId", input.draftId);
-  body.set("revision", String(input.revision));
-  body.set("sourceUrl", input.sourceUrl);
-  body.set("documentDate", input.documentDate);
-  if (input.pageNumber != null) body.set("pageNumber", String(input.pageNumber));
-  body.set("file", input.file);
-  return call<{ ok: true; fileId: string; revision: number; sha256: string; mime: string; sizeBytes: number }>(
-    "/api/map-contributions/files", { method: "POST", body },
-  );
-}
-
-/** Discussion is not a state transition, so it carries no expected revision:
- * the server stamps the comment with the draft's revision as it stands. */
-export function postMapDraftComment(input: { draftId: string; body: string; targetKind?: "slot" | "landmark"; targetRef?: string }, eventId?: string) {
-  return call<{ ok: true; draftId: string; commentId: string }>(
-    `/api/map-contributions/drafts/${encodeURIComponent(input.draftId)}/comments`,
-    { method: "POST", body: JSON.stringify(input) }, eventId,
-  );
-}
-
-export function listAdminMapDrafts(eventId?: string) {
-  return call<{ drafts: MapDraftSummary[] }>("/api/admin/map-contributions/drafts", undefined, eventId);
-}
-
-export function reviewMapContributionDraft(input: {
-  draftId: string;
-  expectedRevision: number;
-  decision: "changes_requested" | "approve" | "reject";
-  note?: string;
-  replacementDraftId?: string;
-  confirmOfficialSource?: boolean;
-  targets?: MapDraftCommentTarget[];
-}, eventId?: string) {
-  return call<{ ok: true }>(`/api/admin/map-contributions/drafts/${encodeURIComponent(input.draftId)}/review`, {
-    method: "POST", body: JSON.stringify(input),
-  }, eventId);
-}
-
-export function exportMapContributionCandidate(draftId: string, expectedRevision: number, eventId?: string) {
-  return call<{
-    ok: true; draftId: string; revision: number; targetPath: string; candidate: PublishedEventMap;
-    diff: MapCandidateDiff; candidateSha256: string; createdAt: number;
-  }>(`/api/admin/map-contributions/drafts/${encodeURIComponent(draftId)}/export`, {
-    method: "POST", body: JSON.stringify({ expectedRevision }),
-  }, eventId);
-}
-
-export function mapDraftProblems(error: unknown) {
-  if (!(error instanceof PortalError) || !Array.isArray(error.body?.problems)) return [];
-  return error.body.problems as MapDraftProblem[];
-}
-
-/** A refused write carries the draft's own state back, so the panel can name
- * the conflict and offer a reload instead of a dead-end error string. */
-export function mapDraftConflict(error: unknown) {
-  if (!(error instanceof PortalError) || error.status !== 409) return null;
-  return parseMapDraftConflict(error.body?.conflict);
-}

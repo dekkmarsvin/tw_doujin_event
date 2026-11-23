@@ -1,27 +1,10 @@
 import { sha256Hex } from "./hosted-thumbnails";
 
-export const MAP_CONTRIBUTION_MAX_BYTES = 20 * 1024 * 1024;
-/** An organizer's own layout plan is one traced image, not a document set, so
- * it gets its own smaller ceiling than the contribution evidence above. */
+/** An organizer's layout plan is one traced image. */
 export const MAP_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
-const MAP_CONTRIBUTION_MAX_PDF_PAGES = 20;
 const MAP_CONTRIBUTION_MAX_IMAGE_PIXELS = 16_000_000;
 const MAP_CONTRIBUTION_MAX_DECOMPRESSED_IMAGE_BYTES = 32 * 1024 * 1024;
 const MAP_CONTRIBUTION_MAX_IMAGE_DIMENSION = 8_192;
-
-type PreparedMapContributionFile = {
-  bytes: ArrayBuffer;
-  contentType: "image/jpeg" | "image/png" | "image/webp" | "application/pdf";
-  extension: "jpg" | "png" | "webp" | "pdf";
-  sha256: string;
-  sizeBytes: number;
-  width: number | null;
-  height: number | null;
-  pageCount: number | null;
-  sourceUrl: string;
-  documentDate: string;
-  pageNumber: number | null;
-};
 
 export type MapContributionFileStore = {
   put: (key: string, value: ArrayBuffer, contentType: string) => Promise<void>;
@@ -30,18 +13,6 @@ export type MapContributionFileStore = {
   /** Keys under a prefix. Optional so a store that cannot list still serves the rest. */
   list?: (prefix: string) => Promise<string[]>;
 };
-
-function validHttps(value: string) {
-  try { return value.startsWith("https://") && new URL(value).protocol === "https:"; } catch { return false; }
-}
-
-function validDate(value: string) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return false;
-  const [, yearText, monthText, dayText] = match;
-  const [year, month, day] = [yearText, monthText, dayText].map(Number);
-  return month >= 1 && month <= 12 && day >= 1 && day <= new Date(Date.UTC(year, month, 0)).getUTCDate();
-}
 
 async function pngDimensions(bytes: Uint8Array) {
   const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
@@ -167,25 +138,6 @@ function webpDimensions(bytes: Uint8Array) {
   return image;
 }
 
-function pdfPageCount(bytes: Uint8Array) {
-  const original = new TextDecoder("latin1").decode(bytes);
-  const text = original.replace(/#([0-9a-f]{2})/gi, (_, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)));
-  const start = /startxref\s+(\d+)\s+%%EOF\s*$/.exec(text);
-  if (!text.startsWith("%PDF-") || !start) return null;
-  const xrefOffset = Number(start[1]);
-  if (!Number.isSafeInteger(xrefOffset) || text.slice(xrefOffset, xrefOffset + 4) !== "xref") return null;
-  const trailer = text.slice(xrefOffset, start.index);
-  if (!/trailer\s*<<[\s\S]*\/Root\s+\d+\s+\d+\s+R[\s\S]*>>/.test(trailer)) return null;
-  // Object streams can hide dictionaries from a bounded structural scan, so
-  // this conservative profile rejects them instead of guessing at contents.
-  if (/\/ObjStm\b/.test(text) || /\/(?:Encrypt|JavaScript|JS|OpenAction|AA|EmbeddedFiles?|Launch|RichMedia)\b/.test(text)) {
-    throw new Error("PDF 不得包含加密、動作、腳本或附件。");
-  }
-  const body = text.slice(0, xrefOffset);
-  const pages = body.match(/\d+\s+\d+\s+obj[\s\S]*?\/Type\s*\/Page\b[\s\S]*?endobj/g)?.length ?? 0;
-  return pages >= 1 && pages <= MAP_CONTRIBUTION_MAX_PDF_PAGES ? pages : null;
-}
-
 /** The container checks both entry points share. Sniffing follows the declared
  * type rather than guessing at one: a file that claims to be a PNG and does not
  * parse as one is rejected, never re-labelled. */
@@ -235,60 +187,6 @@ export async function prepareMapImageFile(file: File): Promise<PreparedMapImage>
     width: image.width,
     height: image.height,
   };
-}
-
-export async function prepareMapContributionFile(input: {
-  file: File;
-  sourceUrl: string;
-  documentDate: string;
-  pageNumber?: number | null;
-}): Promise<PreparedMapContributionFile> {
-  if (!validHttps(input.sourceUrl)) throw new Error("官方來源 URL 必須使用 HTTPS。");
-  if (!validDate(input.documentDate)) throw new Error("文件日期必須是有效的 YYYY-MM-DD。");
-  if (input.file.size <= 0 || input.file.size > MAP_CONTRIBUTION_MAX_BYTES) throw new Error("單檔必須介於 1 byte 與 20 MiB 之間。");
-  const bytes = await input.file.arrayBuffer();
-  const view = new Uint8Array(bytes);
-  const pageNumber = input.pageNumber ?? null;
-  let extension: PreparedMapContributionFile["extension"];
-  let width: number | null = null;
-  let height: number | null = null;
-  let pageCount: number | null = null;
-
-  const image = await mapImageDimensions(input.file.type, view);
-  if (image) {
-    ({ width, height } = image); extension = image.extension;
-  } else if (input.file.type === "application/pdf") {
-    pageCount = pdfPageCount(view);
-    if (!pageCount) throw new Error(`只接受 classic xref、未加密且不含 object stream 的 PDF，頁數須為 1–${MAP_CONTRIBUTION_MAX_PDF_PAGES} 頁。`);
-    if (pageNumber !== null && (!Number.isSafeInteger(pageNumber) || pageNumber < 1 || pageNumber > pageCount)) {
-      throw new Error("PDF 頁碼不在文件頁數範圍內。");
-    }
-    extension = "pdf";
-  } else {
-    throw new Error("只接受 JPEG、PNG、WebP 或 PDF。");
-  }
-  if (extension !== "pdf" && pageNumber !== null) throw new Error("只有 PDF 可以指定頁碼。");
-
-  return {
-    bytes,
-    contentType: input.file.type as PreparedMapContributionFile["contentType"],
-    extension,
-    sha256: await sha256Hex(bytes),
-    sizeBytes: input.file.size,
-    width,
-    height,
-    pageCount,
-    sourceUrl: input.sourceUrl,
-    documentDate: input.documentDate,
-    pageNumber,
-  };
-}
-
-export function mapContributionObjectKey(input: { eventId: string; draftId: string; fileId: string; extension: string }) {
-  for (const [label, value] of Object.entries(input)) {
-    if (!/^[a-z0-9][a-z0-9-]*$/.test(value)) throw new Error(`${label} is invalid.`);
-  }
-  return `map-contributions/${input.eventId}/${input.draftId}/${input.fileId}.${input.extension}`;
 }
 
 /** One key per candidate map, so uploading again overwrites the plan that map

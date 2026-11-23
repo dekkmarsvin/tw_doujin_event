@@ -8,7 +8,7 @@ export async function verifyLocalePreferences(journey) {
   const page = await journey.page({ url: `${base}/circle?event=sample&lang=en`, routes: async p => {
     await p.route("**/api/**", async route => {
       const request = route.request(), path = new URL(request.url()).pathname;
-      if (path === "/api/auth/session") return route.fulfill({ json: { email: "locale-fixture@example.test", isAdmin: false, isMapContributor: false } });
+      if (path === "/api/auth/session") return route.fulfill({ json: { email: "locale-fixture@example.test", isAdmin: false } });
       if (path === "/api/claims") return route.fulfill({ json: { claims: [], eventId: "sample" } });
       if (path === "/api/account/notification-preferences") {
         if (request.method() === "GET") return route.fulfill({ json: preferences });
@@ -84,7 +84,7 @@ export async function verifyLocalePreferences(journey) {
   const fresh = await journey.page({ url: `${base}/circle?event=sample&lang=en`, routes: async p => {
     await p.route("**/api/**", async route => {
       const path = new URL(route.request().url()).pathname;
-      if (path === "/api/auth/session") return route.fulfill({ json: { email: "new-locale@example.test", isAdmin: false, isMapContributor: false } });
+      if (path === "/api/auth/session") return route.fulfill({ json: { email: "new-locale@example.test", isAdmin: false } });
       if (path === "/api/claims") return route.fulfill({ json: { claims: [], eventId: "sample" } });
       if (path === "/api/account/notification-preferences") {
         if (route.request().method() === "GET" && firstRead) {

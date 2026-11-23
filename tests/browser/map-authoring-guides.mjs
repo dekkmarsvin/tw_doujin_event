@@ -9,7 +9,7 @@ journey.report.synthetic = true;
 journey.report.productionWrites = 0;
 
 try {
-  for (const [surface, width, height] of [["organizer", 1000, 1600], ["circle", 1600, 1000]]) {
+  for (const [surface, width, height] of [["organizer", 1000, 1600]]) {
     const initial = { ...source, width, height, floor: { x: 0, y: 0, width, height }, rows: [], pillars: [], landmarks: [], accessPoints: [] };
     const { page, editor, state } = await openSurface(journey, surface, initial);
     const svg = editor.locator("svg[tabindex='0']");

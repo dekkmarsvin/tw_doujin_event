@@ -37,7 +37,6 @@
 - [社團自助控制面](./contracts/circle-portal.md)
 - [主辦單位工作區](./contracts/organizer-workspace.md)
 - [網站營運設定](./contracts/site-settings.md)
-- [地圖貢獻控制面](./contracts/map-contributions.md)
 - [資料 inventory](./contracts/data-inventory.md)
 - [共享 reference 選擇](./contracts/reference-selection.md)
 

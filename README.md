@@ -15,7 +15,6 @@
 
 已發布活動由主辦單位工作區核准後直接發布到活動資料 bucket，見[部署 runbook](docs/runbooks/deployment.md#活動資料r2)。
 
-另外授權的地圖貢獻者可在社團入口維護私人草稿，核准匯出後仍需經資料發布流程，見[地圖貢獻契約](docs/contracts/map-contributions.md)。
 
 ## 快速開始
 

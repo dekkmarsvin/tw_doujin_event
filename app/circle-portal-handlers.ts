@@ -23,15 +23,8 @@ import {
   catalogKeyOf, catalogKeysOf, catalogObjectPrefix, circleObjectPrefix, deleteObjectKeys, hostedCatalogImage, hostedThumbnailFields,
   prepareHostedCatalogImage, prepareHostedThumbnail, type HostedThumbnailStore,
 } from "./hosted-thumbnails";
-import {
-  mapContributionObjectKey, organizerMapBackgroundObjectKey, prepareMapContributionFile, prepareMapImageFile,
-  type MapContributionFileStore, type PreparedMapImage,
-} from "./map-contribution-files";
-import {
-  buildMapCandidate, parseMapContributionDraftContent, validateMapContributionDraft,
-  type MapContributionScope, type MapDraftActorRole, type MapDraftConflict,
-} from "./map-contribution-draft";
-import { validateEventMapLayout, type EventMapLayout, type PublishedEventMap } from "./event-map";
+import { organizerMapBackgroundObjectKey, prepareMapImageFile, type MapContributionFileStore, type PreparedMapImage } from "./map-contribution-files";
+import { parseMapContributionDraftContent, validateMapContributionDraft } from "./map-contribution-draft";
 import {
   describeEventImageBytes, eventImageKeyParts, eventImagePublicKey, organizerEventImageObjectKey, organizerEventImagePrefix,
   prepareEventImage, sameEventImage, type EventImage,
@@ -162,10 +155,6 @@ type PortalDependencies = {
   thumbnailStore?: HostedThumbnailStore;
   /** Separate private R2 bucket. It must never share the public thumbnail origin. */
   mapContributionStore?: MapContributionFileStore;
-  /** Resolves official event scope and booth coverage from the pinned catalog. */
-  resolveMapContributionScope?: (input: { periodKey: string; venueSpaceId: string }) => Promise<MapContributionScope | null>;
-  /** Reads only the reviewed public repository snapshot used as diff base. */
-  readPublishedEventMap?: (targetPath: string) => Promise<PublishedEventMap | null>;
   /** Confirms readers do not see a failed job's approval before its candidate is reopened. */
   publicationAuditor?: (jobId: string) => Promise<{ clear: boolean }>;
   config: PortalConfig;
@@ -188,16 +177,6 @@ function json(body: unknown, status = 200, headers: Record<string, string> = {})
     status,
     headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers },
   });
-}
-
-function isMapDraftActorRole(value: string): value is MapDraftActorRole {
-  return value === "map_contributor" || value === "admin" || value === "system";
-}
-
-function mapDraftConflictMessage(conflict: MapDraftConflict) {
-  if (conflict.cause === "permission") return "沒有有效的地圖貢獻者權限。";
-  if (conflict.cause === "status") return "草稿狀態已變更。";
-  return `草稿已更新至版本 ${conflict.revision}。`;
 }
 
 /** Whether a stored row publishes any sale-sheet page, and so owns hosted objects. */
@@ -237,7 +216,7 @@ export function createCirclePortalHandlers({
   loadPublishedAmendmentBaseline,
   dispatchOrganizerPublication,
   repository, sendMail, mailRecipientAllowed, lookupCircle, searchCircles, fetchEvidence, verifyHuman, turnstileSitekey,
-  projectCircle, thumbnailStore, mapContributionStore, resolveMapContributionScope, readPublishedEventMap,
+  projectCircle, thumbnailStore, mapContributionStore,
   publicationAuditor, config,
 }: PortalDependencies) {
   // The roster lives in the database so it can change without a redeploy.
@@ -487,7 +466,6 @@ export function createCirclePortalHandlers({
       email,
       isAdmin: admin,
       expiresAt: now + sessionTtl,
-      isMapContributor: await repository.hasActiveMapContributor(accountId),
       hasOrganizerAccess: await repository.hasOrganizerAccess(accountId) || await isAdmin(email),
       ...await sessionSiteFields(email),
       hasEventApplications: await repository.hasOrganizerApplications(accountId),
@@ -504,7 +482,6 @@ export function createCirclePortalHandlers({
       email: current.email,
       isAdmin: admin,
       expiresAt: current.sessionCreatedAt + SESSION_TTL_MS,
-      isMapContributor: await repository.hasActiveMapContributor(current.accountId),
       hasOrganizerAccess: await repository.hasOrganizerAccess(current.accountId) || await isAdmin(current.email),
       ...await sessionSiteFields(current.email),
       hasEventApplications: await repository.hasOrganizerApplications(current.accountId),
@@ -545,25 +522,21 @@ export function createCirclePortalHandlers({
     }
     const now = config.now();
     let claimScopes = await repository.listClaimScopesForAccount(current.accountId);
-    let mapDraftKeys = await repository.listUnsubmittedMapDraftObjectKeysForAccount(current.accountId);
     if (!thumbnailStore && claimScopes.length > 0) return json({ error: "暫時無法使用圖片功能，請稍後再試。", code: errorCode("image_service_unavailable") }, 503);
-    if (!mapContributionStore && mapDraftKeys.length > 0) return json({ error: "暫時無法使用地圖草稿檔案，請稍後再試。", code: errorCode("account_files_unavailable") }, 503);
     if (!await repository.beginAccountDeletion({
       accountId: current.accountId, email: current.email, now, retrySessionId: current.sessionId,
     })) {
       return json({ error: "找不到可刪除的帳號。", code: errorCode("account_not_found") }, 404);
     }
-    // Re-read after the atomic contributor tombstone. An upload that already
-    // put R2 bytes can no longer bind metadata and will roll its object back.
+    // Re-read after the atomic tombstone. An upload that already put R2 bytes
+    // can no longer bind metadata and will roll its object back.
     claimScopes = await repository.listClaimScopesForAccount(current.accountId);
-    mapDraftKeys = await repository.listUnsubmittedMapDraftObjectKeysForAccount(current.accountId);
     if (thumbnailStore) {
       const allKeys = (await Promise.all(claimScopes.map((claim) => thumbnailStore.list(
         `events/${encodeURIComponent(claim.event_id)}/circles/${encodeURIComponent(claim.circle_id)}/`,
       )))).flat();
       await deleteObjectKeys(thumbnailStore, [...new Set(allKeys)]);
     }
-    if (mapContributionStore) await deleteObjectKeys(mapContributionStore, [...new Set(mapDraftKeys)]);
     const deleted = await repository.deleteAccount({
       accountId: current.accountId,
       email: current.email,
@@ -1186,576 +1159,10 @@ export function createCirclePortalHandlers({
     return json({ services: await repository.requestServiceCheck(config.now()) }, 202);
   }
 
-  async function adminManageMapContributor(request: Request) {
-    const gate = await requireAdmin(request);
-    if (!gate.ok) return gate.response;
-    const body = await readJson(request);
-    const email = typeof body?.email === "string" ? normalizeEmail(body.email) : "";
-    const action = body?.action;
-    if (!isEmailShaped(email) || (action !== "grant" && action !== "revoke" && action !== "suspend")) {
-      return json({ error: "email 與 action（grant／revoke／suspend）是必填欄位。" }, 400);
-    }
-    const now = config.now();
-    const result = await repository.manageMapContributor({ email, action, by: gate.session.email, now });
-    await repository.writeAudit({
-      at: now, actorAccountId: gate.session.accountId, actorRole: "admin",
-      action: `map_contributor.${action}`, subjectType: "map_contributor",
-      subjectId: await emailAuditSubjectId(config.hashPepper, email), detail: { result }, ipHash: await clientIpHash(request),
-    });
-    if (result === "missing") return json({ error: "找不到可授權的有效帳號。" }, 404);
-    if (result === "unchanged") return json({ error: "角色狀態沒有變更。" }, 409);
-    return json({ ok: true, result });
-  }
-
-  async function adminListStaleMapDrafts(request: Request) {
-    const gate = await requireAdmin(request);
-    if (!gate.ok) return gate.response;
-    const daysValue = Number(new URL(request.url).searchParams.get("days") ?? "30");
-    if (!Number.isSafeInteger(daysValue) || daysValue < 1 || daysValue > 365) return json({ error: "days 必須介於 1 與 365。" }, 400);
-    const before = config.now() - daysValue * 24 * 60 * 60 * 1000;
-    const drafts = await repository.listStaleSubmittedMapDrafts(before, config.eventId);
-    return json({ before, drafts });
-  }
-
-  function validMapScope(value: unknown): value is string {
-    return typeof value === "string" && /^[a-z0-9][a-z0-9-]*$/.test(value);
-  }
-
-  function privateDraftContent(value: unknown) {
-    const content = parseMapContributionDraftContent(value);
-    if (!content) return null;
-    const serialized = JSON.stringify(content);
-    return new TextEncoder().encode(serialized).byteLength <= 1024 * 1024 ? serialized : null;
-  }
-
-  async function mapScope(periodKey: string, venueSpaceId: string) {
-    const scope = await resolveMapContributionScope?.({ periodKey, venueSpaceId }) ?? null;
-    if (!scope) return { ok: false as const, reason: "not_found" as const };
-    const normalized = await repository.normalizeMapDraftPeriodAliases({
-      eventId: config.eventId, venueSpaceId: scope.venueSpaceId,
-      periodKey: scope.periodKey, periodAliases: scope.periodAliases,
-    });
-    return normalized
-      ? { ok: true as const, scope }
-      : { ok: false as const, reason: "scope_conflict" as const };
-  }
-
-  async function listMyMapDrafts(request: Request) {
-    const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。" }, 401);
-    if (!await repository.hasActiveMapContributor(current.accountId)) return json({ error: "沒有有效的地圖貢獻者權限。" }, 403);
-    return json({ drafts: await repository.listMapDraftsForOwner(current.accountId, config.eventId) });
-  }
-
-  async function getMapDraft(request: Request, draftId: string, admin = false) {
-    const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。" }, 401);
-    if (admin && !await isAdmin(current.email)) return json({ error: "沒有權限。" }, 403);
-    const draft = await repository.getMapDraft(draftId, config.eventId);
-    if (!draft || (!admin && draft.owner_account_id !== current.accountId)) return json({ error: "找不到草稿。" }, 404);
-    const [files, reviews, comments, scope] = await Promise.all([
-      repository.listMapDraftFiles(draftId),
-      repository.listMapDraftReviews(draftId),
-      repository.listMapDraftComments(draftId),
-      resolveMapContributionScope?.({ periodKey: draft.period_key, venueSpaceId: draft.venue_space_id }) ?? null,
-    ]);
-    return json({
-      draft: { ...draft, content: draft.content_json ? JSON.parse(draft.content_json) as unknown : null, content_json: undefined },
-      files,
-      reviews,
-      comments,
-      scope: scope ? {
-        periodKey: scope.periodKey, venueSpaceId: scope.venueSpaceId,
-        areaIds: scope.areaIds,
-        allowedBoothCodes: scope.allowedBoothCodes, requiredBoothCodes: scope.requiredBoothCodes,
-        allowsUnallocatedBooths: scope.allowsUnallocatedBooths, groups: scope.groups,
-      } : null,
-    });
-  }
-
-  async function createMapDraft(request: Request) {
-    const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。" }, 401);
-    if (!await repository.hasActiveMapContributor(current.accountId)) {
-      return json({ error: "沒有有效的地圖貢獻者權限。" }, 403);
-    }
-    const body = await readJson(request);
-    const periodKey = body?.periodKey;
-    const venueSpaceId = body?.venueSpaceId;
-    const contentJson = privateDraftContent(body?.content);
-    if (!validMapScope(periodKey) || !validMapScope(venueSpaceId) || !contentJson) {
-      return json({ error: "periodKey、venueSpaceId 或草稿內容無效。" }, 400);
-    }
-    const resolvedScope = await mapScope(periodKey, venueSpaceId);
-    if (!resolvedScope.ok) return json({
-      error: resolvedScope.reason === "scope_conflict"
-        ? "同一活動範圍已有互相衝突的核准稿，請由管理者先處理。"
-        : "活動日或場地不存在。",
-    }, resolvedScope.reason === "scope_conflict" ? 409 : 400);
-    const scope = resolvedScope.scope;
-    const draftId = crypto.randomUUID();
-    const created = await repository.createMapDraft({
-      id: draftId, eventId: config.eventId, periodKey: scope.periodKey, venueSpaceId: scope.venueSpaceId,
-      ownerAccountId: current.accountId, contentJson, now: config.now(),
-    });
-    if (!created) return json({ error: "沒有有效的地圖貢獻者權限。" }, 403);
-    await repository.writeAudit({
-      at: config.now(), actorAccountId: current.accountId, actorRole: "map_contributor",
-      action: "map_draft.created", subjectType: "map_draft", subjectId: draftId,
-      detail: { eventId: config.eventId, periodKey: scope.periodKey, venueSpaceId: scope.venueSpaceId }, ipHash: await clientIpHash(request),
-    });
-    return json({ ok: true, draftId, revision: 1 }, 201);
-  }
-
-  /** A refused optimistic-lock write has three causes that used to share one
-   * message. Re-reading the row after the refusal separates them, and reports
-   * the revision that now exists, when it changed and the role that changed
-   * it. Nothing here relaxes the lock: the write stays refused.
-   *
-   * The role is read off the draft's own rows rather than a timestamp compare,
-   * which two changes in the same millisecond would tie. Every status change
-   * writes a review row carrying the acting role; a plain revision write leaves
-   * none, and the owning contributor is the only account SQL lets write one. So
-   * a review row matching the current revision and status names the last actor,
-   * and its absence means the contributor moved the draft last. */
-  async function mapDraftConflict(input: {
-    draftId: string;
-    expectedRevision: number;
-    /** Set only when the caller's authority is the map contributor grant. */
-    contributorAccountId: string | null;
-  }): Promise<MapDraftConflict> {
-    const draft = await repository.getMapDraft(input.draftId, config.eventId);
-    const reviews = draft ? await repository.listMapDraftReviews(input.draftId) : [];
-    const last = draft
-      ? reviews.findLast((review) => review.revision === draft.current_revision && review.to_status === draft.status)
-      : undefined;
-    const updatedByRole: MapDraftActorRole = last && isMapDraftActorRole(last.actor_role)
-      ? last.actor_role
-      : "map_contributor";
-    const revoked = input.contributorAccountId !== null
-      && !await repository.hasActiveMapContributor(input.contributorAccountId);
-    // A revoked grant outranks a stale revision: reloading recovers a stale tab,
-    // but nothing the contributor does restores write access, so saying "version"
-    // first would send them round the same failed save again.
-    const cause = revoked ? "permission"
-      : !draft || draft.current_revision !== input.expectedRevision ? "version"
-        : "status";
-    return {
-      cause,
-      revision: draft?.current_revision ?? input.expectedRevision,
-      updatedAt: draft?.updated_at ?? config.now(),
-      updatedByRole,
-    };
-  }
-
-  async function mapDraftConflictResponse(input: {
-    draftId: string;
-    expectedRevision: number;
-    contributorAccountId: string | null;
-  }) {
-    const conflict = await mapDraftConflict(input);
-    return json({ error: mapDraftConflictMessage(conflict), conflict }, 409);
-  }
-
-  async function updateMapDraft(request: Request, draftId: string) {
-    const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。" }, 401);
-    const body = await readJson(request);
-    const expectedRevision = body?.expectedRevision;
-    const contentJson = privateDraftContent(body?.content);
-    if (!Number.isSafeInteger(expectedRevision) || (expectedRevision as number) < 1 || !contentJson) {
-      return json({ error: "expectedRevision 或草稿內容無效。" }, 400);
-    }
-    const draft = await repository.getMapDraft(draftId, config.eventId);
-    if (!draft || draft.owner_account_id !== current.accountId) return json({ error: "找不到草稿。" }, 404);
-    const revision = await repository.writeMapDraftRevision({
-      draftId, eventId: config.eventId, ownerAccountId: current.accountId, expectedRevision: expectedRevision as number,
-      contentJson, now: config.now(),
-    });
-    if (revision === null) {
-      return mapDraftConflictResponse({
-        draftId, expectedRevision: expectedRevision as number, contributorAccountId: current.accountId,
-      });
-    }
-    return json({ ok: true, draftId, revision });
-  }
-
-  async function submitMapDraft(request: Request, draftId: string) {
-    const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。" }, 401);
-    const body = await readJson(request);
-    const expectedRevision = body?.expectedRevision;
-    if (!Number.isSafeInteger(expectedRevision) || (expectedRevision as number) < 1) return json({ error: "expectedRevision 無效。" }, 400);
-    const draft = await repository.getMapDraft(draftId, config.eventId);
-    if (!draft || draft.owner_account_id !== current.accountId) return json({ error: "找不到草稿。" }, 404);
-    if (draft.current_revision !== expectedRevision || !await repository.hasActiveMapContributor(current.accountId)) {
-      return mapDraftConflictResponse({
-        draftId, expectedRevision: expectedRevision as number, contributorAccountId: current.accountId,
-      });
-    }
-    const resolvedScope = await mapScope(draft.period_key, draft.venue_space_id);
-    if (!resolvedScope.ok) return json({ error: resolvedScope.reason === "scope_conflict"
-      ? "同一活動範圍有互相衝突的核准稿，請由管理者先處理。"
-      : "活動日或場地已不存在。" }, 409);
-    const scope = resolvedScope.scope;
-    const validation = validateMapContributionDraft(
-      draft.content_json ? JSON.parse(draft.content_json) as unknown : null,
-      scope,
-    );
-    if (!validation.ok) return json({ error: "請修正地圖草稿後再提交。", problems: validation.problems }, 422);
-    const evidence = await repository.listMapDraftFiles(draftId, expectedRevision as number);
-    if (evidence.length === 0) {
-      return json({
-        error: "目前版本至少需要一份活動官方說明頁面的來源檔案。",
-        problems: [{ code: "missing_evidence", message: "請上傳目前版本的官方來源檔與來源資訊。" }],
-      }, 422);
-    }
-    const submitted = await repository.submitMapDraft({
-      draftId, eventId: config.eventId, ownerAccountId: current.accountId,
-      expectedRevision: expectedRevision as number, now: config.now(),
-    });
-    if (!submitted) {
-      return mapDraftConflictResponse({
-        draftId, expectedRevision: expectedRevision as number, contributorAccountId: current.accountId,
-      });
-    }
-    await repository.writeAudit({
-      at: config.now(), actorAccountId: current.accountId, actorRole: "map_contributor",
-      action: "map_draft.submitted", subjectType: "map_draft", subjectId: draftId,
-      detail: { revision: expectedRevision }, ipHash: await clientIpHash(request),
-    });
-    return json({ ok: true, draftId, revision: expectedRevision });
-  }
-
-  async function uploadMapDraftFile(request: Request) {
-    const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。" }, 401);
-    if (!mapContributionStore) return json({ error: "暫時無法使用地圖草稿檔案，請稍後再試。" }, 503);
-    let form: FormData;
-    try { form = await request.formData(); } catch { return json({ error: "上傳格式無效。" }, 400); }
-    const file = form.get("file");
-    const draftId = form.get("draftId");
-    const revision = Number(form.get("revision"));
-    const sourceUrl = form.get("sourceUrl");
-    const documentDate = form.get("documentDate");
-    const pageValue = form.get("pageNumber");
-    const pageNumber = typeof pageValue === "string" && pageValue !== "" ? Number(pageValue) : null;
-    if (!(file instanceof File) || typeof draftId !== "string" || !validMapScope(draftId)
-      || !Number.isSafeInteger(revision) || revision < 1 || typeof sourceUrl !== "string" || typeof documentDate !== "string") {
-      return json({ error: "請選擇檔案並填寫官方來源與文件日期。" }, 400);
-    }
-    const draft = await repository.getMapDraft(draftId, config.eventId);
-    if (!draft || draft.owner_account_id !== current.accountId) return json({ error: "找不到草稿。" }, 404);
-    if (draft.current_revision !== revision) {
-      return mapDraftConflictResponse({ draftId, expectedRevision: revision, contributorAccountId: current.accountId });
-    }
-    let prepared: Awaited<ReturnType<typeof prepareMapContributionFile>>;
-    try { prepared = await prepareMapContributionFile({ file, sourceUrl, documentDate, pageNumber }); }
-    catch (error) { return json({ error: error instanceof Error ? error.message : "檔案格式無效。" }, 400); }
-    const fileId = crypto.randomUUID();
-    const objectKey = mapContributionObjectKey({ eventId: config.eventId, draftId, fileId, extension: prepared.extension });
-    await mapContributionStore.put(objectKey, prepared.bytes, prepared.contentType);
-    let recorded: boolean;
-    try {
-      recorded = await repository.addMapDraftFile({
-        id: fileId, draftId, eventId: config.eventId, revision, objectKey,
-        sourceUrl: prepared.sourceUrl, documentDate: prepared.documentDate,
-        pageNumber: prepared.pageNumber, sha256: prepared.sha256, mime: prepared.contentType,
-        sizeBytes: prepared.sizeBytes, width: prepared.width, height: prepared.height, pageCount: prepared.pageCount,
-        uploadedBy: current.accountId, now: config.now(),
-      });
-    } catch (error) {
-      await mapContributionStore.delete(objectKey);
-      throw error;
-    }
-    if (!recorded) {
-      await mapContributionStore.delete(objectKey);
-      return mapDraftConflictResponse({ draftId, expectedRevision: revision, contributorAccountId: current.accountId });
-    }
-    return json({ ok: true, fileId, revision, sha256: prepared.sha256, mime: prepared.contentType, sizeBytes: prepared.sizeBytes }, 201);
-  }
-
-  async function readMapDraftFile(request: Request, fileId: string, preview = false) {
-    const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。" }, 401);
-    if (!mapContributionStore) return json({ error: "暫時無法使用地圖草稿檔案，請稍後再試。" }, 503);
-    const metadata = await repository.getMapDraftFile(fileId, config.eventId);
-    if (!metadata?.object_key) return json({ error: "找不到檔案。" }, 404);
-    if (metadata.owner_account_id !== current.accountId && !await isAdmin(current.email)) return json({ error: "沒有權限。" }, 403);
-    if (preview && metadata.mime === "application/pdf") return json({ error: "PDF 無法直接預覽，請下載查看。" }, 415);
-    const object = await mapContributionStore.get(metadata.object_key);
-    if (!object) return json({ error: "找不到檔案。" }, 404);
-    const extension = metadata.mime === "image/jpeg" ? "jpg" : metadata.mime === "image/png" ? "png" : metadata.mime === "image/webp" ? "webp" : "pdf";
-    return new Response(object.body, {
-      headers: {
-        "content-type": metadata.mime,
-        "content-disposition": `${preview ? "inline" : "attachment"}; filename="map-source.${extension}"`,
-        "cache-control": "private, no-store",
-        "x-content-type-options": "nosniff",
-        ...(preview ? { "content-security-policy": "default-src 'none'; sandbox" } : {}),
-      },
-    });
-  }
-
-  async function adminListMapDrafts(request: Request) {
-    const gate = await requireAdmin(request);
-    if (!gate.ok) return gate.response;
-    return json({ drafts: await repository.listMapDraftsForAdmin(config.eventId) });
-  }
-
   /** A comment carries a target when it asks for one element to change rather
    * than the draft as a whole. The reference is the booth code or landmark id
    * as the draft spells it, which is what lets the contributor's editor jump
    * straight to it. */
-  type MapDraftCommentTarget = { kind: "slot" | "landmark" | null; ref: string | null };
-
-  function mapDraftCommentTarget(body: Record<string, unknown> | null): { ok: boolean } & MapDraftCommentTarget {
-    const kind = body?.targetKind;
-    if (kind === undefined || kind === null || kind === "") return { ok: true, kind: null, ref: null };
-    if (kind !== "slot" && kind !== "landmark") return { ok: false, kind: null, ref: null };
-    const ref = typeof body?.targetRef === "string" ? body.targetRef.trim().slice(0, 120) : "";
-    if (!ref) return { ok: false, kind: null, ref: null };
-    return { ok: true, kind, ref };
-  }
-
-  /** True when the draft actually contains the element a request names. A
-   * reference that is not there renders as a link the contributor can press
-   * and that then does nothing, so it is refused rather than stored. */
-  function mapDraftHasTarget(contentJson: string | null, kind: "slot" | "landmark", ref: string) {
-    const layout = mapDraftLayout(contentJson);
-    if (!layout) return false;
-    return kind === "slot"
-      ? layout.rows.some((row) => row.slots.some((slot) => slot.code === ref))
-      : layout.landmarks.some((landmark) => landmark.id === ref);
-  }
-
-  function mapDraftLayout(contentJson: string | null): EventMapLayout | null {
-    if (!contentJson) return null;
-    try {
-      const content = JSON.parse(contentJson) as { layout?: unknown };
-      return validateEventMapLayout(content?.layout).ok ? content.layout as EventMapLayout : null;
-    } catch {
-      return null;
-    }
-  }
-
-  async function postMapDraftComment(request: Request, draftId: string) {
-    const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。" }, 401);
-    const admin = await isAdmin(current.email);
-    const draft = await repository.getMapDraft(draftId, config.eventId);
-    // A stranger is told the draft is not there rather than that it is theirs
-    // to be refused, which is why the admin check comes before the gate.
-    if (!draft || (!admin && draft.owner_account_id !== current.accountId)) return json({ error: "找不到草稿。" }, 404);
-    // Writing under the admin role puts words in front of the contributor that
-    // they read as coming from a reviewer, so it passes the same admin check
-    // as every other administrative write. An admin
-    // commenting on a draft they own is a contributor here, grant and all.
-    const asAdmin = admin && draft.owner_account_id !== current.accountId;
-    if (asAdmin) {
-      const gate = await requireAdmin(request);
-      if (!gate.ok) return gate.response;
-    } else if (!await repository.hasActiveMapContributor(current.accountId)) {
-      return json({ error: "沒有有效的地圖貢獻者權限。" }, 403);
-    }
-    const body = await readJson(request);
-    const text = typeof body?.body === "string" ? body.body.trim().slice(0, 2_000) : "";
-    if (!text) return json({ error: "留言內容不可留空。" }, 400);
-    const target = mapDraftCommentTarget(body);
-    if (!target.ok) return json({ error: "指定的對象無效。" }, 400);
-    if (target.kind && target.ref && !mapDraftHasTarget(draft.content_json, target.kind, target.ref)) {
-      return json({ error: "草稿中沒有這個元素。" }, 400);
-    }
-    const role = asAdmin ? "admin" : "map_contributor";
-    const id = await repository.addMapDraftComment({
-      draftId, eventId: config.eventId, authorAccountId: current.accountId, authorRole: role,
-      // Pinned rather than left to the insert's own read, so the comment row
-      // and the audit entry below cannot name different revisions when the
-      // owner saves between the two.
-      revision: draft.current_revision,
-      targetKind: target.kind, targetRef: target.ref, body: text, now: config.now(),
-    });
-    if (!id) return json({ error: "找不到草稿。" }, 404);
-    await repository.writeAudit({
-      at: config.now(), actorAccountId: current.accountId, actorRole: role,
-      action: "map_draft.commented", subjectType: "map_draft", subjectId: draftId,
-      detail: { revision: draft.current_revision, targetKind: target.kind }, ipHash: await clientIpHash(request),
-    });
-    return json({ ok: true, draftId, commentId: id }, 201);
-  }
-
-  async function adminReviewMapDraft(request: Request, draftId: string) {
-    const gate = await requireAdmin(request);
-    if (!gate.ok) return gate.response;
-    const body = await readJson(request);
-    const expectedRevision = body?.expectedRevision;
-    const decision = body?.decision;
-    const note = typeof body?.note === "string" ? body.note.trim().slice(0, 2_000) : "";
-    const confirmOfficialSource = body?.confirmOfficialSource === true;
-    const replacementDraftId = typeof body?.replacementDraftId === "string" && validMapScope(body.replacementDraftId)
-      ? body.replacementDraftId : null;
-    if (!Number.isSafeInteger(expectedRevision) || Number(expectedRevision) < 1
-      || !["changes_requested", "approve", "reject"].includes(String(decision))) {
-      return json({ error: "expectedRevision 與 decision 無效。" }, 400);
-    }
-    if ((decision === "changes_requested" || decision === "reject") && !note) {
-      return json({ error: "要求修改或拒絕時必須填寫說明。" }, 400);
-    }
-    const requested: unknown[] = Array.isArray(body?.targets) ? body.targets : [];
-    // Only a change request can carry them: an approval or a rejection ends the
-    // draft, and a request pointing at one of its booths could never be acted
-    // on because the editor is closed to the contributor from then on.
-    if (requested.length && decision !== "changes_requested") {
-      return json({ error: "只有要求修改可以附帶局部修改請求。" }, 400);
-    }
-    const targets: { targetKind: "slot" | "landmark"; targetRef: string; body: string }[] = [];
-    for (const entry of requested) {
-      const item = entry && typeof entry === "object" ? entry as Record<string, unknown> : null;
-      const target = mapDraftCommentTarget(item);
-      const text = typeof item?.body === "string" ? item.body.trim().slice(0, 2_000) : "";
-      if (!target.ok || !target.kind || !target.ref || !text) return json({ error: "局部修改請求必須指定對象與內容。" }, 400);
-      targets.push({ targetKind: target.kind, targetRef: target.ref, body: text });
-    }
-
-    if (decision === "approve" && !confirmOfficialSource) {
-      return json({ error: "核准前必須確認目前版本的檔案來自活動官方說明頁面。" }, 400);
-    }
-    const draft = await repository.getMapDraft(draftId, config.eventId);
-    if (!draft) return json({ error: "找不到草稿。" }, 404);
-    if (targets.length && !targets.every(({ targetKind, targetRef }) => mapDraftHasTarget(draft.content_json, targetKind, targetRef))) {
-      return json({ error: "草稿中沒有這個元素。" }, 400);
-    }
-
-    if (decision === "approve") {
-      const evidence = await repository.listMapDraftFiles(draftId, Number(expectedRevision));
-      if (evidence.length === 0) {
-        return json({
-          error: "目前版本缺少活動官方來源檔，無法核准。",
-          problems: [{ code: "missing_evidence", message: "請要求貢獻者補上來源檔後重新提交。" }],
-        }, 422);
-      }
-      const resolvedScope = await mapScope(draft.period_key, draft.venue_space_id);
-      if (!resolvedScope.ok) return json({ error: resolvedScope.reason === "scope_conflict"
-        ? "同一活動範圍有互相衝突的核准稿，請先人工處理。"
-        : "活動日或場地已不存在。" }, 409);
-      const scope = resolvedScope.scope;
-      const validation = validateMapContributionDraft(
-        draft.content_json ? JSON.parse(draft.content_json) as unknown : null,
-        scope,
-      );
-      if (!validation.ok) return json({ error: "請修正草稿後再核准。", problems: validation.problems }, 422);
-      const result = await repository.approveMapDraft({
-        draftId, expectedRevision: Number(expectedRevision), replacementDraftId,
-        actorAccountId: gate.session.accountId, note: note || null, now: config.now(),
-      });
-      if (!result.ok) {
-        if (result.reason === "conflict") {
-          return mapDraftConflictResponse({
-            draftId, expectedRevision: Number(expectedRevision), contributorAccountId: null,
-          });
-        }
-        return json({
-          error: result.reason === "replacement_required" ? "此範圍已有核准稿，必須明確指定要取代的 draftId。"
-            : result.reason === "replacement_mismatch" ? "指定的取代稿不是此範圍目前的核准稿。"
-              : "目前版本沒有可供審查的來源檔案。",
-          ...(result.reason === "replacement_required" ? { activeDraftId: result.activeDraftId } : {}),
-        }, result.reason === "missing_evidence" ? 422 : 409);
-      }
-    } else {
-      const ok = await repository.transitionMapDraft({
-        draftId, expectedRevision: Number(expectedRevision),
-        toStatus: decision === "reject" ? "rejected" : "changes_requested",
-        actorAccountId: gate.session.accountId, actorRole: "admin", note, targets, now: config.now(),
-      });
-      if (!ok) {
-        return mapDraftConflictResponse({
-          draftId, expectedRevision: Number(expectedRevision), contributorAccountId: null,
-        });
-      }
-    }
-    await repository.writeAudit({
-      at: config.now(), actorAccountId: gate.session.accountId, actorRole: "admin",
-      action: `map_draft.${decision}`, subjectType: "map_draft", subjectId: draftId,
-      detail: { revision: expectedRevision, replacementDraftId, confirmOfficialSource, targets: targets.length }, ipHash: await clientIpHash(request),
-    });
-    return json({ ok: true, draftId, revision: expectedRevision });
-  }
-
-  async function adminExportMapDraft(request: Request, draftId: string) {
-    const gate = await requireAdmin(request);
-    if (!gate.ok) return gate.response;
-    const body = await readJson(request);
-    const expectedRevision = body?.expectedRevision;
-    if (!Number.isSafeInteger(expectedRevision) || Number(expectedRevision) < 1) return json({ error: "expectedRevision 無效。" }, 400);
-    const draft = await repository.getMapDraft(draftId, config.eventId);
-    if (!draft) return json({ error: "找不到草稿。" }, 404);
-    if (draft.current_revision !== expectedRevision) {
-      return mapDraftConflictResponse({
-        draftId, expectedRevision: Number(expectedRevision), contributorAccountId: null,
-      });
-    }
-
-    const existing = await repository.getMapDraftExport(draftId, Number(expectedRevision));
-    const resolvedScope = await mapScope(draft.period_key, draft.venue_space_id);
-    if (!resolvedScope.ok) {
-      if (existing && resolvedScope.reason === "not_found") {
-        return json({
-          ok: true, draftId, revision: existing.revision, targetPath: existing.target_path,
-          candidate: JSON.parse(existing.candidate_json), diff: JSON.parse(existing.diff_json),
-          candidateSha256: existing.candidate_sha256, createdAt: existing.created_at,
-        });
-      }
-      return json({ error: resolvedScope.reason === "scope_conflict"
-        ? "同一活動範圍有互相衝突的核准稿，請先人工處理。"
-        : "活動日或場地已不存在。" }, 409);
-    }
-    const scope = resolvedScope.scope;
-
-    if (existing) {
-      if (existing.target_path !== scope.targetPath) {
-        return json({ error: "既有候選使用非正規 targetPath，為保留 immutable export，必須先人工處理。" }, 409);
-      }
-      return json({
-        ok: true, draftId, revision: existing.revision, targetPath: existing.target_path,
-        candidate: JSON.parse(existing.candidate_json), diff: JSON.parse(existing.diff_json),
-        candidateSha256: existing.candidate_sha256, createdAt: existing.created_at,
-      });
-    }
-    if (draft.status !== "approved") return json({ error: "只有已核准草稿可以匯出候選檔。" }, 409);
-    const validation = validateMapContributionDraft(
-      draft.content_json ? JSON.parse(draft.content_json) as unknown : null,
-      scope,
-    );
-    if (!validation.ok) return json({ error: "請修正草稿後再匯出。", problems: validation.problems }, 422);
-    const previous = await readPublishedEventMap?.(scope.targetPath) ?? null;
-    const candidate = buildMapCandidate({
-      scope, draftId, draftRevision: draft.current_revision, layout: validation.content.layout,
-      previous, now: config.now(),
-    });
-    const candidateJson = JSON.stringify(candidate.candidate, null, 2) + "\n";
-    const candidateSha256 = await sha256Hex(candidateJson);
-    const stored = await repository.exportMapDraft({
-      draftId, expectedRevision: Number(expectedRevision), targetPath: candidate.targetPath,
-      candidateJson, diffJson: JSON.stringify(candidate.diff), candidateSha256,
-      actorAccountId: gate.session.accountId, now: config.now(),
-    });
-    if (!stored) {
-      return mapDraftConflictResponse({
-        draftId, expectedRevision: Number(expectedRevision), contributorAccountId: null,
-      });
-    }
-    await repository.writeAudit({
-      at: config.now(), actorAccountId: gate.session.accountId, actorRole: "admin",
-      action: "map_draft.exported", subjectType: "map_draft", subjectId: draftId,
-      detail: { revision: expectedRevision, targetPath: candidate.targetPath, candidateSha256 },
-      ipHash: await clientIpHash(request),
-    });
-    return json({
-      ok: true, draftId, revision: stored.revision, targetPath: stored.target_path,
-      candidate: JSON.parse(stored.candidate_json), diff: JSON.parse(stored.diff_json),
-      candidateSha256: stored.candidate_sha256, createdAt: stored.created_at,
-    }, 201);
-  }
 
   async function adminListClaims(request: Request) {
     // Reads and decisions share one session deadline; polling cannot renew it.
@@ -1791,7 +1198,7 @@ export function createCirclePortalHandlers({
       return json({ error: "找不到此活動。" }, 404);
     }
     const queue = await repository.listAdminReviewSummary();
-    const eventIds = [...new Set([...queue.claimCounts, ...queue.mapDrafts].map((row) => row.event_id))];
+    const eventIds = [...new Set(queue.claimCounts.map((row) => row.event_id))];
     const served = new Set((await Promise.all(eventIds.map(async (eventId) => (config.publishedEvent
       ? await config.publishedEvent(eventId) : eventId === config.eventId) ? eventId : null)))
       .filter((eventId): eventId is string => eventId !== null));
@@ -1805,8 +1212,6 @@ export function createCirclePortalHandlers({
         evidenceUrl: claim.evidence_url, evidenceNote: claim.evidence_note, targetUrl: claim.target_url,
         createdAt: claim.created_at, circleClaimed: !!claim.circle_claimed,
       })),
-      mapDrafts: queue.mapDrafts.filter((row) => served.has(row.event_id))
-        .map((row) => ({ eventId: row.event_id, submitted: row.submitted })),
       organizer: { applications: queue.applications, submissions: queue.submissions },
     });
   }
@@ -1836,7 +1241,7 @@ export function createCirclePortalHandlers({
       id: claim.id, eventId: claim.event_id, circleId: claim.circle_id, circleName: claim.circle_name_at_claim,
       evidenceUrl: claim.evidence_url, evidenceNote: claim.evidence_note, targetUrl: claim.target_url,
       createdAt: claim.created_at, circleClaimed: !!claim.circle_claimed,
-    })), mapDrafts: [], organizer: { applications: 0, submissions: 0 } });
+    })), organizer: { applications: 0, submissions: 0 } });
   }
 
   async function readOrganizerNotice(request: Request, candidateId: string) {
@@ -2070,11 +1475,6 @@ export function createCirclePortalHandlers({
         status: account.deletion_started_at !== null ? "deleting" : account.disabled_at !== null ? "disabled" : "active",
         createdAt: account.created_at, disabledAt: account.disabled_at, deletionStartedAt: account.deletion_started_at,
         isAdmin: !!account.is_admin,
-        mapContributor: {
-          status: account.map_granted_at === null ? "none" : account.map_revoked_at !== null ? "revoked"
-            : account.map_suspended_at !== null ? "suspended" : "active",
-          grantedAt: account.map_granted_at, revokedAt: account.map_revoked_at, suspendedAt: account.map_suspended_at,
-        },
         organizerGrants: organizerGrants.map(candidate => ({
           candidateId: candidate.id, eventId: candidate.event_id, name: candidate.tentative_name,
           edition: candidate.edition, role: candidate.role,
@@ -3846,7 +3246,7 @@ export function createCirclePortalHandlers({
     // before an event is chosen.
     authConfig, requestLink, verify, session, signOut, deleteMyAccount,
     listEventApplications, submitEventApplication, reviewEventApplication,
-    adminListAdmins, adminManageAdmins, adminAccountDetail, adminSearchAccountsByCircle, adminDisableAccount, adminManageMapContributor,
+    adminListAdmins, adminManageAdmins, adminAccountDetail, adminSearchAccountsByCircle, adminDisableAccount,
     // Cross-event and read-only; it filters to served events itself.
     adminReviewQueue,
     // Candidate-scoped: an organizer candidate is addressed by candidateId and
@@ -3882,18 +3282,6 @@ export function createCirclePortalHandlers({
     adminTakedown: eventScoped(adminTakedown),
     adminSearchTakedownCircles: eventScoped(adminSearchTakedownCircles),
     adminCircleDetail: eventScoped(adminCircleDetail),
-    adminListStaleMapDrafts: eventScoped(adminListStaleMapDrafts),
-    listMyMapDrafts: eventScoped(listMyMapDrafts),
-    getMapDraft: eventScoped(getMapDraft),
-    createMapDraft: eventScoped(createMapDraft),
-    updateMapDraft: eventScoped(updateMapDraft),
-    submitMapDraft: eventScoped(submitMapDraft),
-    uploadMapDraftFile: eventScoped(uploadMapDraftFile),
-    readMapDraftFile: eventScoped(readMapDraftFile),
-    adminListMapDrafts: eventScoped(adminListMapDrafts),
-    adminReviewMapDraft: eventScoped(adminReviewMapDraft),
-    adminExportMapDraft: eventScoped(adminExportMapDraft),
-    postMapDraftComment: eventScoped(postMapDraftComment),
     // Names its own event and validates it, so it is not scoped by the request.
     publicOverrides,
   };

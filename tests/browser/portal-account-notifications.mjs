@@ -75,7 +75,7 @@ try {
   let allowed = true;
   const target = await journey.page({ url: `${base}/organizer?candidate=invitation-fixture&section=review`, routes: async p => {
     await p.addInitScript(() => localStorage.setItem("organizer.resumeCandidate:owner@example.test", "other-candidate"));
-    await p.route("**/api/auth/session", r => r.fulfill({ json: { email: "owner@example.test", isAdmin: false, isMapContributor: false, hasOrganizerAccess: true } }));
+    await p.route("**/api/auth/session", r => r.fulfill({ json: { email: "owner@example.test", isAdmin: false, hasOrganizerAccess: true } }));
     await p.route("**/api/account/notification-preferences*", r => r.fulfill({ json: { cadence: "daily", version: 0 } }));
     await p.route("**/api/organizer/events", r => r.fulfill({ json: { events: allowed ? [event, { ...event, id: "other-candidate" }] : [{ ...event, id: "other-candidate" }] } }));
     await p.route("**/api/organizer/events/invitation-fixture/validate", r => r.fulfill({ json: { ok: false, version: 1, issues: [] } }));

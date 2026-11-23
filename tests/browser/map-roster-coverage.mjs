@@ -37,16 +37,11 @@ async function open(surface) {
     import: { source: { fileName: "roster.csv", worksheet: null, sha256: "a".repeat(64), sourceDescription: "合成來源", mapping: {} }, rows: roster },
     workspace: { mode: "binder", onboardingCompletedAt: now, resume: { guidedTask: "identity_source", section: "import" }, readiness: { completed: 3, total: 5, suggestedNextSection: "map", blockers: [], sections: ["event", "venue", "import", "map", "review"].map(id => ({ id, state: "available" })) } },
   };
-  const draftOf = map => ({ id: map.id, event_id: "sample", period_key: map.periodKey, venue_space_id: map.venueSpaceId, status: "draft", current_revision: map.mapRevision, updated_at: now, content: { schema: "map-contribution-draft/1", layout: map.layout, authoring: map.authoring } });
-  const scopeOf = map => {
-    const groups = roster.filter(row => row.dayId === map.periodKey && row.venueSpaceId === map.venueSpaceId).map(row => ({ codes: row.codes, circleName: row.circleName }));
-    return { periodKey: map.periodKey, venueSpaceId: map.venueSpaceId, groups, requiredBoothCodes: groups.flatMap(group => group.codes), allowedBoothCodes: groups.flatMap(group => group.codes), allowsUnallocatedBooths: false };
-  };
   const page = await journey.page({ url: `${base}/${surface}`, viewport: { width: 1600, height: 1100 }, routes: async page => {
     await page.route("**/api/**", async route => {
       const request = route.request(), url = new URL(request.url()), path = url.pathname, method = request.method();
       const reply = (body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-      if (path === "/api/auth/session") return reply({ email: "map@example.test", isAdmin: false, isMapContributor: true, hasOrganizerAccess: true, expiresAt: now + 86400000 });
+      if (path === "/api/auth/session") return reply({ email: "map@example.test", isAdmin: false, hasOrganizerAccess: true, expiresAt: now + 86400000 });
       if (path === "/api/auth/config") return reply({ turnstileSitekey: "" });
       if (path === "/api/account/notification-preferences" && method === "GET") return reply({ cadence: "daily", version: 1, locale: "zh-Hant" });
       if (path.endsWith("/claims")) return reply({ claims: [], eventId: "sample" });
@@ -72,11 +67,6 @@ async function open(surface) {
         if (method === "PATCH") { map.layout = request.postDataJSON().layout; map.mapRevision++; summary.version++; return reply({ ok: true, version: summary.version, mapRevision: map.mapRevision }); }
         return reply({ map });
       }
-      if (path === "/api/map-contributions/drafts") return reply({ drafts: maps.map(draftOf) });
-      if (map && path.includes("/drafts/")) {
-        if (method === "PUT") { map.layout = request.postDataJSON().content.layout; map.mapRevision++; return reply({ ok: true, revision: map.mapRevision }); }
-        return reply({ draft: draftOf(map), scope: scopeOf(map), files: [], reviews: [], comments: [] });
-      }
       throw new Error(`Unexpected API: ${method} ${path}`);
     });
   } });
@@ -84,7 +74,7 @@ async function open(surface) {
 }
 
 try {
-  for (const surface of ["organizer", "circle"]) {
+  for (const surface of ["organizer"]) {
     const { page, maps } = await open(surface);
     if (surface === "organizer") {
       const saved = page.getByRole("region", { name: "攤位名單" });

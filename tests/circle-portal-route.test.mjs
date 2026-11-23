@@ -517,7 +517,6 @@ test("admin account detail is private, normalizes Email and leaves missing or un
   assert.equal(detail.account.email, detail.email);
   assert.equal(detail.account.status, "active");
   assert.equal(detail.account.isAdmin, false);
-  assert.deepEqual(detail.account.mapContributor, { status: "none", grantedAt: null, revokedAt: null, suspendedAt: null });
   assert.deepEqual(detail.account.organizerGrants, []);
   assert.deepEqual(detail.account.claims, []);
   assert.equal((await (await handlers.adminAccountDetail(get("/api/admin/accounts?email=admin%40example.com", admin))).json()).account.isAdmin, true);
@@ -623,19 +622,13 @@ test("admin account detail shows the target's actual grants, editions and all sc
     "reading does not accept pending invitations or add grants");
 });
 
-test("admin account detail distinguishes map grant states and existing disabled or deleting restrictions", async () => {
+test("admin account detail shows admin membership and the disabled or deleting restrictions", async () => {
   const admin = await signIn("admin@example.com");
   const email = "account-map@example.com";
   await repository.upsertAccount(email, clock);
   const read = async (target = email) => (await (await handlers.adminAccountDetail(
     get(`/api/admin/accounts?email=${encodeURIComponent(target)}`, admin))).json()).account;
-  const write = (action, target = email) => handlers.adminManageMapContributor(post("/api/admin/map-contributors", { email: target, action }, admin));
-  assert.equal((await read()).mapContributor.status, "none");
-  for (const [action, expected] of [["grant", "active"], ["revoke", "revoked"], ["grant", "active"], ["suspend", "suspended"], ["grant", "active"]]) {
-    assert.equal((await write(action)).status, 200);
-    assert.equal((await read()).mapContributor.status, expected);
-  }
-  assert.equal((await write("grant")).status, 409);
+  assert.equal((await read()).status, "active");
   await repository.addAdmin(email, "admin@example.com", clock);
   assert.equal((await read()).isAdmin, true);
   assert.equal((await handlers.adminDisableAccount(post("/api/admin/accounts", { email }, admin))).status, 409);
@@ -645,7 +638,6 @@ test("admin account detail distinguishes map grant states and existing disabled 
   assert.equal(disabled.status, "disabled");
   assert.equal(disabled.disabledAt, clock);
   assert.equal(disabled.isAdmin, false);
-  for (const action of ["grant", "revoke", "suspend"]) assert.equal((await write(action)).status, 404);
   assert.equal((await read()).status, "disabled");
 
   const deletingEmail = "account-deleting@example.com";
@@ -654,7 +646,6 @@ test("admin account detail distinguishes map grant states and existing disabled 
   const deleting = await read(deletingEmail);
   assert.equal(deleting.status, "deleting");
   assert.equal(deleting.deletionStartedAt, clock);
-  for (const action of ["grant", "revoke", "suspend"]) assert.equal((await write(action, deletingEmail)).status, 404);
   assert.equal((await handlers.adminDisableAccount(post("/api/admin/accounts", { email: deletingEmail }, admin))).status, 409);
 });
 
@@ -1777,7 +1768,7 @@ test("login destinations ignore invalid circles and never redirect to supplied U
 test("admin continuation uses the circle audience and does not grant administration", async () => {
   const response = await handlers.requestLink(post("/api/auth/request-link?event=ff47", {
     email: "entry@example.com", turnstileToken: "solved", audience: "circle", circleId: "ff47-social",
-    destination: { admin: "1", adminSection: "events", adminView: "maps", adminEvent: "other-event", adminDraft: "map-one", returnTo: "https://other.example/" },
+    destination: { admin: "1", adminSection: "circles", adminView: "claims", adminEvent: "other-event", adminDraft: "map-one", returnTo: "https://other.example/" },
   }));
   assert.equal(response.status, 202);
   const destination = new URL(sent.at(-1).text.match(/https?:\/\/[^\s]+/)[0]);
@@ -1787,7 +1778,7 @@ test("admin continuation uses the circle audience and does not grant administrat
   assert.equal(destination.searchParams.has("circle"), false);
   assert.equal(destination.searchParams.has("returnTo"), false);
   assert.equal(destination.searchParams.get("adminEvent"), "other-event");
-  assert.equal(destination.searchParams.get("adminDraft"), "map-one");
+  assert.equal(destination.searchParams.has("adminDraft"), false, "map draft links were removed with map contributions");
   const verified = await handlers.verify(post("/api/auth/verify", { token: destination.searchParams.get("login") }));
   assert.equal(verified.status, 200);
   assert.equal((await verified.json()).isAdmin, false);
@@ -2047,7 +2038,7 @@ test("the review queue gathers every served event's work, and each claim says it
       ["ff47", "ff47-site", true],
       ["ff48", "ff47-social", false],
     ]);
-    assert.deepEqual(body.mapDrafts, [{ eventId: "ff47", submitted: 1 }]);
+    assert.equal(body.mapDrafts, undefined);
     assert.equal(body.pendingClaimCount, 2);
     assert.deepEqual(body.claimCounts, [{ eventId: "ff47", pending: 1 }, { eventId: "ff48", pending: 1 }]);
     assert.deepEqual(body.organizer, { applications: 1, submissions: 0 });
