@@ -26,7 +26,7 @@ test("Admin precise routes take precedence over legacy event links while old des
   assert.equal(route("/admin?event=sample").view, "claims");
   assert.equal(route("/admin?section=events&view=maps&event=sample").unavailable, true, "map submissions were removed");
   assert.equal(route("/admin?event=sample#map-review").unavailable, true, "an old map review link does not open another queue");
-  for (const [hash, section, view] of [["#overview", "overview", ""], ["#admin", "circles", "claims"], ["#takedown", "circles", "search"], ["#accounts", "accounts", "admins"], ["#review-notifications", "notifications", ""]]) {
+  for (const [hash, section, view] of [["#overview", "overview", ""], ["#admin", "circles", "claims"], ["#takedown", "circles", "search"], ["#accounts", "accounts", "admins"], ["#review-notifications", "overview", ""]]) {
     const result = route(`/admin?event=sample${hash}`);
     assert.deepEqual([result.section, result.view, result.event], [section, view, "sample"]);
   }

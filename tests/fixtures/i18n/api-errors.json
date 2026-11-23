@@ -13,7 +13,6 @@
   { "name": "preferences-get-unset", "status": 200, "contentType": "application/json", "body": { "cadence": "daily", "version": 0, "locale": null } },
   { "name": "preferences-get-en", "status": 200, "contentType": "application/json", "body": { "cadence": "hourly", "version": 2, "locale": "en" } },
   { "name": "preferences-put-locale-only", "status": 200, "contentType": "application/json", "body": { "version": 0, "locale": "ja" } },
-  { "name": "preferences-put-cadence-only", "status": 200, "contentType": "application/json", "body": { "version": 2, "cadence": "off" } },
   { "name": "preferences-put-invalid-locale", "status": 400, "contentType": "application/json", "body": { "version": 0, "locale": "en-US" } },
   { "name": "preferences-put-invalid", "status": 400, "contentType": "application/json", "body": { "version": 0 } }
 ]

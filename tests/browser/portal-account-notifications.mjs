@@ -26,46 +26,28 @@ try {
   };
   const dialog = page.getByRole("dialog", { name: "通知設定", exact: true });
   await open();
-  const cadence = dialog.getByLabel("社團內容更新", { exact: true });
-  await cadence.waitFor();
-  // One menu: choosing saves, with no save button or discard prompt.
-  assert.equal(await dialog.getByRole("button", { name: "儲存設定" }).count(), 0);
-  await cadence.selectOption((await cadence.inputValue()) === "hourly" ? "daily" : "hourly");
-  await dialog.getByText("已儲存", { exact: true }).waitFor();
-  const saved = await cadence.inputValue();
+  // Every notice is sent as it happens (#546): the dialog states that and
+  // keeps only the language.
+  const notice = dialog.getByText("認領、補充資料、活動審核、權限異動與發布結果，在發生時各寄一封信，無法關閉。", { exact: true });
+  await notice.waitFor();
+  await dialog.getByLabel("通知語言", { exact: true }).waitFor();
+  assert.equal(await dialog.getByLabel("社團內容更新").count(), 0, "there is no frequency to choose");
   await journey.capture(page, "account-notifications-desktop");
   // Durable PR evidence excludes account addresses, including fictional ones.
   await page.screenshot({ path: `${output}/account-notifications-desktop.png`, mask: [page.getByText(CIRCLE, { exact: true }), dialog.getByText(`收件信箱：${CIRCLE}`, { exact: true })] });
   await page.keyboard.press("Escape"); await dialog.waitFor({ state: "hidden" });
   assert.equal(await page.getByRole("button", { name: "通知設定", exact: true }).evaluate(e => e === document.activeElement), true);
-  await page.route("**/api/account/notification-preferences*", r => r.fulfill({ status: 503, json: { error: "暫時無法載入通知設定。" } }));
-  await open(); await dialog.getByRole("alert").waitFor();
-  assert.equal(await cadence.count(), 0, "failed read cannot masquerade as a saved default");
-  await page.unroute("**/api/account/notification-preferences*");
-  await dialog.getByRole("button", { name: "重新載入設定" }).click(); await cadence.waitFor();
-  await page.keyboard.press("Escape");
   await page.goto(`${base}/organizer?notifications=1`);
-  await cadence.waitFor(); assert.equal(await cadence.inputValue(), saved);
+  await notice.waitFor();
   await page.setViewportSize({ width: 390, height: 844 });
   await journey.capture(page, "account-notifications-mobile");
-  // Durable PR evidence excludes account addresses, including fictional ones.
-  await page.screenshot({ path: `${output}/account-notifications-mobile.png`, mask: [page.getByText(CIRCLE, { exact: true }), dialog.getByText(`收件信箱：${CIRCLE}`, { exact: true })] });
   const rect = await dialog.boundingBox(); assert.ok(rect.width >= 389 && rect.height >= 843);
-  await page.route("**/api/account/notification-preferences*", route => route.request().method() === "PUT"
-    ? route.fulfill({ status: 409, json: { error: "設定已變更，請重新載入後再儲存。" } }) : route.continue());
-  // A refused choice is not left showing as if it were stored.
-  await cadence.selectOption("off"); await dialog.getByRole("alert").waitFor(); assert.equal(await cadence.inputValue(), saved);
-  await page.unroute("**/api/account/notification-preferences*");
-  await dialog.getByRole("button", { name: "重新載入設定" }).click();
-  await dialog.getByText("載入中…", { exact: true }).waitFor({ state: "hidden" }); assert.equal(await cadence.inputValue(), saved);
-  await cadence.selectOption("off"); await dialog.getByText("已儲存", { exact: true }).waitFor();
   await dialog.getByRole("button", { name: "關閉", exact: true }).click(); await dialog.waitFor({ state: "hidden" });
   // Cross-device login: the newly minted login link, not local storage, carries the destination.
   const link = await loginLink(CIRCLE, "organizer", { destination: { notifications: "1", candidate: "missing-candidate", section: "review" } });
   assert.match(link, /notifications=1/); assert.match(link, /candidate=missing-candidate/);
   const device = await journey.page({ url: link, viewport: { width: 390, height: 844 } });
-  await device.getByRole("dialog", { name: "通知設定" }).getByLabel("社團內容更新").waitFor();
-  assert.equal(await device.getByLabel("社團內容更新").inputValue(), "off");
+  await device.getByRole("dialog", { name: "通知設定" }).getByText("認領、補充資料、活動審核、權限異動與發布結果，在發生時各寄一封信，無法關閉。", { exact: true }).waitFor();
   await device.keyboard.press("Escape"); await device.close();
   await page.goto(`${base}/circle?event=not-an-event`);
   await page.getByRole("heading", { name: "找不到指定的活動" }).waitFor();
@@ -76,7 +58,7 @@ try {
   const target = await journey.page({ url: `${base}/organizer?candidate=invitation-fixture&section=review`, routes: async p => {
     await p.addInitScript(() => localStorage.setItem("organizer.resumeCandidate:owner@example.test", "other-candidate"));
     await p.route("**/api/auth/session", r => r.fulfill({ json: { email: "owner@example.test", isAdmin: false, hasOrganizerAccess: true } }));
-    await p.route("**/api/account/notification-preferences*", r => r.fulfill({ json: { cadence: "daily", version: 0 } }));
+    await p.route("**/api/account/notification-preferences*", r => r.fulfill({ json: { version: 0, locale: null } }));
     await p.route("**/api/organizer/events", r => r.fulfill({ json: { events: allowed ? [event, { ...event, id: "other-candidate" }] : [{ ...event, id: "other-candidate" }] } }));
     await p.route("**/api/organizer/events/invitation-fixture/validate", r => r.fulfill({ json: { ok: false, version: 1, issues: [] } }));
     await p.route("**/api/organizer/events/invitation-fixture", r => allowed ? r.fulfill({ json: { ...detail, workspace: { ...detail.workspace, resume: { ...detail.workspace.resume, section: "event" } } } }) : r.fulfill({ status: 404, json: { error: "找不到活動。" } }));
@@ -86,7 +68,7 @@ try {
   const draft = target.getByRole("textbox", { name: "成員 Email", exact: true });
   await draft.fill("unsaved@example.test");
   await target.getByRole("button", { name: "通知設定", exact: true }).click();
-  await target.getByRole("dialog").getByLabel("社團內容更新").waitFor();
+  await target.getByRole("dialog").getByText("認領、補充資料、活動審核、權限異動與發布結果，在發生時各寄一封信，無法關閉。", { exact: true }).waitFor();
   await target.keyboard.press("Escape"); assert.equal(await draft.inputValue(), "unsaved@example.test");
   await target.setViewportSize({ width: 390, height: 844 });
   await target.getByText("目前狀態：草稿", { exact: true }).waitFor();

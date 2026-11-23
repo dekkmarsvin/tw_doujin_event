@@ -1,11 +1,11 @@
-export type AdminSection = "overview" | "events" | "circles" | "accounts" | "data" | "settings" | "notifications";
+export type AdminSection = "overview" | "events" | "circles" | "accounts" | "data" | "settings";
 export type AdminRoute = { section: AdminSection; view: string; event: string; claim: string; circle: string; q: string; email: string; unavailable: boolean };
 
-const defaults: Record<AdminSection, string> = { overview: "", events: "list", circles: "claims", accounts: "search", data: "venues", settings: "", notifications: "" };
-const views: Record<AdminSection, string[]> = { overview: [""], events: ["list", "publication"], circles: ["claims", "search"], accounts: ["search", "admins"], data: ["venues", "organizers", "categories"], settings: [""], notifications: [""] };
+const defaults: Record<AdminSection, string> = { overview: "", events: "list", circles: "claims", accounts: "search", data: "venues", settings: "" };
+const views: Record<AdminSection, string[]> = { overview: [""], events: ["list", "publication"], circles: ["claims", "search"], accounts: ["search", "admins"], data: ["venues", "organizers", "categories"], settings: [""] };
 const legacy: Record<string, [AdminSection, string]> = {
   "#overview": ["overview", ""], "#admin": ["circles", "claims"], "#map-review": ["events", "maps"],
-  "#takedown": ["circles", "search"], "#accounts": ["accounts", "admins"], "#review-notifications": ["notifications", ""],
+  "#takedown": ["circles", "search"], "#accounts": ["accounts", "admins"], "#review-notifications": ["overview", ""],
 };
 
 export function readAdminRoute(url: URL): AdminRoute {

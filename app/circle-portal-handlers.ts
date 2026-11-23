@@ -12,7 +12,6 @@ import { circleOverrideFieldsProblem, circleRetentionExpiresAt, isRetentionChoic
 import { getEventDefinition } from "./event-catalog";
 import { eventDayDate } from "./event-calendar";
 import { groupOrganizerCircles } from "./organizer-circle-groups.mjs";
-import { isNotificationCadence } from "./review-notifications";
 import { parseOrganizerApplication, type OrganizerApplication, type OrganizerApplicationInput } from "./organizer-applications";
 import { loginLinkLetter, organizerInvitationLetter } from "./mail-letter";
 import { mailFailure, type PortalMail } from "./portal-mail";
@@ -1377,28 +1376,6 @@ export function createCirclePortalHandlers({
     const preferences = await repository.saveAccountNotificationPreferences({ accountId: current.accountId,
       sessionId: current.sessionId, ...parsed.value, now: config.now() });
     return preferences ? json(preferences) : json({ error: "設定已變更，請重新載入後再儲存。", code: errorCode("version_conflict") }, 409);
-  }
-
-  async function adminGetNotificationPreferences(request: Request) {
-    const gate = await requireAdmin(request);
-    if (!gate.ok) return gate.response;
-    const preferences = await repository.getNotificationPreferences(gate.session.email);
-    return preferences ? json(preferences) : json({ error: "沒有權限。" }, 403);
-  }
-
-  async function adminSaveNotificationPreferences(request: Request) {
-    const gate = await requireAdmin(request);
-    if (!gate.ok) return gate.response;
-    const body = await readJson(request);
-    if (!body || Object.keys(body).some(key => !["enabled", "cadence", "version"].includes(key))
-      || typeof body.enabled !== "boolean" || !isNotificationCadence(body.cadence)
-      || !Number.isSafeInteger(body.version) || (body.version as number) < 1) {
-      return json({ error: "通知設定格式無效。" }, 400);
-    }
-    const preferences = await repository.saveNotificationPreferences({ email: gate.session.email,
-      sessionId: gate.session.sessionId, enabled: body.enabled, cadence: body.cadence,
-      version: body.version as number, now: config.now() });
-    return preferences ? json(preferences) : json({ error: "設定已變更，請重新載入後再儲存。" }, 409);
   }
 
   async function adminManageAdmins(request: Request) {
@@ -3215,7 +3192,7 @@ export function createCirclePortalHandlers({
   return {
     ...createAdminReferenceHandlers(repository, requireAdmin, config.now),
     adminGetSiteSettings, adminUpdateSiteSettings, adminRequestServiceCheck,
-    adminGetNotificationPreferences, adminSaveNotificationPreferences, getAccountNotificationPreferences, saveAccountNotificationPreferences,
+    getAccountNotificationPreferences, saveAccountNotificationPreferences,
     // Account-scoped: the identity is the same in every event, so these answer
     // before an event is chosen.
     authConfig, requestLink, verify, session, signOut, deleteMyAccount,

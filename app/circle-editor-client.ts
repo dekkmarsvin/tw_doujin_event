@@ -11,7 +11,6 @@ export function requestAdminServiceCheck() {
   return call<{ services: ServiceChecks }>("/api/admin/service-check", { method: "POST", body: "{}" });
 }
 import { notificationParameters } from "./notification-navigation";
-import type { NotificationPreferences } from "./review-notifications";
 import type { AdminCircleDetail } from "./admin-circle-detail";
 export type { AdminCircleDetail, AdminCircleClaim, AdminCircleHistory } from "./admin-circle-detail";
 import type { AdminAccountCircleSearchResponse, AdminAccountDetailResponse } from "./admin-account-detail";
@@ -24,13 +23,6 @@ export function saveAccountNotificationPreferences(preferences: AccountNotificat
   return call<AccountNotificationPreferences>("/api/account/notification-preferences", { method: "PUT", body: JSON.stringify(preferences) });
 }
 
-export function readNotificationPreferences() {
-  return call<NotificationPreferences>("/api/admin/notification-preferences");
-}
-
-export function saveNotificationPreferences(preferences: NotificationPreferences) {
-  return call<NotificationPreferences>("/api/admin/notification-preferences", { method: "PUT", body: JSON.stringify(preferences) });
-}
 import type { CircleOverrideFields, CircleRetentionChoice } from "./circle-overrides";
 
 /**

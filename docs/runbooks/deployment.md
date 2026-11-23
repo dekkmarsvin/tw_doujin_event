@@ -1,30 +1,18 @@
 # Cloudflare Pages 部署
 
-## 管理者待審通知
+## 通知
 
-通知使用既有 `workers/publication-dispatch` 的每分鐘排程、同環境 D1 及 Mailgun；不新增部署單位。個人偏好位於 `/admin#review-notifications`，預設開啟、每 5 分鐘，只收初始化／啟用後的新送審。上線順序：先交付 Pages 的 runtime schema、偏好 API、四類送審寫入及面板，再交付 Worker 寄送端。既有資料庫首次初始化不回填待審項目。
+通知在事件發生時各寄一封信（#546）。產生通知的寫入，在同一個 D1 batch 把通知寫進 `account_notification_items`；每個寫入 API 請求回應後，Pages 以 `waitUntil` 寄出到期的通知（`functions/_after-write.ts`），一次最多 10 封。
 
-全站待審通知由 D1 `admin_review_notifications_enabled` 控制，與發布及帳號通知分開。Worker 必須具備自己的 `MAILGUN_API_KEY`、`MAILGUN_DOMAIN`、`MAILGUN_SENDER` 及 `NOTIFICATION_ORIGIN`；Pages secrets 不會自動成為 Worker secrets。
-
-Preview 使用獨立 D1；設定 `PREVIEW_MAIL_SINK=d1`、`.test` 的 `PREVIEW_TEST_RECIPIENTS` 及 preview 的固定 HTTPS origin，先驗證設定→送審→tick→D1 收信。通知 Worker 的 preview 已啟用，人工收信使用 `verify.kotoban.top` 與 `postmaster@verify.kotoban.top`，確保 SPF／DKIM 與 From 對齊；API key 仍由 preview 自己的 secret 提供。`PREVIEW_SANDBOX_RECIPIENTS` 是人工測試收件白名單，名稱雖含 sandbox，亦適用已驗證自有網域，不放寬任意收件人。Worker 的 `keep_vars: true` 保留 Dashboard 管理的白名單，設定檔明列的 vars 仍會覆寫同名值。preview 環境的 vars 與 secrets 必須各自設定。Pages preview 的登入與邀請信同樣由 `verify.kotoban.top` 寄出，見 [preview 的兩個信箱](#preview-的兩個信箱)。Mailgun `accepted` 後仍須查 `delivered`／`failed` 事件確認交付。
-
-首次正式啟用須先完成 preview 實際收信驗收，再把正式 Worker 總開關設為 `true`。總開關關閉屬於維運暫停，已排入的工作會在恢復後續寄；管理者在面板關閉則取消其待寄工作，重新開啟不補寄。需要停止外部寄信時可關閉總開關，不影響送審與 publication。
-
-以 Worker Logs 的 `review_notifications.tick`／`review_notifications.tick_failed` 檢查結果；摘要包含批次 ID、結果與錯誤分類，不輸出收件地址或供應商回應本文。`accepted` 只表示供應商受理；依 provider ID 查 Mailgun 交付結果。遇到設定錯誤先修正設定，既有批次依退避時間恢復，無需另建通知；不要把批次直接標為成功。已完成／取消的寄送紀錄由既有 retention Worker 清除（30 天）。
-
-公開站與社團入口都部署到**同一個** Cloudflare Pages project：`tw-catalog`。
-
-| 用途 | 網址 | Access |
-|---|---|---|
-| 正式公開入口 | <https://map.kotoban.top/> | 無；一般閱讀公開，社團端由應用層驗證 |
-| Pages production origin | <https://tw-catalog.pages.dev/> | 無；只作 deployment smoke 與故障排查，不是對外正式入口 |
-| PR alias／不可變 deployment | `https://pr-<N>.tw-catalog.pages.dev`／`https://<hash>.tw-catalog.pages.dev` | 有；維護者登入或 CI Service Auth |
-
-`map.kotoban.top` 必須在 Pages project 的 **Custom domains** 顯示 Active，並使用 Cloudflare proxy。該 hostname 啟用 zone 的 Web Analytics 自動注入，`public/_headers` 的三份 CSP 都在 `script-src` 放行 `https://static.cloudflareinsights.com`；放行的是 origin 而非官方 FAQ 寫的 `/beacon.min.js` 路徑，因為自動注入載入的是帶版本號的子路徑，路徑型 CSP source 只精確比對自己那一個路徑。自動注入的 beacon 回報到本網域的 `/cdn-cgi/rum`，`connect-src 'self'` 已涵蓋，不需要額外放行 `cloudflareinsights.com`。
-
-同一個 zone 另外還開著 Bot Fight Mode／JS Detections，它注入的是**行內** script（`window.__CF$cv$params`，轉去 `/cdn-cgi/challenge-platform/scripts/jsd/main.js`），內容含每次請求都不同的 ray ID，因此沒有穩定的 `sha256-` 可放行。要嘛在 zone 關掉它，要嘛接受該行 console error——不得為它加 `'unsafe-inline'`，那會把整份 `script-src` 的防護拆掉。
-
-產物邊界與快取策略見[資料傳輸與離線契約](../contracts/delivery-and-offline.md)。為什麼公開閱讀路徑不走 Worker，見 [ADR-0008](../adr/0008-static-public-reading-path.md)；為什麼用 GitHub Actions Direct Upload 而非 Dashboard Git integration，見 [ADR-0009](../adr/0009-single-pages-project-direct-upload.md)。
+- 社團、申請人與活動成員收到自己的結果；每筆新的活動申請、活動內容送審或社團認領，寄一封給每位網站管理者。
+- 開關在 `/admin?section=settings`：「全站寄送帳號通知」與「全站寄送待審通知」。關閉期間不產生通知；重新開啟帳號通知只寄之後的新事件。
+- 寄送前重新確認收件人仍然相關（認領、成員、管理者身分與帳號狀態），不再相關就取消。
+- 暫時失敗等 10 分鐘後由之後的寫入請求重試；設定錯誤或收件人被拒直接記為失敗；48 小時後仍未寄出就放棄。
+- 個人設定只剩通知語言（社團信件的語言），沒有頻率或關閉選項。
+- 信件連結使用 `NOTIFICATION_ORIGIN`（production 為 `https://map.kotoban.top`）；preview 未設定時用請求的 origin。
+- 待審信寄給已登入過、有帳號的網站管理者；新加入名單但還沒登入過的管理者收不到加入前的待審信。
+- 沒有排程：核准請求若在發布途中中斷，只有之後的寫入請求會接手；15 分鐘內都沒有寫入時，該發布會轉為可重試的失敗，請在工作區按「重試發布」。
+- 從舊 Worker 切換（#546 5c）：合併前先刪除 production 與 preview 的 `tw-catalog-publication-dispatch` Worker（`npx wrangler delete --name tw-catalog-publication-dispatch` 與 `--name tw-catalog-publication-dispatch-preview`），避免新舊兩邊搶同一筆通知。舊待審摘要裡還沒寄出的項目不再寄送。
 
 ## 這個專案需要什麼
 
@@ -34,7 +22,7 @@ Preview 使用獨立 D1；設定 `PREVIEW_MAIL_SINK=d1`、`.test` 的 `PREVIEW_T
 | Pages Functions | **需要**——`functions/` 承載社團身分、認領、編輯、管理 route 與公開的 `overrides.json` |
 | D1 binding | **需要**——binding 名 `DB`。production 用 `tw-catalog-identity`，preview 用 `tw-catalog-identity-preview` |
 | Runtime secrets | **需要**——production 六個基本 secret、發布用的四個 GitHub App secret 與一個公開變數；preview 使用隔離的 session／pepper、E2E token、D1 mail sink、`verify.kotoban.top` 寄件網域與 Turnstile dummy 金鑰，見下 |
-| 排程 Worker（Cron Trigger） | **需要**——`tw-catalog-retention-purge` 與 `tw-catalog-publication-dispatch`，與 Pages project 分開部署，見[排程清除 Worker](#排程清除-worker)與 [Organizer 發布](#organizer-發布) |
+| 排程 Worker（Cron Trigger） | **需要**——`tw-catalog-retention-purge`，與 Pages project 分開部署，見[排程清除 Worker](#排程清除-worker) |
 | R2 | **需要**——每個環境各有公開縮圖 bucket（`THUMBNAILS`）與無公開網域的地圖來源 bucket（`MAP_CONTRIBUTIONS`） |
 | KV / Durable Objects | 不需要 |
 | advanced mode（`dist/_worker.js`） | **不得使用** |
@@ -81,9 +69,9 @@ production 的六個 runtime secret 以 `wrangler pages secret put` 設定。**�
 
 `ORGANIZER_PUBLICATION_MODE=r2` 時，核准在同一個請求內寫入活動資料 bucket，見[核准即發布](#核准即發布)。未設定時預設 disabled，核准與重試回 503；編輯、匯入、地圖、驗證、預覽與送審仍可使用。設定同時寫在根目錄 `wrangler.jsonc` 與 `workers/publication-dispatch/wrangler.jsonc`，不以 dashboard 臨時改值代替。
 
-獨立 `tw-catalog-publication-dispatch` Worker 綁同一個 production identity D1 與活動資料 bucket，每分鐘執行，沒有 HTTP 入口。它只接手核准請求中斷後留下的工作，並送出通知信。用 `npm run publication:deploy`（preview：`publication:deploy:preview`）部署，與 Pages 部署分開。
+核准請求若在發布途中中斷，之後任何寫入 API 請求都會在回應後接手完成（`functions/_after-write.ts`）；原本每分鐘執行的 `tw-catalog-publication-dispatch` Worker 已在 #546 移除。
 
-Worker 的 `preview_urls: false` 與 observability 也納入設定，保留既有 Dashboard 的入口／日誌狀態，避免 Wrangler 預設值在部署時覆寫。`tw-catalog-publication-dispatch` 與 `tw-catalog-retention-purge` 兩個 Worker 都開啟 Workers Logs 與 Workers Traces（`head_sampling_rate: 1`、`invocation_logs: true`、`persist: true`），因為兩者都只有 cron 入口，沒有使用者會替它們回報失敗；`observability` 是可繼承欄位，`env.preview` 不必重寫。
+`tw-catalog-retention-purge` Worker 開啟 Workers Logs 與 Workers Traces（`head_sampling_rate: 1`、`invocation_logs: true`、`persist: true`），因為它只有 cron 入口，沒有使用者會替它回報失敗；`preview_urls: false` 也納入設定。
 
 根目錄 `wrangler.jsonc` 是 Pages 專案設定，**不能**加 `observability`：Pages 的支援欄位清單沒有它，Wrangler 會直接以 `Configuration file for Pages projects does not support "observability"` 中斷部署。Pages Functions 也沒有可查詢的 Workers Logs，只有不落地的即時串流（見下方 `wrangler pages deployment tail`）。
 
@@ -264,11 +252,9 @@ npx wrangler r2 object put tw-doujin-event-data/index.json --file index.json --c
 
 ## 獨立 Worker
 
-`tw-catalog-publication-dispatch` 與 `tw-catalog-retention-purge` 不隨 Pages 部署，CI 也不部署它們。改了 Worker 會用到的程式（`app/publication-dispatch.ts`、`db/retention-purge.ts` 等）後，合併到 main 再手動部署：
+`tw-catalog-retention-purge` 是唯一的獨立 Worker，不隨 Pages 部署，CI 也不部署它。改了它會用到的程式（`db/retention-purge.ts` 等）後，合併到 main 再手動部署：
 
 ```bash
-npm run publication:deploy
-npm run publication:deploy:preview
 npm run purge:deploy
 npm run purge:deploy:preview
 ```
@@ -301,25 +287,13 @@ Pages 每次部署都是不可變 deployment。若正式版本有問題：
 1. 到 Pages project 的 **Deployments** 選擇上一個已驗證 deployment 並執行 rollback。
 2. **同時在 repository 回復有問題的 snapshot 或程式變更**，避免下一次 build 再次發布錯誤版本。
 
-## 帳號結果與內容通知（#469）
-
-沿用 publication-dispatch 與 retention 的既有排程、D1、Mailgun，新增產品／排程角色為 0。schema runtime version 3 新增三張 account notification 表及索引；不改舊 review notification 表、偏好與 pending，舊 consumer 也不讀新表。部署順序：先 Pages 的 schema／事件寫入／設定介面，再同版本的 publication-dispatch 與 retention Worker；先在獨立 preview D1 sink 驗證。沒有旗標時新入列與消費均停用，UI 可先設定偏好。
-
-正式寄送由同環境 D1 `account_notifications_enabled` 控制，Pages producer 與 Worker 均讀取最新設定。Admin 從關閉改為啟用時自動建立 `account_notifications_since`，取消早於起點的舊 pending，不補寄停用期間事件。登入／邀請、待審通知與發布各自獨立；origin 沿用 `NOTIFICATION_ORIGIN`。
-
-正式啟用前確認 Worker 已部署目前版本，並取得有授權 preview 信箱的社團結果、主辦結果與摘要收信證據。D1 sink、provider accepted、delivered、人工觀察分開記錄在 issue／PR；不由 CI 或 Pages 部署推定 Worker／收件匣已完成。preview 白名單與 Mailgun secrets 沿用既有隔離規則，不將 production 地址放入測試。
-
-`account_notifications.tick` 含 batch ID 與結果；D1 批次保存安全錯誤分類及 provider ID，不記錄地址／信件全文於正式 logs。每 tick 最多 10 個批次、每摘要最多 100 項；租約 120 秒，批次內容固定，暫時錯誤退避至 6 小時，首次嘗試 48 小時後終止，完成／取消／失敗 30 天清除。外部已受理但寫回失敗可能重複，禁止以重試成功宣稱 exactly-once。
-
-回滾與舊環境旗標清除依下方營運設定遷移段落，保留 notification 表與 monotonic schema marker。既有重試／保留期／個人偏好維持原契約。
 
 ## 網站營運設定遷移（#477）
 
 既有環境透過保留一次性 env seed 的 PR #480 遷移；完成初始值、Pages／Worker 與 D1 核對後，Phase 5 移除舊五個營運環境旗標與 GitHub build variable，以及初始化讀取。現行版本只由 D1 管理營運設定，不保留 env fallback。
 
 - 新環境先部署 Pages 並登入 `/admin?section=settings` 初始化。預設暫停申請、空名單、通知與發布關閉；由管理者在 Admin 開啟所需功能。
-- 再部署 publication-dispatch Worker（見[獨立 Worker](#獨立-worker)），確認 active version 是剛才那次。Worker 不 seed 營運設定；只有 Pages／CI 成功不代表 Worker 已更新。
-- 在 Admin 保存設定、重新載入並核對；下一次 request／scheduled tick 使用 D1 新值。手動「檢查服務」由實際 Worker 執行，不寄測試信或修改儲存庫；無結果／無診斷讀取權不宣稱寄信或發布失敗。
+- 在 Admin 保存設定、重新載入並核對；下一次 request／scheduled tick 使用 D1 新值。手動「檢查服務」在送出請求後由 Pages 執行，不寄測試信或修改儲存庫；無結果／無診斷讀取權不宣稱寄信或發布失敗。
 - `ORGANIZER_PUBLICATION_MODE`、憑證、binding、通知 origin 維持部署設定。
 
 回滾到遷移前程式時，先從當前 D1 設定恢復舊旗標與同一通知 epoch，再部署舊程式。只回滾程式、不刪 `site_settings`、通知表、job／snapshot／checkpoint 或 monotonic schema marker；回滾到 PR #480 可直接沿用既有 D1。

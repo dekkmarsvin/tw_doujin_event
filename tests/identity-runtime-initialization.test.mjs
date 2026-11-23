@@ -116,7 +116,7 @@ test("version 6 upgrades an existing notification preference table without losin
   await database.prepare("INSERT INTO account_notification_preferences VALUES ('keep', 'off', 3, 17, 'original')").run();
   await database.prepare("UPDATE identity_runtime_state SET version = 6").run();
   const repo = createIdentityRepository(database);
-  assert.deepEqual(await repo.getAccountNotificationPreferences("keep"), { cadence: "off", version: 3, locale: null });
+  assert.deepEqual(await repo.getAccountNotificationPreferences("keep"), { version: 3, locale: null });
   assert.equal((await marker(database)).version, version.version);
   assert.deepEqual(await database.prepare("SELECT * FROM account_notification_preferences WHERE account_id = 'keep'").first(),
     { account_id: "keep", cadence: "off", version: 3, enabled_since: 17, write_token: "original", locale: null });
@@ -183,23 +183,19 @@ test("a concurrent newer completion cannot be overwritten by an older initialize
   assert.equal((await marker(database)).version, version.version + 1);
 });
 
-test("public reads do not bootstrap admins; control-plane startup still recovers and seeds preferences", async () => {
+test("public reads do not bootstrap admins; control-plane startup still recovers them", async () => {
   const database = await preparedDatabase();
   const options = { bootstrapAdmins: ["first@example.test", "second@example.test"] };
   const repo = createIdentityRepository(database, options);
   await repo.getOverridesDoc("ff47");
   assert.equal(await count(database, "admins"), 0);
   assert.equal(await repo.isAdminEmail("first@example.test"), true);
-  assert.equal(await count(database, "admin_notification_preferences"), 2);
-  await database.prepare("UPDATE admin_notification_preferences SET enabled = 0, cadence = 'daily', enabled_since = 7 WHERE recipient = 'second@example.test'").run();
   assert.equal(await repo.removeAdmin("first@example.test"), "removed");
   const restarted = createIdentityRepository(database, options);
   assert.equal(await restarted.isAdminEmail("first@example.test"), false, "deleted admins cannot reappear while another admin exists");
-  assert.deepEqual(await database.prepare("SELECT enabled, cadence, enabled_since FROM admin_notification_preferences WHERE recipient = 'second@example.test'").first(), { enabled: 0, cadence: "daily", enabled_since: 7 });
-  await database.batch([database.prepare("DELETE FROM admins"), database.prepare("DELETE FROM admin_notification_preferences")]);
+  await database.prepare("DELETE FROM admins").run();
   assert.equal(await createIdentityRepository(database, options).isAdminEmail("first@example.test"), true);
-  assert.equal(await count(database, "admin_notification_preferences"), 2);
-  assert.equal(await count(database, "review_notification_items"), 0, "recovery does not enqueue old reviews");
+  assert.equal(await count(database, "account_notification_items"), 0, "recovery does not enqueue old reviews");
 });
 
 test("fresh public handler preserves revisions, 304 and phase rebuild without control-plane initialization", async () => {

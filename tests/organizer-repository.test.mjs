@@ -26,7 +26,7 @@ const { hmacSign } = await environment.runner.import("/app/portal-crypto.ts");
 const { runPublicationTick, createScheduledPublicationDispatcher,
   PUBLICATION_CRON, PUBLICATION_RETRY_MAX_MS, PUBLICATION_TICK_MAX_TRANSITIONS, PUBLICATION_JOB_MAX_TRANSITIONS,
   PUBLICATION_TICK_START_BUDGET_MS } = await environment.runner.import("/app/publication-scheduler.ts");
-const { default: scheduledWorker } = await environment.runner.import("/workers/publication-dispatch/index.ts");
+const { afterWrite } = await environment.runner.import("/functions/_after-write.ts");
 
 const miniflare = new Miniflare(convertV4MiniflareOptions({
   modules: true,
@@ -327,35 +327,20 @@ test("overlapping cron ticks have one leased mutation and keep the checkpoint", 
   assert.equal(job.pending_attempts, 0);
 });
 
-test("scheduled Worker entry ignores disabled and r2 environments and advances only a preview-gated fake", async (t) => {
+// The scheduled Worker is gone (#546 5c); each write request finishes an
+// interrupted publication afterwards instead.
+test("after a write, interrupted publications advance only in r2 or a preview-gated fake", async (t) => {
   const { jobId } = await publicationFixture();
   t.mock.method(Date, "now", () => NOW + 10);
-  // In r2 mode the Worker needs the event data bucket to finish anything (#546).
-  for (const env of [{}, { ORGANIZER_PUBLICATION_MODE: "fake" }, { ORGANIZER_PUBLICATION_MODE: "r2" }]) {
-    await scheduledWorker.scheduled({}, { ...env, DB: database });
+  t.mock.method(console, "log", () => {});
+  t.mock.method(console, "error", () => {});
+  for (const env of [{}, { ORGANIZER_PUBLICATION_MODE: "fake" }]) {
+    await afterWrite({ ...env, DB: database }, "https://map.kotoban.top");
     assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "queued");
   }
-  t.mock.method(console, "log", () => {});
-  await scheduledWorker.scheduled({}, { DB: database, ORGANIZER_PUBLICATION_MODE: "fake", PREVIEW_MAIL_SINK: "d1" });
+  await afterWrite({ DB: database, ORGANIZER_PUBLICATION_MODE: "fake", PREVIEW_MAIL_SINK: "d1" }, "https://map.kotoban.top");
   const finalJob = await repository.getOrganizerPublicationJob(jobId);
   assert.equal(finalJob.status, "published", JSON.stringify({ step: finalJob.step, failureCode: finalJob.failure_code, error: finalJob.error }));
-  assert.equal(scheduledWorker.fetch, undefined);
-  // Explicit production rollout does not enable the preview Worker. Read the
-  // configuration with Wrangler's own reader rather than `JSON.parse`: the file
-  // is JSONC, so a comment added to it would otherwise fail this test with a
-  // parse error that says nothing about publication. Reading it the way a deploy
-  // does also resolves inheritance, so the preview assertion below covers the
-  // value the preview Worker would actually run with, not just the literal text.
-  process.env.WRANGLER_LOG ??= "error";
-  const { unstable_readConfig } = await import("wrangler");
-  const configFile = "workers/publication-dispatch/wrangler.jsonc";
-  const config = unstable_readConfig({ config: configFile });
-  const preview = unstable_readConfig({ config: configFile, env: "preview" });
-  assert.deepEqual(config.triggers.crons, [PUBLICATION_CRON]);
-  assert.equal(config.vars.ORGANIZER_PUBLICATION_MODE, "r2");
-  assert.equal(preview.vars.ORGANIZER_PUBLICATION_MODE, "r2");
-  assert.deepEqual(config.r2_buckets.map((bucket) => bucket.bucket_name), ["tw-doujin-event-data"]);
-  assert.deepEqual(preview.r2_buckets.map((bucket) => bucket.bucket_name), ["tw-doujin-event-data-preview"]);
 });
 
 test("Pages runtime exposes publication by mode and a fake retry finishes through real D1", async (t) => {

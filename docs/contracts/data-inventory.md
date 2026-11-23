@@ -267,7 +267,7 @@ D1 保存草稿 revision、私人 object key、官方來源 URL、文件日期�
 
 ### 管理者待審通知資料
 
-`admin_notification_preferences` 保存管理者明文 email、收信開關、頻率、設定版本、啟用起點、下一摘要時間與交易 token；只接受本人經授權修改。預設及行為見[個人待審通知](./circle-portal.md#個人待審通知)。管理者移除或帳號刪除時清除。
+`admin_notification_preferences` 保存管理者明文 email、收信開關、頻率、設定版本、啟用起點、下一摘要時間與交易 token；只接受本人經授權修改。預設及行為見[個人待審通知](./circle-portal.md#待審通知)。管理者移除或帳號刪除時清除。
 
 `review_notification_items` 保存收件者 email、待審類型、來源 ID、送審識別、活動代碼、建立時間、所屬摘要及完成狀態。`review_notification_batches` 保存每位收件者的摘要識別、lease、嘗試次數、重試時間、供應商訊息 ID 與去除敏感內容的錯誤分類。兩表不保存申請內文、證據或信件全文；完成／取消 30 天後由既有清除 Worker 刪除，pending 保留至受理或取消。管理者移除／帳號刪除立即清除收件者紀錄，停用則取消 pending。
 

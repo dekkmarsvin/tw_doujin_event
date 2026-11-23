@@ -10,8 +10,7 @@ import { createIdentityInitializer, seedOrganizerVenueCatalog, referenceInsertSt
 import { createVenueReference, createVenueSpaceReference, type OrganizerReferenceRecord } from "../app/organizer-reference-catalog";
 import { createOrganizerAmendmentRepository } from "./organizer-amendment-repository";
 import { createOrganizerApplicationRepository } from "./organizer-application-repository";
-import { createReviewNotificationRepository, seedNotificationPreferences, enqueueReviewNotification, deleteNotificationRecipient, cancelNotificationRecipient } from "./review-notification-repository";
-import { createAccountNotificationRepository, createAccountNotificationWriter, deleteAccountNotifications, claimNotificationSource, circleNotificationSource, ownerNotificationSource, memberNotificationSource, organizerCandidateEdition } from "./account-notification-repository";
+import { createAccountNotificationRepository, createAccountNotificationWriter, deleteAccountNotifications, deleteLegacyReviewRecipient, enqueueReviewNotification, claimNotificationSource, circleNotificationSource, ownerNotificationSource, memberNotificationSource, organizerCandidateEdition } from "./account-notification-repository";
 import { createSiteSettingsRepository, seedSiteSettings } from "./site-settings-repository";
 
 /**
@@ -120,7 +119,6 @@ export function createIdentityRepository(database: D1Database, options: { bootst
             contactUrl: "", claimReviewNotice: "", updatedAt: Date.now(), updatedBy: "migration",
           });
         })
-        .then(async () => { await seedNotificationPreferences(database, Date.now()); })
         .catch((error: unknown) => {
           tablesReady = null;
           throw error;
@@ -245,8 +243,6 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     await ensureTables();
     const results = await database.batch([
       database.prepare("INSERT OR IGNORE INTO admins (email, added_by, added_at) VALUES (?1, ?2, ?3)").bind(email, addedBy, now),
-      database.prepare(`INSERT OR IGNORE INTO admin_notification_preferences (recipient, enabled_since, next_digest_at)
-        SELECT email, ?2, (CAST(?2 / 300000 AS INTEGER) + 1) * 300000 FROM admins WHERE email = ?1`).bind(email, now),
     ]);
     return results[0].meta.changes === 1;
   }
@@ -258,7 +254,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     if ((total?.total ?? 0) <= 1) return "last" as const;
     const results = await database.batch([
       database.prepare("DELETE FROM admins WHERE email = ?1").bind(email),
-      ...deleteNotificationRecipient(database, email),
+      ...deleteLegacyReviewRecipient(database, email),
     ]);
     return results[0].meta.changes === 1 ? "removed" as const : "missing" as const;
   }
@@ -432,10 +428,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
            SELECT id FROM accounts WHERE email = ?2 AND disabled_at = ?1 AND deletion_started_at IS NULL
          ) AND revoked_at IS NULL`,
       ).bind(now, email),
-      ...cancelNotificationRecipient(database, email, now),
-      ...["account_notification_items", "account_notification_batches"].map(table => database.prepare(
-        `UPDATE ${table} SET state = 'cancelled', completed_at = ?2 WHERE account_id = (SELECT id FROM accounts WHERE email = ?1)
-          AND state = 'pending'`).bind(email, now)),
+      database.prepare(`UPDATE account_notification_items SET state = 'cancelled', completed_at = ?2
+        WHERE account_id = (SELECT id FROM accounts WHERE email = ?1) AND state = 'pending'`).bind(email, now),
     ]);
     if (results[0].meta.changes === 1) {
       return "disabled" as const;
@@ -488,8 +482,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     }
 
     statements.push(
-      ...deleteNotificationRecipient(database, input.email),
       ...deleteAccountNotifications(database, input.accountId),
+      ...deleteLegacyReviewRecipient(database, input.email),
       database.prepare(`DELETE FROM map_draft_exports WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft' AND candidate_id IS NULL)`).bind(input.accountId),
       database.prepare(`DELETE FROM map_draft_files WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft' AND candidate_id IS NULL)`).bind(input.accountId),
       database.prepare(`DELETE FROM map_draft_comments WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft' AND candidate_id IS NULL)`).bind(input.accountId),
@@ -3033,7 +3027,6 @@ export function createIdentityRepository(database: D1Database, options: { bootst
 
   return {
     ...createSiteSettingsRepository(database, ensureTables),
-    ...createReviewNotificationRepository(database, ensureTables),
     ...createAccountNotificationRepository(database, ensureTables),
     ...createOrganizerAmendmentRepository(database, ensureTables),
     ...createOrganizerApplicationRepository(database, ensureTables, organizerCandidateStatements, notify),

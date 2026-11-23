@@ -15,9 +15,7 @@
 **實作**：[`app/circle-portal/`](../../app/circle-portal)、[`app/public-header.ts`](../../app/public-header.ts)、[`app/workspace-nav.tsx`](../../app/workspace-nav.tsx)、[`app/circle-share.ts`](../../app/circle-share.ts)、[`app/circle-share-image.ts`](../../app/circle-share-image.ts)、[`app/catalog-image-prepare.ts`](../../app/catalog-image-prepare.ts)、[`app/hosted-thumbnails.ts`](../../app/hosted-thumbnails.ts)、[`app/admin/admin-review-queue.tsx`](../../app/admin/admin-review-queue.tsx)、[`app/admin/claim-batch.ts`](../../app/admin/claim-batch.ts)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`app/circle-overrides.ts`](../../app/circle-overrides.ts)、[`app/mail-letter.ts`](../../app/mail-letter.ts)、[`app/portal-crypto.ts`](../../app/portal-crypto.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`functions/`](../../functions)
 **測試**：`tests/organizer-claims.test.mjs`、`tests/circle-portal-route.test.mjs`、`tests/public-artifact.test.mjs`、`tests/admin-claim-batch.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/catalog-images.test.mjs`、`tests/circle-page-share-component.test.mjs`、`tests/circle-share-image.test.mjs`、`tests/identity-repository.test.mjs`、`tests/mail-letter.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs`
 **部署與密鑰**：[部署 runbook](../runbooks/deployment.md)
-**實作**：`app/admin/admin-notification-panel.tsx`、`app/review-notifications.ts`、`app/portal-mail.ts`、`app/review-notification-scheduler.ts`、`db/review-notification-repository.ts`、`functions/api/admin/notification-preferences.ts`、`workers/publication-dispatch`
-**測試**：`tests/review-notifications.test.mjs`、`tests/account-notifications.test.mjs`
-**實作**：`app/account-notifications.ts`、`app/account-notification-scheduler.ts`、`app/account-notification-settings.tsx`、`app/notification-navigation.ts`、`db/account-notification-repository.ts`、`functions/api/account/notification-preferences.ts`
+**通知**：`app/notification-delivery.ts`、`app/account-notifications.ts`、`app/review-notifications.ts`、`app/portal-mail.ts`、`app/account-notification-settings.tsx`、`db/account-notification-repository.ts`、`functions/_after-write.ts`；測試 `tests/notification-delivery.test.mjs`
 **實作**：`app/portal-sign-in.tsx`、`app/portal-sign-in.module.css`
 **測試**：[tests/browser/portal-claim-entry.mjs](../../tests/browser/portal-claim-entry.mjs)、[tests/browser/portal-organizer-entry.mjs](../../tests/browser/portal-organizer-entry.mjs)
 
@@ -292,25 +290,13 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 ## 管理者
 
-### 個人待審通知
+### 待審通知
 
-全站寄送由 [網站營運設定](./site-settings.md) 的 D1 開關控制，保留以下個人偏好與頻率；全站停止寄送不改寫個人設定。帳號通知的全站起點亦由 Admin 儲存時建立，producer 與 scheduler 不快取環境旗標。
-
-`/admin#review-notifications` 提供跨活動的個人收信開關與頻率；不隨活動切換卸載，不修改其他管理者，也不能指定其他收件地址。`GET`／`PUT /api/admin/notification-preferences` 只操作目前有效管理者，PUT 沿用 CSRF 檢查，以 `enabled`、`cadence`、`version` 儲存；過期版本回 409，介面保留輸入並提供重新載入。載入失敗不冒充已保存預設值，重新載入期間不能編輯或儲存。
-
-預設開啟且每 5 分鐘彙整，另可選每小時或每日台北時間 09:00。五分鐘與小時模式採整點時段；每日 09:00 即 UTC 01:00。每位管理者的設定、排程及寄送結果獨立。首次初始化、加入管理者、關閉後重開都不補寄舊件；關閉取消尚未寄出的項目與重試，只變更頻率則保留待寄工作並改排下一時段。已送到 Mailgun 的信件不能撤回。
-
-通知涵蓋活動申請、候選活動（含修訂）送審、人工待審認領及獨立地圖草稿；自動通過的認領與活動工作區內的地圖不另通知。送審與待寄項目寫入同一 D1 batch，按收件者及這次送審識別去重；退回或撤回後再送審是新一次通知，不能只按來源 ID 去重。通知不改變審核、核准快照或發布流程。
-
-摘要只包含類型、活動代碼、筆數及既有審核入口，不附申請內容、證據或登入憑證；由 `app/mail-letter.ts` 產生，同時寄出 HTML 與純文字，並附通知設定連結。寄出前核對同一次送審仍待審、收件者仍為管理者且帳號未停用／刪除。沒有新項目不寄，不重複催辦；排程恢復只寄積欠摘要，不逐時段補信。
-
-寄送由既有 publication-dispatch Worker 的獨立通知 tick 執行，每 tick 最多 10 位管理者。每人只允許一個 pending 摘要，以 120 秒 lease 防併發；新項目不混入正在重試的摘要。失敗由 1 分鐘倍增退避、上限 6 小時，成功記錄為 `accepted`（供應商受理，並非收件匣送達）。外部受理成功、D1 寫回前中斷可能重複寄送；不承諾 exactly-once。寄送總開關與 publication mode 分離，兩項工作互不阻斷。
-
-管理者移除／帳號刪除會清除其通知設定與寄送紀錄；帳號停用取消待寄工作。已完成及取消紀錄由既有 retention Worker 在 30 天後刪除，production 不保存信件全文。Preview 沿用獨立 D1 mail sink／sandbox 白名單，設定錯誤不得回退到 production 寄信。
+每筆新的活動申請、活動內容送審或人工待審認領，寄一封信給每位網站管理者（#546）；自動通過的認領不寄。信件只有類型、活動代碼與審核入口，不附申請內容、證據或登入憑證。沒有個人頻率或開關，全站開關在[網站營運設定](./site-settings.md)。寄送方式見[部署 runbook 的通知](../runbooks/deployment.md#通知)。
 
 ### 審核與帳號操作
 
-- `/admin` 依 `section` 分為管理總覽、活動管理、社團管理、帳號管理、資料管理與網站設定；只有目前分區的面板掛載。我的通知設定由帳號選單进入。活動管理預設完整活動總表，另有審核與發布、地圖投稿頁籤；社團管理預設認領審核，另一頁籤保留名稱查詢與撤下。帳號管理預設 Email 查詢，網站管理者名單另有唯一頁籤，停用位於已確認目標的帳號明細；資料管理保留場館／主辦／分類。候選活動的內容、Owner、核准並發布與重試仍在 `/organizer`，不重建 Admin 編輯器。
+- `/admin` 依 `section` 分為管理總覽、活動管理、社團管理、帳號管理、資料管理與網站設定；只有目前分區的面板掛載。活動管理預設完整活動總表，另有審核與發布、地圖投稿頁籤；社團管理預設認領審核，另一頁籤保留名稱查詢與撤下。帳號管理預設 Email 查詢，網站管理者名單另有唯一頁籤，停用位於已確認目標的帳號明細；資料管理保留場館／主辦／分類。候選活動的內容、Owner、核准並發布與重試仍在 `/organizer`，不重建 Admin 編輯器。
 - **`/admin` 預設跨活動管理總覽，不先選活動。** 四類待審摘要採既有 COUNT 及完整認領分組計數；待審內容復用候選列表的 submitted，單列連指定 candidate 的 review。認領與地圖活動摘要分別進該活動清單；過去活動的待辦保留。近期活動只列已知公開活動，標明「已公開活動」，連往完整活動總表；總表以 eventId 合併公開定義及候選版次，無 eventId 者分開，公開日期與工作日期分列。發布摘要列目前 queued／publishing 及未解決 failed 作業、edition、階段與更新時間，連指定候選 review；不可重試及暫停不代表問題已解決。`/circle` 的管理連結不帶活動。
 - 新路由以 `section`／`view`／`event` 及必要 `claim`／`draft` 精確識別；社團查詢保留 `q`，資料管理保留 `view`。舊 `section=references` 映射資料管理，`#overview`／`#admin`／`#map-review`／`#takedown`／`#accounts`／`#review-notifications` 保留目的地。無分區及錨點的 `/admin?event=X` 永久開該活動認領審核；精確新分區不被 legacy event 規則覆蓋。無效的指定活動或頁籤顯示無法開啟，不改開第一場。
 - 社團查詢先選一場已公開、此部署服務的活動，沿用名稱搜尋與上限；`event`／`q`／`circle` 可還原指定明細，返回列表保留搜尋。`GET /api/admin/circles/:circleId?event=...` 只供管理者讀取指定活動的官方基本資料、認領帳號／結果、目前保存的補充內容及可歸屬該活動／社團的必要處理紀錄；不放寬社團擁有者查詢，也不向公開 Reader 回傳私人認領資料。沒有可用公開頁或可信主辦工作區時不產生連結。
@@ -390,18 +376,6 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 ## 帳號通知信
 
-社團認領自動／人工通過、拒絕、撤銷與管理者撤下補充資料，由成功的業務交易同時寫入 `account_notification_items`；個人偏好不能關閉必要服務通知，全站寄送則依 [網站營運設定](./site-settings.md)。寄前核對帳號與逐活動社團關係；本人撤權結果可保留最低必要歷史事實，停用／刪除仍取消。撤銷後不寄舊的通過信或內容摘要，同次撤銷不再寄撤下信。
+認領結果、本人補充資料的實質變更或撤下、活動申請結果、工作區成員異動、審核結果與發布結果，在發生時各寄一封信（#546），無法關閉；全站開關在[網站營運設定](./site-settings.md)。相同內容的儲存不寄信。
 
-本人補充資料、品書、保存／公開設定實質變更納入摘要；相同內容儲存不入列，摘要只保存變更項目、不保存完整內容。每日台北 09:00 為新帳號預設，亦可每小時或關閉。關閉取消摘要及重試，重開只收新事件；改頻率保留項目、改排下個時段。
-
-`GET/PUT /api/account/notification-preferences` 僅依本人 session 操作，PUT 有同源 JSON 防護及 version CAS（首次讀取 version 0）；其他帳號及收件地址不可指定。`/circle`、`/organizer` 共用「通知設定」Modal，桌機浮動／手機全螢幕，關閉保留原編輯內容。唯一的頻率選單選定即儲存，不設儲存鍵或關閉確認；儲存失敗時選單回到已儲存的值並說明原因。載入失敗不假裝有預設已儲存；管理者待審設定維持獨立。
-
-GET 回 `{ cadence, version, locale }`，未選語言時 `locale: null`，讀取不建立偏好列。PUT 的 cadence／locale 可省略其一；省略 locale 保留原值，省略 cadence 僅更新語言、version 與 write_token，不改 enabled_since、待寄時間、重試、lease 或取消狀態。首次只改語言插入 daily／enabled_since 0，與無偏好列相同。明確帶 cadence 仍依原規則重排，即使頻率未變；版本衝突回 `409 version_conflict`，不覆寫。
-
-社團介面登入後，僅在通知語言為 null 時以當次介面語言初始化一次；網址帶入語言不覆寫既存偏好。明確切換介面／通知語言立即更新 UI，並以 `{ version, locale }` 儲存。失敗保留目前介面與草稿、顯示未儲存與重試；版本衝突先重新讀取，不自動重送舊選擇。頁首與通知設定共用版本，頻率操作只送 `{ version, cadence }`。主辦／管理者維持原本繁中與頻率設定。
-
-五類社團通知（claim.approved／claim.rejected／claim.revoked／circle.updated／circle.takendown）在寄送時讀取帳號語言，null 沿用繁中；目的地與通知設定連結都明確帶 lang。摘要的固定中文明細詞在呈現時翻譯，保留「、」合併與未知詞，既有佇列不改寫；名稱、活動代碼與人工內容保持原文。主辦／管理通知與邀請維持繁中。
-
-社團可達與共用帳號 API 的錯誤在原 error、HTTP status 與結構化欄位上增補 code／必要 params，依 `app/i18n/api-error.ts` 的 registry；主辦／管理專用錯誤不變。挑戰驗證找不到驗證碼仍回 HTTP 200 與 `verified: false`。
-
-信件只有本站的 event／circle 或通知設定目的地，不帶登入憑證、不授權；重新登入信攜帶白名單選擇參數，GET 不執行業務異動。不存在的活動不回退另一場活動。
+`GET/PUT /api/account/notification-preferences` 只保存通知語言：GET 回 `{ version, locale }`（未選時 `locale: null`），PUT 只接受 `{ version, locale }`，依本人 session、同源 JSON 防護與 version CAS。社團信件以這個語言寄出，其他信件為繁體中文。社團介面登入後，僅在通知語言為 null 時以當次介面語言初始化一次；網址帶入語言不覆寫既存偏好。`/circle`、`/organizer` 的「通知設定」說明通知內容，社團介面另可選通知語言。

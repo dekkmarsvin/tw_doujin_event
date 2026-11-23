@@ -11,6 +11,7 @@
 import { isHtmlRoute, secureHtmlResponse, unconditionalHtmlRequest } from "./_html-security";
 import { applyCircleShareImage } from "./_circle-share-image";
 import { withPublishedEvents } from "./_published-events-html";
+import { afterWrite } from "./_after-write";
 import { API_ERROR_CODES, type ApiErrorCode } from "../app/i18n/api-error-codes";
 
 const SAFE_METHODS = new Set(["GET", "HEAD"]);
@@ -56,6 +57,9 @@ export const onRequest: PagesFunction<PortalEnv> = async (context) => {
   // Shares are anonymous snapshots with a bounded private cache. Other APIs
   // carry identity and must never be stored by a cache or the worker.
   if (url.pathname.startsWith("/api/")) {
+    // A write may have queued notices or a service check; send them after the
+    // response, the way the scheduled Worker used to each minute.
+    if (!SAFE_METHODS.has(request.method) && response.status < 400) context.waitUntil?.(afterWrite(context.env, url.origin));
     const headers = new Headers(response.headers);
     if (!(request.method === "GET" && /^\/api\/shares\/[^/]+$/.test(url.pathname))) {
       headers.set("cache-control", "no-store");

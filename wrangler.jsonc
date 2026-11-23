@@ -52,7 +52,9 @@
     "ORGANIZER_PUBLICATION_MODE": "r2",
     "EVENT_ID": "ff47",
     "TURNSTILE_SITEKEY": "0x4AAAAAAET9rAWIzjOckkSc",
-    "THUMBNAIL_PUBLIC_ORIGIN": "https://media.kotoban.top"
+    "THUMBNAIL_PUBLIC_ORIGIN": "https://media.kotoban.top",
+    // Links in notification mail. Preview omits it and uses the request's origin.
+    "NOTIFICATION_ORIGIN": "https://map.kotoban.top"
   },
   // Preview (every branch that is not the production branch) gets its own
   // database. Without this the top-level binding applies to preview too, so a
