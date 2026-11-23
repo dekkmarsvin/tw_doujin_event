@@ -444,7 +444,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
           onCreated={async (id) => { await reloadList(); setSelectedId(id); }}
           onInvitationFailed={(delivery, email) => setNotice({ kind: "error", message:
             (delivery === "failed" ? "活動已建立，邀請信未寄出。" : "活動已建立，無法確認邀請信是否寄出。")
-            + (email.normalize("NFKC").trim().toLowerCase() === session.email ? "" : "請到「成員與權限」重寄負責人邀請信。") })}
+            + (email.normalize("NFKC").trim().toLowerCase() === session.email ? "" : "請到「成員與權限」重寄成員邀請信。") })}
         />}
         <nav aria-label="活動列表" className={styles.eventList}>
           {groups.map(group => {
@@ -494,7 +494,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
           if (target === "review") chooseSection("review");
           else requestNavigation(target === "circles" ? "開啟社團管理" : "開啟成員與權限", () => setSurface(target));
         }} />}
-      {surface === "data" && detail?.event.status === "published" && (detail.event.role === "owner" || session.isAdmin) && <div className={styles.guideBanner}>
+      {surface === "data" && detail?.event.status === "published" && <div className={styles.guideBanner}>
         <div><strong>修正已發布名單</strong><p>建立修正草稿，原本的公開活動會持續提供，直到新版核准並完成發布。</p></div>
         <button type="button" disabled={startingAmendment} onClick={() => {
           setStartingAmendment(true); setNotice({ kind: "busy", message: "正在核對已發布版本…" });
@@ -522,11 +522,11 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
           : session.isAdmin ? "建立新活動後，活動會出現在左側。"
             : "收到主辦邀請後，活動會出現在左側。"}</p>
       </div>
-        : surface === "members" ? <MembersPanel key={detail.event.id} session={session} detail={detail} onChanged={refresh} onClose={() => setSurface("data")} />
+        : surface === "members" ? <MembersPanel key={detail.event.id} detail={detail} onChanged={refresh} onClose={() => setSurface("data")} />
         : surface === "notice" && detail.claimReviewAvailable && detail.event.eventId
           ? <OrganizerNoticePanel key={detail.event.id} candidateId={detail.event.id} />
         : surface !== "data" && detail.claimReviewAvailable && detail.event.eventId
-          ? <OrganizerCirclePanel key={detail.event.id} candidateId={detail.event.id} eventId={detail.event.eventId} canRevoke={detail.event.role !== "editor" || session.isAdmin} onQueueLoaded={onQueueLoaded} />
+          ? <OrganizerCirclePanel key={detail.event.id} candidateId={detail.event.id} eventId={detail.event.eventId} onQueueLoaded={onQueueLoaded} />
           : <WorkspaceSurface
           key={detail.event.id}
           session={session}
@@ -859,7 +859,7 @@ function CreateEntry({ onStarted, onCreated, onInvitationFailed }: {
     }).catch((error) => setNotice({ kind: "error", message: message(error) }));
   }}>
     <label><span>暫定名稱<RequiredMark /></span><input aria-label="暫定名稱" required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} /></label>
-    <label><span>負責人 Email<RequiredMark /></span><input aria-label="負責人 Email" required type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+    <label><span>成員 Email<RequiredMark /></span><input aria-label="成員 Email" required type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
     <div className={styles.row}><button type="submit">建立並邀請</button><button type="button" className={styles.ghost} onClick={() => setOpen(false)}>取消</button></div>
     {notice.kind === "error" && <p className={styles.error}>{notice.message}</p>}
   </form>;

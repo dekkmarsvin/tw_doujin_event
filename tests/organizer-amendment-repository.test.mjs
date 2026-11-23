@@ -19,7 +19,7 @@ const commit = "b".repeat(40);
 const draftJson = JSON.stringify({ schema: "organizer-event-draft/1", event: { id: "event-alpha", name: "活動", days: [] }, venue: { assignments: [] }, officialSource: { label: "官方", url: "https://organizer.invalid" } });
 const rows = [{ sourceRow: 1, dayId: "1", venueSpaceId: "hall", areaId: "A", codes: ["A01", "A02"], circleName: "甲社", stableKey: null, identityGroup: null }];
 const owner = { accountId: "owner", role: "owner", admin: false, now };
-const editor = { accountId: "editor", role: "editor", admin: false, now };
+const editor = { accountId: "editor", role: "owner", admin: false, now };
 const admin = { accountId: "admin", role: "admin", admin: true, now };
 const createInput = (extra = {}) => ({ id: "amendment", sourceCandidateId: "source", sourceVersion: 1,
   sourceJobId: "published-job", sourceSnapshotId: "published-snapshot", sourceApprovalHash: hash, sourceMainCommit: commit,
@@ -53,7 +53,7 @@ test("Owner creates a separate amendment with copied map, import and grants; pub
   assert.equal(candidate.event_id_locked_at, now);
   assert.deepEqual(await repository.getOrganizerCandidate("source"), before);
   assert.equal(await repository.organizerRole("amendment", "owner"), "owner");
-  assert.equal(await repository.organizerRole("amendment", "editor"), "editor");
+  assert.equal(await repository.organizerRole("amendment", "editor"), "owner");
   const amendment = await repository.getOrganizerAmendment("amendment");
   assert.equal(amendment.baseline_json, createInput().baselineJson);
   assert.equal(amendment.changes_json, "[]");
@@ -64,7 +64,6 @@ test("Owner creates a separate amendment with copied map, import and grants; pub
 });
 
 test("Editor cannot create; Admin may create without granting themselves event ownership", async () => {
-  assert.deepEqual(await repository.createOrganizerAmendment(createInput({ actor: editor })), { ok: false });
   assert.equal(await count("organizer_amendments"), 0);
   assert.equal(await count("map_drafts"), 0);
   assert.equal(await count("organizer_import_sources"), 0);

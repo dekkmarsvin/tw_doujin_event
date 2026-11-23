@@ -87,11 +87,11 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 **驗證碼只存在於第二層。** 人工審核不發驗證碼：管理者看的是 `evidence_url` 與 `evidence_note`，判斷依據是人工核對。介面在人工審核路徑不得索取驗證碼。
 
-人工審核也可由持有所屬候選活動有效 Owner／Editor grant 的主辦人員，在 `/organizer` 活動內「社團管理」面板的社團認領完成。僅開放當前部署已公開活動的待審認領核准／婉拒，範圍與寫入授權重查依[主辦工作區契約](./organizer-workspace.md#活動內社團認領審核)；撤銷已通過的認領限網站管理者與該活動的 Owner，Editor 不可撤銷。主辦裁決與管理者裁決共用狀態與唯一擁有者約束，audit 分別記為 `claim.organizer_approve／reject／revoke` 與 `claim.admin_approve／reject／revoke`。
+人工審核也可由所屬候選活動的有效成員，在 `/organizer` 活動內「社團管理」面板的社團認領完成。僅開放當前部署已公開活動的待審認領核准／婉拒，範圍與寫入授權重查依[主辦工作區契約](./organizer-workspace.md#活動內社團認領審核)；撤銷已通過的認領限網站管理者與該活動的 Owner，Editor 不可撤銷。主辦裁決與管理者裁決共用狀態與唯一擁有者約束，audit 分別記為 `claim.organizer_approve／reject／revoke` 與 `claim.admin_approve／reject／revoke`。
 
 資料庫層保證**一個社團同時只有一位擁有者**。所有認領與撤下決策寫入稽核記錄。
 
-已公開活動的有效 Owner／Editor 也可撤下所屬活動的社團補充資料；名稱搜尋、選取與確認面板與 `/admin` 共用，寫入／R2 清除及清除失敗重試的活動隔離依[主辦工作區契約](./organizer-workspace.md#活動內撤下社團補充資料)。撤下不撤銷認領，也不修改主辦快照的攤位資料。`GET /api/admin/overrides?q=...&event=...` 為管理者的名稱搜尋，`POST` 沿用管理者撤下入口。
+已公開活動的有效成員也可撤下所屬活動的社團補充資料；名稱搜尋、選取與確認面板與 `/admin` 共用，寫入／R2 清除及清除失敗重試的活動隔離依[主辦工作區契約](./organizer-workspace.md#活動內撤下社團補充資料)。撤下不撤銷認領，也不修改主辦快照的攤位資料。`GET /api/admin/overrides?q=...&event=...` 為管理者的名稱搜尋，`POST` 沿用管理者撤下入口。
 
 **驗證碼遺失或過期由社團自己解決。** 明文驗證碼不保存（只留 hash），所以遺失後沒有可再顯示的東西；恢復路徑是**撤回自己仍在審核中的認領，再重新送出**，重送會發新的驗證碼。這條路不需要管理者介入。
 

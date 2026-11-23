@@ -31,7 +31,7 @@ try {
   });
   await page.getByRole("button", { name: "建立新活動", exact: true }).click();
   await page.getByLabel("暫定名稱", { exact: true }).fill("分類目錄驗收");
-  await page.getByLabel("負責人 Email", { exact: true }).fill(ADMIN);
+  await page.getByLabel("成員 Email", { exact: true }).fill(ADMIN);
   await page.getByRole("button", { name: "建立並邀請", exact: true }).click();
   // Requirements are visible before the first save, without red errors.
   for (const target of ["event.name", "event.id", "officialSource.url", "references.categoryCatalog"]) {

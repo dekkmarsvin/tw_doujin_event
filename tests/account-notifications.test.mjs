@@ -384,31 +384,6 @@ test("application result reaches applicant without a grant and approval is one c
   assert.ok(sent.every(m => !m.text.includes("private note")));
 });
 
-test("grant acceptance, role changes, self revocation and invitation-only cancellation", async () => {
-  const admin = await candidate();
-  const editor = await repo.upsertAccount("editor@example.test", now);
-  await repo.manageOrganizerCollaborator({ role: "editor", candidateId: "candidate", email: "editor@example.test", action: "invite", actorAccountId: owner, now });
-  const before = (await items()).length;
-  await repo.manageOrganizerCollaborator({ role: "editor", candidateId: "candidate", email: "editor@example.test", action: "resend", actorAccountId: owner, now });
-  assert.equal((await items()).length, before);
-  await Promise.all([repo.acceptOrganizerInvitations({ accountId: editor, email: "editor@example.test", now }), repo.acceptOrganizerInvitations({ accountId: editor, email: "editor@example.test", now })]);
-  assert.equal((await items("kind = 'member.granted'")).length, 3, "initial owner plus editor and existing owner");
-  await repo.manageOrganizerOwner({ candidateId: "candidate", email: "editor@example.test", action: "invite", actorAccountId: admin, now });
-  await repo.acceptOrganizerInvitations({ accountId: editor, email: "editor@example.test", now });
-  assert.equal((await items("kind = 'member.granted'")).length, 5);
-  const result = await repo.manageOrganizerOwner({ candidateId: "candidate", email: "editor@example.test", action: "revoke", actorAccountId: editor, now });
-  assert.equal(result.ok, true);
-  assert.equal((await items("kind = 'member.revoked'")).length, 2);
-  await tick();
-  const own = sent.filter(mail => mail.to === "editor@example.test");
-  assert.equal(own.length, 1, "lost grant cancels old grants, but own revocation remains");
-  assert.match(own[0].subject, /曾被移除/); assert.doesNotMatch(own[0].text, /candidate=/);
-  assert.ok(sent.every(mail => !mail.text.includes("內容版本")), "permission notices carry no content version");
-  await repo.manageOrganizerCollaborator({ role: "editor", candidateId: "candidate", email: "pending@example.test", action: "invite", actorAccountId: owner, now });
-  await repo.manageOrganizerCollaborator({ role: "editor", candidateId: "candidate", email: "pending@example.test", action: "revoke", actorAccountId: owner, now });
-  assert.equal((await items("kind = 'member.revoked'")).length, 2);
-});
-
 test("review results and actual published gate; latest result cancels obsolete progress", async () => {
   const { admin, publication } = await submitted();
   const input = { candidateId: "candidate", expectedVersion: 1, decision: "approve", actorAccountId: admin, publication, now };

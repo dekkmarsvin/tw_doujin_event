@@ -146,7 +146,7 @@ export function AdminAccountPanel({ initialEmail, initialCircle, onSearchChange,
       </section>
       <section className={ui.detailSection} aria-labelledby="account-workspaces-heading"><h4 id="account-workspaces-heading">活動工作區</h4>
         {detail.organizerGrants.length ? <ul className={ui.detailList}>{detail.organizerGrants.map(grant => <li key={grant.candidateId}>
-          <div><strong>{grant.name}</strong><span>{grant.role === "owner" ? "負責人" : "協作者"}{grant.edition ? `・第 ${grant.edition} 版` : ""}</span></div>
+          <div><strong>{grant.name}</strong><span>成員{grant.edition ? `・第 ${grant.edition} 版` : ""}</span></div>
           <a href={grant.membersHref}>管理成員</a>
         </li>)}</ul> : <p className={styles.muted}>無活動工作區權限。</p>}
       </section>

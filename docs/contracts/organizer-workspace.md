@@ -1,5 +1,7 @@
 # 主辦單位工作區契約
 
+> **角色（#546 階段 5b）**：Owner／Editor 已合併為單一「活動成員」，資料庫仍以 `owner` 保存。每位成員都能編輯、送審、管理成員、撤銷認領、重試發布與開始修正；網站管理者負責核准。下文提到 Editor 的限制已不適用。
+
 > **凍結（2026-11-21）**：描述舊後端，後端依 [#546](https://github.com/dekkmarsvin/tw_doujin_event/issues/546) 重寫後隨對應程式刪除。只用來理解現況，不作為新需求的依據。
 
 **實作**：`app/organizer-status-summary.ts`、`app/organizer/organizer-workspace-header.tsx`、`app/organizer/use-organizer-pending-claims.ts`、`app/organizer/organizer-takedown-panel.tsx`

@@ -13,7 +13,7 @@ const rows: readonly (readonly [string, string, string, string])[] = [
   ["account_not_found", "找不到帳號。", "Account not found.", "アカウントが見つかりません。"],
   ["account_delete_confirmation", "請輸入完整 email 確認刪除。", "Enter your full email address to confirm deletion.", "削除を確認するため、メールアドレスをすべて入力してください。"],
   ["admin_account_delete_blocked", "管理者需先移出管理名單。", "Another administrator must remove your administrator role first.", "先に別の管理者が管理者権限を解除する必要があります。"],
-  ["account_sole_owner", "請先移轉活動負責人權限。", "Transfer your event ownership before deleting your account.", "アカウントを削除する前に、イベントの責任者権限を移譲してください。"],
+  ["account_sole_owner", "請先邀請另一位活動成員，再刪除帳號。", "Invite another member to your event before deleting your account.", "アカウントを削除する前に、イベントに別のメンバーを招待してください。"],
   ["account_files_unavailable", "目前無法刪除帳號檔案，請稍後再試。", "Account files cannot be deleted right now. Please try again later.", "現在アカウントのファイルを削除できません。しばらくしてから再試行してください。"],
   ["event_not_found", "找不到這個活動。", "Event not found.", "イベントが見つかりません。"],
   ["circle_not_found", "找不到這個社團。", "Circle not found.", "サークルが見つかりません。"],

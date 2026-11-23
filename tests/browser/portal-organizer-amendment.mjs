@@ -189,14 +189,14 @@ try {
   assert.equal(await page.getByRole("button", { name: "送出審閱", exact: true }).isDisabled(), true);
   await journey.capture(page, "organizer-amendment-publication-not-enabled");
   await page.close();
-  for (const role of ["editor", "admin"]) {
+  for (const role of ["owner", "admin"]) {
     const routes = fixtureRoutes(role);
     const actor = await journey.page({ url: `${base}/organizer`, routes: routes.routes, viewport: { width: 1100, height: 900 } });
     await actor.getByRole("heading", { name: "檢查與發布", exact: true }).waitFor();
-    assert.equal(await actor.getByRole("button", { name: "開始修正已發布活動", exact: true }).count(), role === "admin" ? 1 : 0);
+    assert.equal(await actor.getByRole("button", { name: "開始修正已發布活動", exact: true }).count(), 1, "every member and admin can start a correction");
     await journey.capture(actor, `organizer-amendment-${role}-entry`); await actor.close();
   }
-  const editorRoutes = fixtureRoutes("editor", true);
+  const editorRoutes = fixtureRoutes("owner", true);
   const editor = await journey.page({ url: `${base}/organizer`, routes: editorRoutes.routes, viewport: { width: 1100, height: 900 } });
   await editor.getByRole("heading", { name: "已發布活動修正", exact: true }).waitFor();
   assert.equal(await editor.getByRole("combobox", { name: "變動類型", exact: true }).isEnabled(), true);

@@ -148,7 +148,7 @@ test("digests keep each destination and count distinct circles in the subject", 
   assert.equal(twoCircles.subject, "場刊 Map｜Circle details updated for 2 circles");
 });
 
-for (const [inviterRole, label] of [["admin", "網站管理者"], ["owner", "活動負責人"]]) {
+for (const [inviterRole, label] of [["admin", "網站管理者"], ["owner", "活動成員"]]) {
   test(`invitation facts identify the event and ${inviterRole} in both alternatives`, () => {
     const eventName = '星塵 <&"交流會 ' + '長名稱'.repeat(30);
     const href = `${ORIGIN}/organizer?login=Invitation_context`;

@@ -3,7 +3,7 @@ export type AdminAccountOrganizerGrant = {
   eventId: string | null;
   name: string;
   edition: number;
-  role: "owner" | "editor";
+  role: "owner";
   membersHref: string;
 };
 

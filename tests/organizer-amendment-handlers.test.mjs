@@ -43,7 +43,7 @@ beforeEach(async () => {
   stranger = (await actor("stranger")).cookie;
   await repo.createOrganizerCandidate({ id: "source", tentativeName: "測試活動", ownerEmail: "owner@example.test", createdByAccountId: adminActor.id, draftJson: JSON.stringify(data.baseline.draft), now: data.now });
   await db.prepare("UPDATE organizer_event_candidates SET event_id = 'event-alpha', event_id_locked_at = ?1, status = 'published', published_version = 1, published_at = ?1 WHERE id = 'source'").bind(data.now).run();
-  for (const [person, role] of [[ownerActor, "owner"], [editorActor, "editor"]]) await db.prepare(`INSERT INTO organizer_event_grants
+  for (const [person, role] of [[ownerActor, "owner"], [editorActor, "owner"]]) await db.prepare(`INSERT INTO organizer_event_grants
     (id,candidate_id,account_id,role,granted_by,granted_at) VALUES (?1,'source',?2,?3,?4,?5)`)
     .bind(crypto.randomUUID(), person.id, role, adminActor.id, data.now).run();
   await db.prepare(`INSERT INTO organizer_submission_snapshots (id,candidate_id,candidate_version,snapshot_json,sha256,created_by,created_at)
@@ -120,7 +120,7 @@ test("baseline errors distinguish version conflicts from unavailable upstreams w
 });
 
 test("baseline reads follow authorization; callers cannot supply baseline content or use a stale source", async () => {
-  for (const [cookie, status] of [[null, 401], [editor, 403], [stranger, 404]]) {
+  for (const [cookie, status] of [[null, 401], [stranger, 404]]) {
     assert.equal((await handlers.createOrganizerAmendment(request("POST", { expectedVersion: 1 }, cookie), "source")).status, status);
   }
   assert.equal((await handlers.createOrganizerAmendment(request("POST", { expectedVersion: 1, baseline: {} }, owner), "source")).status, 400);
@@ -283,7 +283,6 @@ test("AMEND validation, preview, immutable submission and unique approval use th
   const preview = await (await handlers.previewOrganizerCandidate(request("POST", {}, owner), id)).json();
   assert.deepEqual(preview.preview.placements.map((row) => [row.boothCode, row.circleName]), [["S01", "甲社"], ["S02", "確認接手社"]]);
   assert.equal(preview.preview.maps.length, 1);
-  assert.equal((await submit(id, 2, editor)).status, 403);
   assert.equal((await submit(id, 1)).status, 409);
   const response = await submit(id);
   assert.equal(response.status, 200, await response.clone().text());
@@ -308,7 +307,6 @@ test("AMEND validation, preview, immutable submission and unique approval use th
   assert.equal((await review(id)).status, 200);
   assert.deepEqual(dispatched, [job.id], "duplicate approval must not dispatch again");
   dispatchHook = async () => {};
-  assert.equal((await handlers.adminRetryOrganizerPublication(request("POST", {}, editor), job.id)).status, 403);
   const retried = await handlers.adminRetryOrganizerPublication(request("POST", {}, owner), job.id);
   assert.equal(retried.status, 200, await retried.clone().text());
   const same = await repo.getLatestOrganizerPublicationJob(id);

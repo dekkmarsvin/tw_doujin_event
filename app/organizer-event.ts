@@ -1,7 +1,8 @@
 import { EVENT_ALIAS_MAX_COUNT, EVENT_ALIAS_MAX_LENGTH, eventAliasProblems } from "./event-aliases";
 import { parseEventImage, type EventImage } from "./event-image";
 
-export type OrganizerRole = "owner" | "editor";
+/** An event member; every member has the same rights (#546). */
+export type OrganizerRole = "owner";
 
 export type OrganizerCandidateStatus =
   | "draft"

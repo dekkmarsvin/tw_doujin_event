@@ -803,7 +803,7 @@ test("saved cross-day imports expose the shared circle grouping in Reader previe
   assert.ok((await repository.getOrganizerImport(candidateId)).rows.every(row => row.stable_key === null), "derived grouping never manufactures internal identifiers");
 });
 
-test("owner and editor use one validated optimistic workflow while only admin approves", async (t) => {
+test("members use one validated optimistic workflow while only admin approves", async (t) => {
   const adminCookie = await signIn("admin@example.test");
   const created = await handlers.adminCreateOrganizerCandidate(request(
     "/api/admin/organizer/events", "POST",
@@ -902,10 +902,6 @@ test("owner and editor use one validated optimistic workflow while only admin ap
   const preview = await handlers.previewOrganizerCandidate(request(`/api/organizer/events/${candidateId}/preview`, "POST", {}, ownerCookie), candidateId);
   assert.equal(preview.status, 200);
   assert.deepEqual((await preview.json()).preview.placements.map((row) => [row.boothCode, row.circleName]), [["A01", "甲社"], ["A02", "甲社"]]);
-  const editorSubmit = await handlers.submitOrganizerCandidate(request(
-    `/api/organizer/events/${candidateId}/submit`, "POST", { expectedVersion: 5 }, editorCookie,
-  ), candidateId);
-  assert.equal(editorSubmit.status, 403);
 
   const submitted = await handlers.submitOrganizerCandidate(request(
     `/api/organizer/events/${candidateId}/submit`, "POST", { expectedVersion: 5 }, ownerCookie,
@@ -1001,7 +997,6 @@ test("owner and editor use one validated optimistic workflow while only admin ap
     metadata: { data_pr_number: 4, data_head_sha: "b".repeat(40), data_merge_sha: "c".repeat(40) } });
   await repository.releaseOrganizerPublicationLease(jobId, lease.token);
   const retryPath = `/api/organizer/publications/${jobId}/retry`;
-  assert.equal((await handlers.adminRetryOrganizerPublication(request(retryPath, "POST", {}, editorCookie), jobId)).status, 403);
   const retried = await handlers.adminRetryOrganizerPublication(request(retryPath, "POST", {}, ownerCookie), jobId);
   assert.equal(retried.status, 200);
   assert.equal((await retried.json()).step, "preparing_main");
@@ -1345,14 +1340,14 @@ test("organizer invitations are metered like every other login link", async () =
   for (let index = 0; index < 12; index += 1) statuses.push((await invite(`editor${index}@example.test`)).status);
   assert.equal(statuses.filter((status) => status === 200).length, 10);
   assert.deepEqual([...new Set(statuses.filter((status) => status !== 200))], [429]);
-  // Ten editor links, plus the one the admin minted for the Owner itself.
+  // Ten member links, plus the one the admin minted for the first member.
   assert.equal(sent.filter((mail) => mail.subject.includes("主辦工作區邀請")).length, 11);
 
   // A refused invitation leaves no row claiming someone was invited.
   const pending = await database.prepare(
-    "SELECT COUNT(*) AS total FROM organizer_event_invitations WHERE candidate_id = ?1 AND role = 'editor'",
+    "SELECT COUNT(*) AS total FROM organizer_event_invitations WHERE candidate_id = ?1 AND role = 'owner'",
   ).bind(candidateId).first();
-  assert.equal(pending.total, 10);
+  assert.equal(pending.total, 11, "ten members plus the first member the admin invited");
 });
 
 test("an invitation flood cannot lock the target out of their own sign-in", async () => {
@@ -1681,40 +1676,6 @@ async function invitationFixture() {
   return { cookie, candidateId, manage };
 }
 
-test("editor invitations cannot downgrade an ordinary Owner through login", async () => {
-  const adminCookie = await signIn("admin@example.test");
-  const created = await handlers.adminCreateOrganizerCandidate(request("/api/admin/organizer/events", "POST",
-    { tentativeName: "Owner preservation", ownerEmail: "owner@example.test" }, adminCookie));
-  const { candidateId } = await created.json();
-  const ownerCookie = await signIn("owner@example.test", "organizer");
-  const path = `/api/organizer/events/${candidateId}/collaborators`;
-  const manage = action => handlers.manageOrganizerCollaborators(request(path, "POST",
-    { email: "owner@example.test", role: "editor", action }, ownerCookie), candidateId);
-  const sentBefore = sent.length;
-  const initial = await manage("invite");
-  assert.equal(initial.status, 409);
-  assert.equal((await initial.json()).error, "這個信箱已是活動負責人，不需要再邀請為協作者。");
-  assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM organizer_event_invitations WHERE candidate_id = ?1 AND role = 'editor'")
-    .bind(candidateId).first()).n, 0);
-  const owner = await database.prepare("SELECT id FROM accounts WHERE email = 'owner@example.test'").first();
-  await database.prepare(`INSERT INTO organizer_event_invitations
-    (id, candidate_id, email, role, invited_by, created_at) VALUES ('legacy-editor', ?1, 'owner@example.test', 'editor', ?2, ?3)`)
-    .bind(candidateId, owner.id, now - 1).run();
-  for (const action of ["invite", "resend"]) {
-    const response = await manage(action);
-    assert.equal(response.status, 409);
-    assert.match((await response.json()).error, /已是活動負責人/);
-  }
-  assert.equal(sent.length, sentBefore, "rejected Editor invitations do not send mail");
-  const newCookie = await signIn("owner@example.test", "organizer");
-  const detail = await handlers.getOrganizerCandidate(request(`/api/organizer/events/${candidateId}`, "GET", undefined, newCookie), candidateId);
-  assert.equal(detail.status, 200);
-  assert.equal((await detail.json()).event.role, "owner");
-  assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM organizer_event_grants WHERE candidate_id = ?1 AND role = 'owner' AND revoked_at IS NULL")
-    .bind(candidateId).first()).n, 1);
-  assert.equal((await database.prepare("SELECT accepted_at FROM organizer_event_invitations WHERE id = 'legacy-editor'").first()).accepted_at, now);
-});
-
 test("ordinary owners manage owners only within their candidate without acquiring review authority", async () => {
   const adminCookie = await signIn("admin@example.test");
   const created = await handlers.adminCreateOrganizerCandidate(request("/api/admin/organizer/events", "POST",
@@ -1729,16 +1690,16 @@ test("ordinary owners manage owners only within their candidate without acquirin
   const invitation = await database.prepare("SELECT id FROM organizer_event_invitations WHERE candidate_id = ?1 AND email = ?2")
     .bind(candidateId, "co-owner@example.test").first();
   for (const part of ["text", "html"]) {
-    assert.match(sent.at(-1)[part], /活動負責人/);
+    assert.match(sent.at(-1)[part], /活動成員/);
     assert.doesNotMatch(sent.at(-1)[part], /網站管理者|owner@example\.test/);
   }
   assert.equal((await manage("co-owner@example.test", "resend")).status, 200);
-  assert.match(sent.at(-1).text, /活動負責人/);
+  assert.match(sent.at(-1).text, /活動成員/);
   assert.equal((await database.prepare("SELECT id FROM organizer_event_invitations WHERE candidate_id = ?1 AND email = ?2")
     .bind(candidateId, "co-owner@example.test").first()).id, invitation.id);
   const lastOwner = await manage("owner@example.test", "revoke");
   assert.equal(lastOwner.status, 409, "a pending invitation cannot replace the last accepted owner");
-  assert.match((await lastOwner.json()).error, /至少需要一位負責人/);
+  assert.match((await lastOwner.json()).error, /至少需要一位成員/);
 
   const coOwnerCookie = await signIn("co-owner@example.test", "organizer");
   assert.equal((await handlers.getOrganizerCandidate(request(`/api/organizer/events/${candidateId}`, "GET", undefined, coOwnerCookie), candidateId)).status, 200);
@@ -1750,15 +1711,12 @@ test("ordinary owners manage owners only within their candidate without acquirin
   const pendingCookie = await signIn("pending-owner@example.test", "organizer");
   assert.equal((await handlers.getOrganizerCandidate(request(`/api/organizer/events/${candidateId}`, "GET", undefined, pendingCookie), candidateId)).status, 404);
 
-  assert.equal((await manage("member@example.test", "invite", ownerCookie, "editor")).status, 200);
-  const editorCookie = await signIn("member@example.test", "organizer");
   const other = await handlers.adminCreateOrganizerCandidate(request("/api/admin/organizer/events", "POST",
     { tentativeName: "Other scope", ownerEmail: "other-owner@example.test" }, adminCookie));
   const otherId = (await other.json()).candidateId;
   const otherCookie = await signIn("other-owner@example.test", "organizer");
   const beforeDenied = sent.length;
   for (const action of ["invite", "resend", "revoke"]) {
-    assert.equal((await manage("co-owner@example.test", action, editorCookie)).status, 403);
     assert.equal((await manage("co-owner@example.test", action, otherCookie)).status, 404);
     assert.equal((await handlers.manageOrganizerCollaborators(request(`/api/organizer/events/${otherId}/collaborators`, "POST",
       { email: "other-owner@example.test", role: "owner", action }, ownerCookie), otherId)).status, 404);
@@ -1775,7 +1733,7 @@ test("ordinary owners manage owners only within their candidate without acquirin
   assert.ok(audits.every(row => row.actor_role === "organizer_owner"));
 });
 
-for (const role of ["editor", "owner"]) {
+for (const role of ["owner"]) {
   test(`${role} invitation failure keeps the invitation, cleans only its token, and can resend`, async () => {
     const { candidateId, manage } = await invitationFixture();
     const email = "invited@example.test";
@@ -1803,7 +1761,7 @@ for (const role of ["editor", "owner"]) {
     assert.equal(await repository.organizerRole(candidateId, account.id), role);
     assert.equal((await manage(role, email, "resend")).status, 409);
     const active = await manage(role, email, "invite");
-    assert.equal(active.status, 409); assert.match((await active.json()).error, /已具備/);
+    assert.equal(active.status, 409); assert.match((await active.json()).error, /已是活動成員/);
     assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE subject_id = ?1 AND action = ?2").bind(candidateId, `organizer_event.${role}_resend`).first()).n, 1);
   });
 }
@@ -1827,12 +1785,11 @@ test("resend rejects wrong roles, revoked or missing invitations, other events a
     { tentativeName: "Other invitation scope", ownerEmail: "admin@example.test" }, cookie));
   const otherId = (await other.json()).candidateId;
   const outsider = await signIn("outsider@example.test", "organizer");
-  for (const role of ["owner", "editor"]) {
+  for (const role of ["owner"]) {
     const email = `${role}@example.test`;
     assert.equal((await manage(role, email, "resend")).status, 409);
     assert.equal((await manage(role, email, "invite")).status, 200);
     const before = sent.length;
-    assert.equal((await manage(role === "owner" ? "editor" : "owner", email, "resend")).status, 409);
     assert.equal((await manage(role, email, "resend", handlers, outsider)).status, 404);
     assert.equal((await manage(role, email, "resend", handlers, cookie, otherId)).status, 409);
     assert.equal(sent.length, before);
@@ -1840,18 +1797,13 @@ test("resend rejects wrong roles, revoked or missing invitations, other events a
     assert.equal((await manage(role, email, "resend")).status, 409);
     assert.equal(sent.length, before);
   }
-  await manage("editor", "member@example.test", "invite");
-  const editorCookie = await signIn("member@example.test", "organizer");
-  const before = sent.length;
-  for (const role of ["owner", "editor"]) assert.equal((await manage(role, "someone@example.test", "resend", handlers, editorCookie)).status, 403);
-  assert.equal(sent.length, before);
   assert.equal((await repository.getOrganizerCandidate(candidateId)).current_version, 1);
 });
 
 test("preview recipient preflight cannot leave an invitation or token and preserves existing invitations", async () => {
   const { candidateId, manage } = await invitationFixture();
   const denied = createCirclePortalHandlers({ ...handlerOptions, mailRecipientAllowed: () => false });
-  for (const role of ["owner", "editor"]) {
+  for (const role of ["owner"]) {
     const email = `${role}@example.test`;
     assert.equal((await manage(role, email, "invite", denied)).status, 400);
     assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM organizer_event_invitations WHERE candidate_id = ?1 AND email = ?2").bind(candidateId, email).first()).n, 0);
@@ -1867,7 +1819,7 @@ test("resending old invitations is charged to the current sender's hourly budget
   const { candidateId, manage } = await invitationFixture();
   const admin = await database.prepare("SELECT id FROM accounts WHERE email = 'admin@example.test'").first();
   for (let i = 0; i < 11; i++) {
-    await repository.manageOrganizerCollaborator({ candidateId, actorAccountId: admin.id, email: `old${i}@example.test`, role: "editor", action: "invite", now: now - 2 * 3600000 });
+    await repository.manageOrganizerOwner({ candidateId, actorAccountId: admin.id, email: `old${i}@example.test`, role: "editor", action: "invite", now: now - 2 * 3600000 });
   }
   const previousNow = now;
   try {
@@ -1907,9 +1859,9 @@ test("invitation mail uses the current server-side event name and the inviter's 
   assert.match(sent.at(-1).text, /邀請者：網站管理者/);
   assert.match(sent.at(-1).html, /Invitation recovery/);
   assert.doesNotMatch(sent.at(-1).text + sent.at(-1).html, /admin@example\.test/);
-  for (const role of ["editor", "owner"]) {
+  for (const role of ["owner"]) {
     const email = `context-${role}@example.test`;
-    const label = role === "owner" ? "網站管理者" : "活動負責人";
+    const label = "活動成員";
     const name = `活動 ${role}`;
     await database.prepare("UPDATE organizer_event_candidates SET tentative_name = ?1 WHERE id = ?2").bind(name, candidateId).run();
     const initial = await handlers.manageOrganizerCollaborators(request(`/api/organizer/events/${candidateId}/collaborators`, "POST",

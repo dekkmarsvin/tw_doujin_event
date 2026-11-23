@@ -32,7 +32,7 @@ try {
         if (body.email === session.email) canAccess = false;
         return route.fulfill({ json: { ok: true, result: "revoked" } });
       }
-      const delivery = body.action === "resend" ? "sent" : body.role === "owner" ? "unknown" : "failed";
+      const delivery = body.action === "resend" ? "sent" : body.email.startsWith("unknown") ? "unknown" : "failed";
       return route.fulfill({ json: { ok: true, result: body.action === "resend" ? "resent" : "invited",
         invitationSent: delivery === "sent", invitationDelivery: delivery } });
     });
@@ -44,27 +44,28 @@ try {
   };
   await page.getByRole("heading", { name: "檢查與發布", exact: true }).waitFor();
   await openMembers();
-  for (const [role, label, button, failure] of [
-    ["editor", "協作者", "邀請協作者", "邀請已建立，邀請信未寄出。請按「重寄邀請信」。"],
-    ["owner", "負責人", "新增負責人", "邀請已建立，無法確認邀請信是否寄出。你可以重寄邀請信。"],
+  const memberSection = page.locator("div").filter({ has: page.getByRole("heading", { name: "成員", exact: true }) }).last();
+  const memberEmail = () => page.getByRole("textbox", { name: "成員 Email", exact: true });
+  for (const [email, failure] of [
+    ["failed@example.test", "邀請已建立，邀請信未寄出。請按「重寄邀請信」。"],
+    ["unknown@example.test", "邀請已建立，無法確認邀請信是否寄出。你可以重寄邀請信。"],
   ]) {
-    const section = page.locator("div").filter({ has: page.getByRole("heading", { name: label, exact: true }) }).last();
-    await page.getByRole("textbox", { name: `${label} Email`, exact: true }).fill(`${role}@example.test`);
-    await section.getByRole("button", { name: button, exact: true }).click();
-    await section.getByRole("status").getByText(failure, { exact: true }).waitFor();
-    assert.equal((actions.at(-1).role ?? "editor"), role);
-    await journey.capture(page, `invitation-${role}-failure`);
+    await memberEmail().fill(email);
+    await memberSection.getByRole("button", { name: "邀請成員", exact: true }).click();
+    await memberSection.getByRole("status").getByText(failure, { exact: true }).waitFor();
+    assert.deepEqual(actions.at(-1), { email, action: "invite" });
+    await journey.capture(page, `invitation-${email.split("@")[0]}`);
     // A pending invitation must remain recoverable after leaving the page.
     await page.reload();
     await openMembers();
-    await page.getByRole("textbox", { name: `${label} Email`, exact: true }).fill(`${role}@example.test`);
-    await section.getByRole("button", { name: "重寄邀請信", exact: true }).click();
-    await section.getByRole("status").getByText("邀請信已寄出。", { exact: true }).waitFor();
-    assert.deepEqual(actions.at(-1), { email: `${role}@example.test`, ...(role === "owner" ? { role } : {}), action: "resend" });
-    await journey.capture(page, `invitation-${role}-resent`);
+    await memberEmail().fill(email);
+    await memberSection.getByRole("button", { name: "重寄邀請信", exact: true }).click();
+    await memberSection.getByRole("status").getByText("邀請信已寄出。", { exact: true }).waitFor();
+    assert.deepEqual(actions.at(-1), { email, action: "resend" });
+    await journey.capture(page, `invitation-${email.split("@")[0]}-resent`);
   }
-  assert.equal(actions.length, 4, "each click sends exactly one collaborator action");
-  // An ordinary owner manages their own event's owners but never sees the
+  assert.equal(actions.length, 4, "each click sends exactly one member action");
+  // A member manages their own event's members but never sees the
   // administrator's review form, even after the event has been submitted.
   session = { ...session, email: "organizer@example.test", isAdmin: false };
   detail.event.status = "submitted";
@@ -75,16 +76,15 @@ try {
   assert.equal(await page.getByRole("textbox", { name: "審閱說明" }).count(), 0);
   assert.equal(await page.getByRole("button", { name: "核准並發布", exact: true }).count(), 0);
   await openMembers();
-  const ownerSection = page.locator("div").filter({ has: page.getByRole("heading", { name: "負責人", exact: true }) }).last();
-  await page.getByRole("textbox", { name: "負責人 Email", exact: true }).fill("co-owner@example.test");
-  await ownerSection.getByRole("button", { name: "新增負責人", exact: true }).click();
-  await ownerSection.getByRole("status").getByText("邀請已建立，無法確認邀請信是否寄出。你可以重寄邀請信。", { exact: true }).waitFor();
-  await ownerSection.getByRole("button", { name: "重寄邀請信", exact: true }).click();
-  await ownerSection.getByRole("status").getByText("邀請信已寄出。", { exact: true }).waitFor();
-  await ownerSection.getByRole("button", { name: "移除此負責人", exact: true }).click();
-  await ownerSection.getByRole("status").getByText("已移除這位負責人。", { exact: true }).waitFor();
-  assert.deepEqual(actions.slice(-3).map(({ role, action }) => [role, action]), [["owner", "invite"], ["owner", "resend"], ["owner", "revoke"]]);
-  await page.getByRole("textbox", { name: "負責人 Email", exact: true }).fill("");
+  await memberEmail().fill("co-member@example.test");
+  await memberSection.getByRole("button", { name: "邀請成員", exact: true }).click();
+  await memberSection.getByRole("status").getByText("邀請已建立，邀請信未寄出。請按「重寄邀請信」。", { exact: true }).waitFor();
+  await memberSection.getByRole("button", { name: "重寄邀請信", exact: true }).click();
+  await memberSection.getByRole("status").getByText("邀請信已寄出。", { exact: true }).waitFor();
+  await memberSection.getByRole("button", { name: "移除此成員", exact: true }).click();
+  await memberSection.getByRole("status").getByText("已移除這位成員。", { exact: true }).waitFor();
+  assert.deepEqual(actions.slice(-3).map(({ action }) => action), ["invite", "resend", "revoke"]);
+  await memberEmail().fill("");
   await journey.capture(page, "ordinary-owner-submitted");
   await page.locator("section").filter({ has: page.getByRole("heading", { name: "成員與權限", exact: true }) })
     .last().screenshot({ path: `${output}/ordinary-owner-members-panel.png` });
@@ -92,15 +92,6 @@ try {
   await page.getByRole("heading", { name: "請改用桌機", exact: true }).waitFor();
   await journey.capture(page, "organizer-mobile-desktop-required");
   await page.setViewportSize({ width: 1440, height: 900 });
-
-  detail.event.role = "editor";
-  await page.reload();
-  await page.getByRole("heading", { name: "檢查與發布", exact: true }).waitFor();
-  assert.equal(await page.getByRole("heading", { name: "網站管理者審閱", exact: true }).count(), 0);
-  await openMembers();
-  assert.equal(await page.getByRole("heading", { name: "負責人", exact: true }).count(), 0);
-  assert.equal(await page.getByRole("button", { name: "邀請協作者", exact: true }).isDisabled(), true);
-  await journey.capture(page, "editor-submitted");
 
   session = { ...session, isAdmin: true };
   detail.event.role = "admin";
@@ -112,10 +103,8 @@ try {
   await page.locator("section").filter({ has: page.getByRole("heading", { name: "檢查與發布", exact: true }) })
     .last().screenshot({ path: `${output}/admin-review-panel.png` });
   await openMembers();
-  assert.equal(await page.getByRole("button", { name: "新增負責人", exact: true }).isEnabled(), true);
-  // ADR-0080: an admin without the Owner grant also manages collaborators and submits.
-  assert.equal(await page.getByRole("button", { name: "邀請協作者", exact: true }).isEnabled(), true);
-  assert.equal(await page.getByText(/管理成員需要負責人身分/).count(), 0);
+  // ADR-0080: an admin without a member grant also manages members and submits.
+  assert.equal(await page.getByRole("button", { name: "邀請成員", exact: true }).isEnabled(), true);
   detail.event.status = "draft";
   await page.reload();
   await page.getByRole("heading", { name: "檢查與發布", exact: true }).waitFor();
@@ -130,8 +119,8 @@ try {
   await page.getByRole("heading", { name: "檢查與發布", exact: true }).waitFor();
   assert.equal(await page.getByRole("button", { name: "送出審閱", exact: true }).isEnabled(), true);
   await openMembers();
-  await page.getByRole("textbox", { name: "負責人 Email", exact: true }).fill(session.email);
-  await ownerSection.getByRole("button", { name: "移除此負責人", exact: true }).click();
+  await memberEmail().fill(session.email);
+  await memberSection.getByRole("button", { name: "移除此成員", exact: true }).click();
   await page.getByRole("heading", { name: "成員與權限", exact: true }).waitFor({ state: "hidden" });
   assert.equal(await page.getByText("找不到活動。", { exact: true }).count(), 0);
   await journey.capture(page, "owner-leaves-activity");
@@ -178,7 +167,7 @@ try {
     assert.deepEqual(requestedLink.destination, { candidate: "invitation-fixture", section: "members" });
     await members.goto(`${base}/organizer?${new URLSearchParams({ ...requestedLink.destination, login: "member-login-token" })}`);
     await members.getByRole("heading", { name: "成員與權限", exact: true }).waitFor();
-    assert.equal(await members.getByRole("textbox", { name: "協作者 Email", exact: true }).isEnabled(), true);
+    assert.equal(await members.getByRole("textbox", { name: "成員 Email", exact: true }).isEnabled(), true);
     assert.equal(new URL(members.url()).searchParams.get("candidate"), "invitation-fixture");
     assert.equal(new URL(members.url()).searchParams.get("section"), "members");
     assert.equal(new URL(members.url()).searchParams.has("login"), false);
@@ -194,7 +183,7 @@ try {
   await journey.capture(members, "members-exact-destination-after-expiry");
   await members.setViewportSize({ width: 390, height: 844 });
   await members.getByText("成員管理請改用桌機。請在桌機開啟同一個連結，接續這個工作區。", { exact: true }).waitFor();
-  assert.equal(await members.getByRole("textbox", { name: "協作者 Email", exact: true }).count(), 0);
+  assert.equal(await members.getByRole("textbox", { name: "成員 Email", exact: true }).count(), 0);
   assert.equal(new URL(members.url()).searchParams.get("candidate"), "invitation-fixture");
   assert.equal(new URL(members.url()).searchParams.get("section"), "members");
   await journey.capture(members, "members-exact-destination-mobile");

@@ -83,7 +83,7 @@ try {
   } });
   await target.getByRole("heading", { name: "檢查與發布", exact: true }).waitFor();
   await target.getByRole("button", { name: "成員與權限", exact: true }).click();
-  const draft = target.getByRole("textbox", { name: "協作者 Email", exact: true });
+  const draft = target.getByRole("textbox", { name: "成員 Email", exact: true });
   await draft.fill("unsaved@example.test");
   await target.getByRole("button", { name: "通知設定", exact: true }).click();
   await target.getByRole("dialog").getByLabel("社團內容更新").waitFor();
