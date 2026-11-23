@@ -13,7 +13,6 @@ async function open(role, entry = "/admin", pendingService = false, viewport, ev
     { id: "claim-two", eventId: "sample-two", circleId: "c-900003", circleName: "第二場待審社", evidenceUrl: "https://example.test/circle", evidenceNote: null, targetUrl: null, createdAt: now, circleClaimed: false },
   ];
   let admins = [{ email: "admin@example.test", addedBy: "bootstrap", addedAt: now }];
-  let notificationPreferences = { enabled: true, cadence: "five_minutes", version: 1 };
   let siteSettings = { organizerApplicationMode: "closed", organizerAllowedEmails: [], accountNotificationsEnabled: false,
     accountNotificationsSince: null, adminReviewNotificationsEnabled: false, publicationEnabled: true, contactUrl: "", claimReviewNotice: "",
     updatedAt: now, updatedBy: "admin@example.test" };
@@ -114,11 +113,6 @@ async function open(role, entry = "/admin", pendingService = false, viewport, ev
           publication: { id: "failed-amend-job", status: "failed", step: "waiting_deployment", error: "測試發布未完成。", failureCode: "infrastructure_error", retryable: false, started: true, candidateVersion: 44, updatedAt: now },
           workspace: { mode: "binder", onboardingCompletedAt: now, resume: { guidedTask: "identity_source", section: "event" },
             readiness: { completed: 5, total: 5, suggestedNextSection: "review", blockers: [], sections: ["event", "venue", "import", "map", "review"].map(id => ({ id, state: "complete" })) } } });
-      }
-      if (path === "/api/admin/notification-preferences") {
-        if (failure) return reply({ error: "登入已失效。" }, failure);
-        if (method === "PUT") notificationPreferences = { ...body, version: notificationPreferences.version + 1 };
-        return reply(notificationPreferences);
       }
       if (path === "/api/admin/site-settings") {
         if (settingsFailure) return reply({ error: "無法取得網站設定。" }, 503);
@@ -419,14 +413,6 @@ try {
   await navigate(settingsPage.page, "管理總覽");
   const operations = settingsPage.page.locator('section[aria-labelledby="operations-heading"]');
   const savedReviewSetting = operations.locator("div").filter({ has: settingsPage.page.locator("dt", { hasText: "待審通知" }) });
-  await savedReviewSetting.getByText("開啟", { exact: true }).waitFor();
-  await settingsPage.page.locator("summary", { hasText: "我的帳號" }).click();
-  await settingsPage.page.getByRole("link", { name: "我的通知設定", exact: true }).click();
-  await settingsPage.page.getByRole("heading", { name: "待審通知", exact: true }).waitFor();
-  await settingsPage.page.getByLabel("接收待審通知", { exact: true }).uncheck();
-  await settingsPage.page.getByRole("button", { name: "儲存設定", exact: true }).click();
-  await settingsPage.page.getByText("通知設定已儲存。", { exact: true }).waitFor();
-  await navigate(settingsPage.page, "管理總覽");
   await savedReviewSetting.getByText("開啟", { exact: true }).waitFor();
   assert.equal(settingsPage.requests.filter(x => x.path === "/api/admin/service-check").length, 0);
   await settingsPage.page.setViewportSize({ width: 390, height: 844 });

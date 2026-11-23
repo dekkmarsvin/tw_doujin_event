@@ -53,7 +53,6 @@ try {
   // continuation. The final page still applies the signed-in account's role.
   for (const [destination, isAdmin] of [
     ["/admin?section=circles&view=claims&event=sample&claim=claim-one", true],
-    ["/admin#review-notifications", true],
     ["/admin?section=accounts", false],
   ]) {
     let verified = false;
@@ -76,7 +75,6 @@ try {
         verified = true;
         return route.fulfill({ json: { email: "session@example.test", isAdmin, hasOrganizerAccess: true, expiresAt: now + week } });
       });
-      await page.route("**/api/admin/notification-preferences*", route => route.fulfill({ json: { enabled: true, cadence: "five_minutes", version: 1 } }));
     } });
     currentPage = page;
     await page.getByRole("heading", { name: "請先登入", exact: true }).waitFor();

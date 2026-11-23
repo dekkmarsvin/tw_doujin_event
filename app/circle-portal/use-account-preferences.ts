@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PortalError, readAccountNotificationPreferences, saveAccountNotificationPreferences } from "../circle-editor-client";
-import type { AccountNotificationCadence, AccountNotificationPreferences } from "../account-notifications";
+import type { AccountNotificationPreferences } from "../account-notifications";
 import type { Locale } from "../i18n/locale";
 import { noticeError, type PortalNotice } from "./portal-i18n";
 
@@ -20,7 +20,7 @@ const INITIAL: State = { saved: null, loading: true, busy: false, error: null, c
  * overwrites an existing preference. Only locale is sent for a locale write. */
 export function useAccountPreferences(email: string | undefined, initialLocale?: Locale) {
   const [state, setState] = useState<State>(INITIAL);
-  const actions = useRef<{ chooseLocale(locale: Locale): void; chooseCadence(cadence: AccountNotificationCadence): void; retry(): void; reload(): void } | null>(null);
+  const actions = useRef<{ chooseLocale(locale: Locale): void; retry(): void; reload(): void } | null>(null);
   const localeAtEntry = useRef(initialLocale);
   useEffect(() => { localeAtEntry.current = initialLocale; }, [initialLocale]);
   useEffect(() => {
@@ -34,13 +34,13 @@ export function useAccountPreferences(email: string | undefined, initialLocale?:
       if (active) setState(current);
     };
     const failed = (error: unknown) => update({ error: noticeError(error), conflict: error instanceof PortalError && error.status === 409 });
-    const write = async (cadence?: AccountNotificationCadence) => {
+    const write = async () => {
       if (!active || current.busy || current.loading || !current.saved || current.conflict) return;
-      const locale = cadence ? null : desiredLocale;
-      if (!cadence && !locale) return;
+      const locale = desiredLocale;
+      if (!locale) return;
       update({ busy: true, error: null, savedNow: false });
       try {
-        const saved = await saveAccountNotificationPreferences({ version: current.saved.version, ...(cadence ? { cadence } : { locale: locale! }) });
+        const saved = await saveAccountNotificationPreferences({ version: current.saved.version, locale });
         if (!active) return;
         if (locale === desiredLocale) desiredLocale = null;
         update({ saved, unsavedLocale: desiredLocale, savedNow: true });
@@ -70,7 +70,6 @@ export function useAccountPreferences(email: string | undefined, initialLocale?:
     };
     actions.current = {
       chooseLocale(locale) { desiredLocale = locale; update({ unsavedLocale: locale, savedNow: false }); if (!current.error) void write(); },
-      chooseCadence(cadence) { if (!current.error && cadence !== current.saved?.cadence) void write(cadence); },
       retry() { if (!current.saved) void read(true); else void write(); },
       reload() { if (!current.busy && !current.loading) void read(!initialReadComplete); },
     };
@@ -78,10 +77,9 @@ export function useAccountPreferences(email: string | undefined, initialLocale?:
     return () => { active = false; actions.current = null; };
   }, [email]);
   const chooseLocale = useCallback((locale: Locale) => actions.current?.chooseLocale(locale), []);
-  const chooseCadence = useCallback((cadence: AccountNotificationCadence) => actions.current?.chooseCadence(cadence), []);
   const retry = useCallback(() => actions.current?.retry(), []);
   const reload = useCallback(() => actions.current?.reload(), []);
-  return { ...state, chooseLocale, chooseCadence, retry, reload };
+  return { ...state, chooseLocale, retry, reload };
 }
 
 export type AccountPreferencesController = ReturnType<typeof useAccountPreferences>;

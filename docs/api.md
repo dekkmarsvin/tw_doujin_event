@@ -49,7 +49,7 @@
 | GET | `/api/auth/session` | 登入 | `readSession` | 保留。回應 `PortalSession` 的 `isMapContributor` 在階段 5 移除 |
 | DELETE | `/api/auth/session` | 登入 | `signOut` | 保留 |
 | DELETE | `/api/account` | 登入 | `deleteMyAccount` | 保留。body `{ confirm: <自己的 email> }` |
-| GET／PUT | `/api/account/notification-preferences` | 登入 | `readAccountNotificationPreferences`、`saveAccountNotificationPreferences` | **刪除**：通知改為事件發生時寄單封，不再有偏好設定 |
+| GET／PUT | `/api/account/notification-preferences` | 登入 | `readAccountNotificationPreferences`、`saveAccountNotificationPreferences` | 階段 5c：只剩通知語言 `{ version, locale }`；頻率已移除 |
 
 ## 社團與認領
 
@@ -81,7 +81,7 @@
 | POST | `/api/admin/accounts` | 管理者 | `disableAccount` | 保留 |
 | GET／PUT | `/api/admin/site-settings` | 管理者 | `readAdminSiteSettings`、`saveAdminSiteSettings` | 修改：`AdminSiteSettings` 移除 `publicationMode`、`publicationActivities`，設定移除 `publicationEnabled` 與兩個通知開關 |
 | POST | `/api/admin/service-check` | 管理者 | `requestAdminServiceCheck` | 修改：目前由排程 Worker 執行，改為請求內直接檢查寄信設定；`publication` 項目移除 |
-| GET／PUT | `/api/admin/notification-preferences` | 管理者 | `readNotificationPreferences`、`saveNotificationPreferences` | **刪除** |
+| GET／PUT | `/api/admin/notification-preferences` | 管理者 | `readNotificationPreferences`、`saveNotificationPreferences` | **已刪除**（階段 5c） |
 | GET／POST | `/api/admin/references` | 管理者 | 主辦 `readSharedReferences`、`saveSharedReference` | 保留 |
 | POST | `/api/admin/integrations/github/probe` | 管理者 | 前端未使用 | 已刪除（階段 4b） |
 

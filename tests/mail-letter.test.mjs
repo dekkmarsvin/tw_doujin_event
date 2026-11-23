@@ -129,15 +129,15 @@ test("digests keep each destination and count distinct circles in the subject", 
 
   const many = reviewDigest(ORIGIN, [
     { kind: "application", event_id: null, total: 1 },
-    { kind: "map", event_id: "ff47", total: 3 },
+    { kind: "claim", event_id: "ff47", total: 3 },
   ]);
   assert.equal(many.subject, "場刊 Map：4 筆新增待審項目");
   assert.doesNotMatch(many.html, /前往審核/);
   assert.match(many.text, /^活動申請：1 筆\nhttps:\/\/map\.kotoban\.top\/organizer$/m);
-  assert.match(many.text, /^地圖貢獻（ff47）：3 筆\nhttps:\/\/map\.kotoban\.top\/admin\?event=ff47#map-review$/m);
-  assert.match(many.html, /href="https:\/\/map\.kotoban\.top\/admin\?event=ff47#map-review" style="[^"]*">3 筆<\/a>/);
-  assert.match(many.text, /通知設定：https:\/\/map\.kotoban\.top\/admin#review-notifications/);
-  assert.match(many.html, /href="https:\/\/map\.kotoban\.top\/admin#review-notifications" style="[^"]*">通知設定<\/a>/);
+  assert.match(many.text, /^社團認領（ff47）：3 筆\nhttps:\/\/map\.kotoban\.top\/admin\?event=ff47#admin$/m);
+  assert.match(many.html, /href="https:\/\/map\.kotoban\.top\/admin\?event=ff47#admin" style="[^"]*">3 筆<\/a>/);
+  assert.match(many.text, /管理總覽：https:\/\/map\.kotoban\.top\/admin$/m);
+  assert.match(many.html, /href="https:\/\/map\.kotoban\.top\/admin" style="[^"]*">管理總覽<\/a>/);
   assert.doesNotMatch(many.html, /#fff7df/, "a digest is a general letter, not an urgent one");
 
   const item = { kind: "circle.updated", name: "原文社團", event_id: "ff47", circle_id: "c-1", candidate_id: null,

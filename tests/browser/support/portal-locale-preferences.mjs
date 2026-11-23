@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { base } from "./journey.mjs";
 
 export async function verifyLocalePreferences(journey) {
-  let preferences = { cadence: "hourly", version: 7, locale: "ja" };
+  let preferences = { version: 7, locale: "ja" };
   let mode = "pass", release, started;
   const writes = [];
   const page = await journey.page({ url: `${base}/circle?event=sample&lang=en`, routes: async p => {
@@ -37,7 +37,6 @@ export async function verifyLocalePreferences(journey) {
   mode = "pass"; release();
   await page.waitForResponse(r => r.request().method() === "PUT" && r.request().postDataJSON().locale === "ja");
   assert.deepEqual(writes.slice(0, 2), [{ version: 7, locale: "zh-Hant" }, { version: 8, locale: "ja" }]);
-  assert.equal(preferences.cadence, "hourly");
 
   mode = "fail";
   await language.selectOption("en");
@@ -52,7 +51,7 @@ export async function verifyLocalePreferences(journey) {
   mode = "conflict";
   await language.selectOption("ja");
   await page.getByRole("alert").waitFor();
-  preferences = { ...preferences, cadence: "off", version: preferences.version + 1 };
+  preferences = { ...preferences, version: preferences.version + 1 };
   const count = writes.length;
   mode = "pass";
   await page.getByRole("button", { name: "設定を再読み込み", exact: true }).click();
@@ -62,19 +61,13 @@ export async function verifyLocalePreferences(journey) {
   await page.getByRole("button", { name: "通知言語の保存を再試行", exact: true }).click();
   await page.getByRole("button", { name: "通知言語の保存を再試行", exact: true }).waitFor({ state: "hidden" });
   assert.equal(preferences.locale, "ja");
-  assert.equal(preferences.cadence, "off", "a locale retry preserves the other device's cadence");
-  assert.ok(writes.every(write => !Object.hasOwn(write, "cadence")), "locale writes never include cadence");
+  assert.ok(writes.every(write => Object.keys(write).sort().join() === "locale,version"), "writes carry only the language");
   await page.getByRole("button", { name: "アカウント", exact: true }).click();
   const dialogRead = page.waitForResponse(r => r.request().method() === "GET" && new URL(r.url()).pathname === "/api/account/notification-preferences");
   await page.getByRole("button", { name: "通知設定", exact: true }).click();
   await dialogRead;
   const dialog = page.getByRole("dialog", { name: "通知設定", exact: true });
-  assert.equal(await dialog.getByLabel("サークル情報の更新", { exact: true }).inputValue(), "off");
-  const cadenceWrite = page.waitForResponse(r => r.request().method() === "PUT" && Object.hasOwn(r.request().postDataJSON(), "cadence"));
-  await dialog.getByLabel("サークル情報の更新", { exact: true }).selectOption("hourly");
-  await cadenceWrite;
-  await dialog.getByText("保存しました", { exact: true }).waitFor();
-  assert.deepEqual(Object.keys(writes.at(-1)).sort(), ["cadence", "version"]);
+  await dialog.getByLabel("通知言語", { exact: true }).waitFor();
   await journey.capture(page, "account-notification-locale-ja");
   await page.close();
 
