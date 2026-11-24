@@ -1,5 +1,4 @@
-import { firstParam, guard } from "../_portal";
-import { planningShareHandlers } from "../_planning-shares";
+import { firstParam, guard, sharesFor } from "../_portal";
 
 export const onRequestGet: PagesFunction<PortalEnv> = context =>
-  guard(() => planningShareHandlers(context).page(context.request, firstParam(context.params.shareId)));
+  guard(() => sharesFor(context).page(context.request, firstParam(context.params.shareId)));

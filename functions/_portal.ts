@@ -3,6 +3,8 @@ import type { ApiErrorCode } from "../app/i18n/api-error";
 export { previewMailRouteFor } from "../app/portal-mail";
 import { createCirclePortalHandlers, type CircleLookup, type CirclePortalHandlers, type PortalDependencies } from "../app/circle-portal-handlers";
 import { createAuth } from "../server/auth";
+import { createPlanningShareHandlers } from "../server/shares";
+import { createPlanningShareRepository } from "../db/planning-share-repository";
 import { buildCircleCatalog, isCircleCatalogPayload, normalizeCircleName, type CircleCatalogPayload } from "../app/circle-records";
 import { CIRCLE_OVERRIDES_SCHEMA, isCircleOverrideFields } from "../app/circle-overrides";
 import { selectedCircleShareImage } from "../app/circle-share-image";
@@ -11,7 +13,7 @@ import { parseEventDefinition, type EventDefinition } from "../app/event-catalog
 import type { HostedThumbnailStore } from "../app/hosted-thumbnails";
 import type { MapContributionFileStore } from "../app/map-contribution-files";
 import { createPublicationDispatcher } from "../app/publication-dispatch";
-import { readEntryJson, readEventIndex } from "./_event-data";
+import { readEntryJson, readEventIndex, readEventJson } from "./_event-data";
 import { createR2AmendmentBaselineLoader } from "../app/event-data-publisher";
 import { readEventIndexObject } from "../app/event-data-store";
 
@@ -252,6 +254,34 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
 /** The auth module's routes: sign-in, session, sign-out and the caller's own account. */
 export function authFor(context: { request: Request; env: PortalEnv }) {
   return createAuth(portalDependencies(context)).routes;
+}
+
+const shareRepositories = new WeakMap<D1Database, ReturnType<typeof createPlanningShareRepository>>();
+
+/** The shares module: planning-list snapshots and the `/s/:shareId` page. Anonymous, so it needs none of the portal wiring. */
+export function sharesFor({ env }: { env: PortalEnv }) {
+  let repository = shareRepositories.get(env.DB);
+  if (!repository) {
+    repository = createPlanningShareRepository(env.DB);
+    shareRepositories.set(env.DB, repository);
+  }
+  return createPlanningShareHandlers({
+    repository,
+    hashPepper: () => {
+      if (!env.HASH_PEPPER) throw new Error("Missing Pages secret HASH_PEPPER.");
+      return env.HASH_PEPPER;
+    },
+    publishedEvent: async (eventId) => {
+      if (!/^[a-z0-9][a-z0-9-]*$/.test(eventId)) return null;
+      const [definition, references] = await Promise.all([
+        readEventJson(env, eventId, "event.json"),
+        readEventJson(env, eventId, "reference-records.json"),
+      ]);
+      if (definition === null || references === null) return null;
+      const event = parseEventDefinition(definition, references);
+      return event.id === eventId ? event : null;
+    },
+  });
 }
 
 /** Bindings, secrets and per-request configuration every backend module is built from. */

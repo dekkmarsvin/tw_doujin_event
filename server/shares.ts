@@ -1,11 +1,16 @@
-import type { EventDefinition } from "./event-catalog";
-import { parseShareSnapshot, type ShareSnapshot } from "./planning-share-snapshot";
-import { peppered, randomToken } from "./portal-crypto";
-import { SHARE_IMAGE } from "./seo";
-import { escapeHtml, metadataHtml } from "./static-discovery";
+import type { EventDefinition } from "../app/event-catalog";
+import { parseShareSnapshot, type ShareSnapshot } from "../app/planning-share-snapshot";
+import { peppered, randomToken } from "../app/portal-crypto";
+import { SHARE_IMAGE } from "../app/seo";
+import { escapeHtml, metadataHtml } from "../app/static-discovery";
 import type { createPlanningShareRepository } from "../db/planning-share-repository";
-import { canonicalLocale, localizedHref, type Locale } from "./i18n/locale";
-import type { ApiErrorCode } from "./i18n/api-error";
+import { canonicalLocale, localizedHref, type Locale } from "../app/i18n/locale";
+import type { ApiErrorCode } from "../app/i18n/api-error";
+
+/**
+ * Shares module (#546 phase 5): anonymous planning-list snapshots, their API
+ * and the `/s/:shareId` landing page.
+ */
 
 const errorCode = (code: ApiErrorCode) => code;
 
