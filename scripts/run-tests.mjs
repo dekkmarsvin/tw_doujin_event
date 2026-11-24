@@ -29,7 +29,8 @@ const TIER_NAMES = ["module", "d1", "cli", "artifact"];
 // else it also does.
 const TIER_SIGNALS = [
   ["artifact", /new URL\(\s*[`"']\.\.\/dist/],
-  ["d1", /(?:from|import)\s*\(?\s*["']miniflare["']/],
+  // The API harness (tests/support/api.mjs) starts Miniflare for its caller.
+  ["d1", /(?:from|import)\s*\(?\s*["'](?:miniflare|\.\/support\/api\.mjs)["']/],
   ["cli", /(?:from|import)\s*\(?\s*["']node:child_process["']/],
 ];
 
