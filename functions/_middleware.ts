@@ -32,11 +32,7 @@ export const onRequest: PagesFunction<PortalEnv> = async (context) => {
 
   if (!SAFE_METHODS.has(request.method)) {
     const origin = request.headers.get("origin");
-    const githubWebhook = request.method === "POST" && url.pathname === "/api/integrations/github/webhook";
-    // This server-to-server route authenticates exact body bytes with HMAC.
-    // Its JSON requirement remains below; every cookie-authenticated write
-    // still requires the same-origin header.
-    if (!githubWebhook && origin !== url.origin) return json({ error: "來源不符，請重新整理後再試。", ...errorCode("origin_mismatch") }, 403);
+    if (origin !== url.origin) return json({ error: "來源不符，請重新整理後再試。", ...errorCode("origin_mismatch") }, 403);
 
     const contentType = (request.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
     const privateFileUpload = contentType === "multipart/form-data" && (

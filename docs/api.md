@@ -41,6 +41,8 @@
 
 ## 登入與帳號
 
+階段 5e 起由 auth 模組（[`server/auth.ts`](../server/auth.ts)）經單一 router `functions/api/[[path]].ts` 提供；尚未重寫的領域仍由各自的 function 檔回應。
+
 | 方法 | 路徑 | 權限 | 呼叫端 | #546 |
 |---|---|---|---|---|
 | GET | `/api/auth/config` | 匿名 | `readTurnstileSitekey` | 保留 |

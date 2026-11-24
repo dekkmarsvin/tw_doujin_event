@@ -1,22 +1,22 @@
-import { parseRequestLinkLocale, parseAccountNotificationPreferencesUpdate } from "./i18n/api-contract";
 import { eventNoticeInputProblem, parseEventNoticeInput, type EventNotice } from "./event-notice";
 import type { ApiErrorCode } from "./i18n/api-error";
 import { canSubmitEventApplication, contactSettingsProblem, parseSiteSettings } from "./site-settings";
 import type { AdminCircleDetail } from "./admin-circle-detail";
 import type { AdminAccountCircleSearchResponse, AdminAccountDetailResponse } from "./admin-account-detail";
 import { normalizeCircleName, type CircleViewRecord } from "./circle-records";
-import { notificationParameters } from "./notification-navigation";
 import { createAdminReferenceHandlers } from "./admin-reference-handlers";
 import { circleOverrideFieldsProblem, circleRetentionExpiresAt, isRetentionChoice, type CircleOverrideFields } from "./circle-overrides";
 import { getEventDefinition } from "./event-catalog";
 import { eventDayDate } from "./event-calendar";
 import { groupOrganizerCircles } from "./organizer-circle-groups.mjs";
 import { parseOrganizerApplication, type OrganizerApplication, type OrganizerApplicationInput } from "./organizer-applications";
-import { loginLinkLetter, organizerInvitationLetter } from "./mail-letter";
+import { organizerInvitationLetter } from "./mail-letter";
 import { mailFailure, type PortalMail } from "./portal-mail";
-import { hmacSign, hmacVerify, isEmailShaped, normalizeEmail, peppered, randomChallengeCode, randomToken, sha256Hex } from "./portal-crypto";
+import { isEmailShaped, normalizeEmail, randomChallengeCode, randomToken, sha256Hex } from "./portal-crypto";
 import type { ClaimMethod, IdentityRepository, OverridesPhase } from "../db/identity-repository";
 import { DYNAMIC_OVERLAY_CACHE_POLICY } from "./catalog-publication";
+import { createAuth, emailAuditSubjectId, LOGIN_LIMITS, LOGIN_TOKEN_TTL_MS } from "../server/auth";
+import { json, readJson } from "../server/http";
 import {
   catalogKeyOf, catalogKeysOf, catalogObjectPrefix, circleObjectPrefix, deleteObjectKeys, hostedCatalogImage, hostedThumbnailFields,
   prepareHostedCatalogImage, prepareHostedThumbnail, type HostedThumbnailStore,
@@ -65,15 +65,10 @@ import {
  */
 
 const errorCode = (code: ApiErrorCode) => code;
-export const SESSION_COOKIE = "__Host-ff47_session";
-
-const LOGIN_TOKEN_TTL_MS = 15 * 60 * 1000;
-const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export { SESSION_COOKIE, emailAuditSubjectId } from "../server/auth";
 const CHALLENGE_TTL_MS = 24 * 60 * 60 * 1000;
 
 const LIMITS = {
-  loginPerEmailPerHour: 5,
-  loginPerIpPerHour: 20,
   organizerInvitesPerActorPerHour: 10,
   organizerInvitesPerEmailPerHour: 3,
   claimsPerAccountPerDay: 3,
@@ -115,7 +110,7 @@ type PortalConfig = {
   organizerPublicationMode?: "disabled" | "fake" | "r2";
 };
 
-type PortalDependencies = {
+export type PortalDependencies = {
   loadPublishedAmendmentBaseline?: (source: AmendmentPublishedSource) => Promise<OrganizerAmendmentBaseline>;
   /** Durable dispatch only; never wait for checks or deployment in a request.
    * Omitted until the production driver and rollout gates are verified. */
@@ -158,24 +153,9 @@ type PortalDependencies = {
   config: PortalConfig;
 };
 
-const EMAIL_AUDIT_DOMAIN = "audit-email-v1";
-
-/** Keyed and domain-separated so a leaked audit table cannot be tested against
- * an email dictionary, and the digest cannot be confused with another HMAC. */
-export function emailAuditSubjectId(secret: string, email: string) {
-  return hmacSign(secret, `${EMAIL_AUDIT_DOMAIN}\0${normalizeEmail(email)}`);
-}
-
 const SEARCH_MIN_LENGTH = 2;
 const SEARCH_LIMIT = 8;
 const ACCOUNT_SEARCH_LIMIT = 20;
-
-function json(body: unknown, status = 200, headers: Record<string, string> = {}) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers },
-  });
-}
 
 /** Whether a stored row publishes any sale-sheet page, and so owns hosted objects. */
 function hasCatalogImages(row: { fields_json: string } | null | undefined) {
@@ -187,29 +167,6 @@ function hasCatalogImages(row: { fields_json: string } | null | undefined) {
   }
 }
 
-function readCookie(request: Request, name: string) {
-  const header = request.headers.get("cookie") ?? "";
-  for (const part of header.split(";")) {
-    const [key, ...rest] = part.trim().split("=");
-    if (key === name) return rest.join("=");
-  }
-  return null;
-}
-
-function sessionCookie(value: string, maxAgeSeconds: number) {
-  // `__Host-` forces Secure + Path=/ + no Domain, so no sibling host can set it.
-  return `${SESSION_COOKIE}=${value}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}`;
-}
-
-async function readJson(request: Request): Promise<Record<string, unknown> | null> {
-  try {
-    const body: unknown = await request.json();
-    return body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : null;
-  } catch {
-    return null;
-  }
-}
-
 export function createCirclePortalHandlers({
   loadPublishedAmendmentBaseline,
   dispatchOrganizerPublication,
@@ -217,37 +174,15 @@ export function createCirclePortalHandlers({
   projectCircle, thumbnailStore, mapContributionStore,
   publicationAuditor, config,
 }: PortalDependencies) {
-  // The roster lives in the database so it can change without a redeploy.
-  // Normalized on both sides, as a stored account email is: comparing a raw
-  // string against a normalized one silently denies an admin whose address
-  // differs only in case or Unicode width.
-  const isAdmin = (email: string) => repository.isAdminEmail(normalizeEmail(email));
+  // Sign-in, the session and the caller's own account live in the auth module.
+  const auth = createAuth({ repository, sendMail, mailRecipientAllowed, lookupCircle, verifyHuman, turnstileSitekey, thumbnailStore, config });
+  const { isAdmin, clientIpHash, currentSession } = auth;
 
   /** Publication phase. Only the circle's own content is withdrawn afterwards. */
   const configValue = async (value: string | (() => Promise<string>)) => typeof value === "string" ? value : value();
   const dataUpdatedAt = () => configValue(config.dataUpdatedAt);
   const eventEndsAt = () => configValue(config.eventEndsAt);
   const currentPhase = async (): Promise<OverridesPhase> => (config.now() > Date.parse(await eventEndsAt()) ? "after" : "during");
-
-  async function clientIpHash(request: Request) {
-    const address = request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for") ?? "";
-    return address ? peppered(config.hashPepper, address) : null;
-  }
-
-  /** Resolve the caller. Signature is a cheap gate; the session row is the authority. */
-  async function currentSession(request: Request, allowDeleting = false) {
-    const raw = readCookie(request, SESSION_COOKIE);
-    if (!raw) return null;
-    const separator = raw.lastIndexOf(".");
-    if (separator <= 0) return null;
-    const sessionId = raw.slice(0, separator);
-    const signature = raw.slice(separator + 1);
-    if (!await hmacVerify(config.sessionSecret, sessionId, signature)) return null;
-    const session = await repository.getSession(sessionId, config.now(), allowDeleting);
-    // Older 30-day cookies obey the same deadline as new sessions.
-    if (session && config.now() >= session.sessionCreatedAt + SESSION_TTL_MS) return null;
-    return session ? { ...session, sessionId } : null;
-  }
 
   /**
    * Whether this deployment serves the event the request named.
@@ -273,20 +208,8 @@ export function createCirclePortalHandlers({
       : json({ error: "找不到這個活動。", ...(circleErrors ? { code: errorCode("event_not_found") } : {}) }, 404);
   }
 
-  /** The public half of the Turnstile pair, so the sign-in page can render it. */
-  function authConfig() {
-    return json({ turnstileSitekey: turnstileSitekey() });
-  }
-
   async function canApplyForEvent(email: string) {
     return canSubmitEventApplication(await repository.getSiteSettings(), email);
-  }
-
-  /** The session fields that come from site settings: one read for all of them. */
-  async function sessionSiteFields(email: string) {
-    const settings = await repository.getSiteSettings();
-    return { canApplyForEvent: canSubmitEventApplication(settings, email),
-      contactUrl: settings?.contactUrl ?? "", claimReviewNotice: settings?.claimReviewNotice ?? "" };
   }
 
   function applicationResponse(row: NonNullable<Awaited<ReturnType<IdentityRepository["getOrganizerApplication"]>>>, admin: boolean): OrganizerApplication {
@@ -334,216 +257,6 @@ export function createCirclePortalHandlers({
       now: config.now(), ipHash: await clientIpHash(request) });
     return result ? json({ application: applicationResponse(result, true) })
       : json({ error: "申請、帳號或審核權限已變更，請重新讀取申請。" }, 409);
-  }
-
-  async function requestLink(request: Request) {
-    const body = await readJson(request);
-
-    // Human verification runs first, before the address is even read. The
-    // check does not depend on the mailbox, so it can answer honestly
-    // without telling an attacker which inboxes exist — and
-    // nothing past it, neither the rate-limit counters nor the mailer, is
-    // reachable by a script that cannot solve it.
-    const humanToken = typeof body?.turnstileToken === "string" ? body.turnstileToken : "";
-    if (!humanToken || !await verifyHuman(humanToken, request.headers.get("cf-connecting-ip"))) {
-      return json({ error: "真人驗證未通過，請重新驗證後再送出。", code: errorCode("turnstile_failed") }, 403);
-    }
-
-    const parsedLocale = parseRequestLinkLocale(body?.locale);
-    if (!parsedLocale.ok) return json({ error: "請選擇支援的語言。", code: errorCode("invalid_locale") }, 400);
-    const { locale } = parsedLocale;
-
-    const email = typeof body?.email === "string" ? normalizeEmail(body.email) : "";
-    const audience = body?.audience === "organizer" ? "organizer" : "circle";
-    const now = config.now();
-
-    // Always the same answer: an attacker must not learn which inboxes exist.
-    const accepted = json({ ok: true }, 202);
-    if (!isEmailShaped(email)) return accepted;
-
-    // Preview and local keep a fixed recipient list. Saying so costs nothing
-    // here — the list is this environment's own configuration, not a fact about
-    // who has an account — and without it the mailer's refusal surfaces as a
-    // 500 that reads like the server broke. Production supplies no predicate,
-    // so this is unreachable there and the 202 above stays the only answer.
-    if (mailRecipientAllowed && !mailRecipientAllowed(email)) {
-      return json({ error: "這個測試環境不會寄信到這個地址。", code: errorCode("mail_recipient_not_allowed") }, 400);
-    }
-
-    const ipHash = await clientIpHash(request);
-    const windowStart = now - 60 * 60 * 1000;
-    const [byEmail, byIp] = await Promise.all([
-      // Only links this inbox asked for. Invitations another account minted for
-      // it are capped on their own budget, so an inviter cannot exhaust this
-      // one and lock the address out of its own sign-in.
-      repository.countLoginTokensSince("email", email, windowStart, "self"),
-      ipHash ? repository.countLoginTokensSince("request_ip_hash", ipHash, windowStart) : Promise.resolve(0),
-    ]);
-    if (byEmail >= LIMITS.loginPerEmailPerHour || byIp >= LIMITS.loginPerIpPerHour) {
-      return json({ error: "請求過於頻繁，請稍後再試。", code: errorCode("rate_limited") }, 429);
-    }
-
-    // These parameters select a form after login; ownership still comes only
-    // from the authenticated claim. Never accept an arbitrary redirect URL.
-    const destination = new URL(`${config.origin}/${audience === "organizer" ? "organizer" : "circle"}`);
-    const continuation = notificationParameters(body?.destination, audience);
-    if (audience === "circle" && !continuation.has("admin") && new URL(request.url).searchParams.has("event")) {
-      if (await servesRequestedEvent()) {
-        destination.searchParams.set("event", config.eventId);
-        if (typeof body?.circleId === "string" && body.circleId.length <= 200) {
-          const circle = await lookupCircle(body.circleId);
-          if (circle) destination.searchParams.set("circle", circle.id);
-        }
-      }
-    }
-    for (const [key, value] of continuation) destination.searchParams.set(key, value);
-    destination.searchParams.set("lang", locale);
-    const token = randomToken();
-    destination.searchParams.set("login", token);
-    const expiresAt = now + LOGIN_TOKEN_TTL_MS;
-    await repository.createLoginToken({
-      tokenHash: await sha256Hex(token),
-      email,
-      now,
-      expiresAt,
-      ipHash,
-      audience,
-    });
-
-    // Root-path query, consumed by POST from the page: mail scanners issue a GET
-    // on every link they see, and a GET-consumes design burns the token first.
-    try {
-      await sendMail({
-        purpose: "login_link",
-        to: email,
-        ...loginLinkLetter({ href: destination.href, origin: config.origin, requestedAt: now, expiresAt, locale }),
-      });
-    } catch (error) {
-      // The row exists but nobody can ever hold the link, and it counts against
-      // this address's own hourly budget. Left in place, a mailer outage locks
-      // the address out of signing in once the mailer recovers.
-      await repository.deleteLoginToken(await sha256Hex(token));
-      throw error;
-    }
-    await repository.writeAudit({
-      at: now, actorRole: "system", action: "auth.link_requested", subjectType: "email",
-      subjectId: await emailAuditSubjectId(config.hashPepper, email), ipHash,
-    });
-    return accepted;
-  }
-
-  async function verify(request: Request) {
-    const body = await readJson(request);
-    const token = typeof body?.token === "string" ? body.token : "";
-    if (!token) return json({ error: "登入連結無效。", code: errorCode("login_link_invalid") }, 400);
-
-    const now = config.now();
-    const login = await repository.consumeLoginTokenDetails(await sha256Hex(token), now);
-    if (!login) return json({ error: "登入連結已失效或已使用，請重新索取。", code: errorCode("login_link_expired") }, 400);
-    const { email, audience } = login;
-
-    let accountId: string;
-    try {
-      accountId = await repository.upsertAccount(email, now);
-    } catch (error) {
-      return json({ error: error instanceof Error ? error.message : "無法建立帳號。", code: errorCode("account_creation_refused") }, 403);
-    }
-    if (audience === "organizer") {
-      await repository.acceptOrganizerInvitations({ accountId, email, now });
-    }
-
-    // A fresh id on every verify, so a leaked earlier value cannot be reused.
-    const sessionId = randomToken();
-    const admin = await isAdmin(email);
-    const sessionTtl = SESSION_TTL_MS;
-    await repository.createSession(accountId, now, now + sessionTtl, sessionId);
-    const signature = await hmacSign(config.sessionSecret, sessionId);
-    await repository.writeAudit({ at: now, actorAccountId: accountId, actorRole: "circle", action: "auth.session_created", subjectType: "account", subjectId: accountId, ipHash: await clientIpHash(request) });
-
-    return json({
-      email,
-      isAdmin: admin,
-      expiresAt: now + sessionTtl,
-      hasOrganizerAccess: await repository.hasOrganizerAccess(accountId) || await isAdmin(email),
-      ...await sessionSiteFields(email),
-      hasEventApplications: await repository.hasOrganizerApplications(accountId),
-    }, 200, {
-      "set-cookie": sessionCookie(`${sessionId}.${signature}`, Math.floor(sessionTtl / 1000)),
-    });
-  }
-
-  async function session(request: Request) {
-    const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。", code: errorCode("unauthenticated") }, 401);
-    const admin = await isAdmin(current.email);
-    return json({
-      email: current.email,
-      isAdmin: admin,
-      expiresAt: current.sessionCreatedAt + SESSION_TTL_MS,
-      hasOrganizerAccess: await repository.hasOrganizerAccess(current.accountId) || await isAdmin(current.email),
-      ...await sessionSiteFields(current.email),
-      hasEventApplications: await repository.hasOrganizerApplications(current.accountId),
-    });
-  }
-
-  async function signOut(request: Request) {
-    const current = await currentSession(request);
-    if (current) {
-      await repository.revokeSession(current.sessionId, config.now());
-      await repository.writeAudit({ at: config.now(), actorAccountId: current.accountId, actorRole: "circle", action: "auth.signed_out", subjectType: "account", subjectId: current.accountId });
-    }
-    return json({ ok: true }, 200, { "set-cookie": sessionCookie("", 0) });
-  }
-
-  async function deleteMyAccount(request: Request) {
-    // The session that initiated deletion remains usable only on this route so
-    // an R2 outage can be retried; every normal route rejects the tombstone.
-    const current = await currentSession(request, true);
-    if (!current) return json({ error: "尚未登入。", code: errorCode("unauthenticated") }, 401);
-    if (await isAdmin(current.email)) {
-      return json({ error: "管理者帳號需先由另一位管理者移出名單，才能刪除。", code: errorCode("admin_account_delete_blocked") }, 409);
-    }
-    const body = await readJson(request);
-    if (body?.confirm !== current.email) {
-      return json({ error: "請輸入目前登入的完整 email 以確認刪除帳號。", code: errorCode("account_delete_confirmation") }, 400);
-    }
-    const soleOwnerCandidates = await repository.listSoleOwnerOrganizerCandidates(current.accountId);
-    if (soleOwnerCandidates.length > 0) {
-      return json({
-        error: "請先邀請另一位 Owner 接手所有活動，才能刪除帳號。",
-        code: errorCode("account_sole_owner"),
-        candidates: soleOwnerCandidates.map((candidate) => ({
-          candidateId: candidate.id,
-          tentativeName: candidate.tentative_name,
-        })),
-      }, 409);
-    }
-    const now = config.now();
-    let claimScopes = await repository.listClaimScopesForAccount(current.accountId);
-    if (!thumbnailStore && claimScopes.length > 0) return json({ error: "暫時無法使用圖片功能，請稍後再試。", code: errorCode("image_service_unavailable") }, 503);
-    if (!await repository.beginAccountDeletion({
-      accountId: current.accountId, email: current.email, now, retrySessionId: current.sessionId,
-    })) {
-      return json({ error: "找不到可刪除的帳號。", code: errorCode("account_not_found") }, 404);
-    }
-    // Re-read after the atomic tombstone. An upload that already put R2 bytes
-    // can no longer bind metadata and will roll its object back.
-    claimScopes = await repository.listClaimScopesForAccount(current.accountId);
-    if (thumbnailStore) {
-      const allKeys = (await Promise.all(claimScopes.map((claim) => thumbnailStore.list(
-        `events/${encodeURIComponent(claim.event_id)}/circles/${encodeURIComponent(claim.circle_id)}/`,
-      )))).flat();
-      await deleteObjectKeys(thumbnailStore, [...new Set(allKeys)]);
-    }
-    const deleted = await repository.deleteAccount({
-      accountId: current.accountId,
-      email: current.email,
-      emailAuditDigest: await emailAuditSubjectId(config.hashPepper, current.email),
-      legacyEmailAuditDigest: await sha256Hex(current.email),
-      now,
-    });
-    if (!deleted) return json({ error: "找不到可刪除的帳號。", code: errorCode("account_not_found") }, 404);
-    return json({ ok: true }, 200, { "set-cookie": sessionCookie("", 0) });
   }
 
   async function listClaims(request: Request) {
@@ -1360,23 +1073,6 @@ export function createCirclePortalHandlers({
     });
   }
 
-  async function getAccountNotificationPreferences(request: Request) {
-    const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。", code: errorCode("unauthenticated") }, 401);
-    return json(await repository.getAccountNotificationPreferences(current.accountId));
-  }
-
-  async function saveAccountNotificationPreferences(request: Request) {
-    const current = await currentSession(request);
-    if (!current) return json({ error: "尚未登入。", code: errorCode("unauthenticated") }, 401);
-    const body = await readJson(request);
-    const parsed = parseAccountNotificationPreferencesUpdate(body);
-    if (!parsed.ok) return json({ error: parsed.code === "invalid_locale" ? "請選擇支援的語言。" : "通知設定格式無效。", code: errorCode(parsed.code) }, 400);
-    const preferences = await repository.saveAccountNotificationPreferences({ accountId: current.accountId,
-      sessionId: current.sessionId, ...parsed.value, now: config.now() });
-    return preferences ? json(preferences) : json({ error: "設定已變更，請重新載入後再儲存。", code: errorCode("version_conflict") }, 409);
-  }
-
   async function adminManageAdmins(request: Request) {
     const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
@@ -1672,7 +1368,7 @@ export function createCirclePortalHandlers({
       repository.countOrganizerInvitationsSince(actorAccountId, windowStart),
     ]);
     return byEmail < LIMITS.organizerInvitesPerEmailPerHour
-      && byIp < LIMITS.loginPerIpPerHour
+      && byIp < LOGIN_LIMITS.perIpPerHour
       && byActor < LIMITS.organizerInvitesPerActorPerHour;
   }
 
@@ -3190,10 +2886,9 @@ export function createCirclePortalHandlers({
   return {
     ...createAdminReferenceHandlers(repository, requireAdmin, config.now),
     adminGetSiteSettings, adminUpdateSiteSettings, adminRequestServiceCheck,
-    getAccountNotificationPreferences, saveAccountNotificationPreferences,
     // Account-scoped: the identity is the same in every event, so these answer
     // before an event is chosen.
-    authConfig, requestLink, verify, session, signOut, deleteMyAccount,
+    ...auth.routes,
     listEventApplications, submitEventApplication, reviewEventApplication,
     adminListAdmins, adminManageAdmins, adminAccountDetail, adminSearchAccountsByCircle, adminDisableAccount,
     // Cross-event and read-only; it filters to served events itself.

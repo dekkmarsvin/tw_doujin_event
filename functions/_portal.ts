@@ -1,7 +1,8 @@
 import { mailFailure, sendPortalMail, previewMailRouteFor } from "../app/portal-mail";
 import type { ApiErrorCode } from "../app/i18n/api-error";
 export { previewMailRouteFor } from "../app/portal-mail";
-import { createCirclePortalHandlers, type CircleLookup, type CirclePortalHandlers } from "../app/circle-portal-handlers";
+import { createCirclePortalHandlers, type CircleLookup, type CirclePortalHandlers, type PortalDependencies } from "../app/circle-portal-handlers";
+import { createAuth } from "../server/auth";
 import { buildCircleCatalog, isCircleCatalogPayload, normalizeCircleName, type CircleCatalogPayload } from "../app/circle-records";
 import { CIRCLE_OVERRIDES_SCHEMA, isCircleOverrideFields } from "../app/circle-overrides";
 import { selectedCircleShareImage } from "../app/circle-share-image";
@@ -245,6 +246,16 @@ export function requestedEventId(request: Request, env: PortalEnv) {
 }
 
 export function portalHandlers(context: { request: Request; env: PortalEnv }): CirclePortalHandlers {
+  return createCirclePortalHandlers(portalDependencies(context));
+}
+
+/** The auth module's routes: sign-in, session, sign-out and the caller's own account. */
+export function authFor(context: { request: Request; env: PortalEnv }) {
+  return createAuth(portalDependencies(context)).routes;
+}
+
+/** Bindings, secrets and per-request configuration every backend module is built from. */
+function portalDependencies(context: { request: Request; env: PortalEnv }): PortalDependencies {
   const { request, env } = context;
   const eventId = requestedEventId(request, env);
   const repository = repositoryFor(env);
@@ -296,7 +307,7 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     const current = await readEventIndexObject(env.EVENT_DATA);
     return { clear: !current?.index.events.some((entry) => entry.source?.approvalHash === job.approval_hash) };
   };
-  return createCirclePortalHandlers({
+  return {
     loadPublishedAmendmentBaseline: env.ORGANIZER_PUBLICATION_MODE === "r2" ? createR2AmendmentBaselineLoader(env.EVENT_DATA) : undefined,
     repository,
     sendMail: async (message) => {
@@ -373,7 +384,7 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
       // the portal uses.
       publishedEvent,
     },
-  });
+  };
 }
 
 /** Map an unexpected failure onto the same envelope the client already parses. */
