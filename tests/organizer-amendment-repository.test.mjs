@@ -2,14 +2,15 @@ import assert from "node:assert/strict";
 import test, { after, before, beforeEach } from "node:test";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer, isRunnableDevEnvironment } from "vite";
+import { applyMigrations } from "./support/d1-migrations.mjs";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 if (!isRunnableDevEnvironment(vite.environments.ssr)) throw new Error("Vite SSR unavailable");
 const { createIdentityRepository } = await vite.environments.ssr.runner.import("/db/identity-repository.ts");
-const { IDENTITY_TABLES } = await vite.environments.ssr.runner.import("/db/identity-runtime-schema.ts");
 const mf = new Miniflare(convertV4MiniflareOptions({ modules: true,
   script: "export default { fetch() { return new Response('ok'); } }", d1Databases: { DB: "amendment-candidates", LEGACY: "amendment-legacy" } }));
 const db = await mf.getD1Database("DB");
+await applyMigrations(db);
 const repository = createIdentityRepository(db);
 after(async () => { await mf.dispose(); await vite.close(); });
 before(() => repository.ensureTables());
@@ -152,27 +153,6 @@ test("stale baseline, revoked editor and locked state refuse saves without retir
   assert.equal(await count("audit_log", "action = 'organizer.amendment.save'"), 0);
 });
 
-test("the legacy event unique index upgrades atomically and old CREATE IF NOT EXISTS cannot restore it", async () => {
-  const legacy = await mf.getD1Database("LEGACY");
-  const oldColumns = IDENTITY_TABLES.find((table) => table.name === "organizer_event_candidates").columns.filter((column) => !column.startsWith("publication_operation "));
-  await legacy.prepare(`CREATE TABLE organizer_event_candidates (${oldColumns.join(",")})`).run();
-  const oldIndex = "CREATE UNIQUE INDEX IF NOT EXISTS organizer_candidates_event_id_idx ON organizer_event_candidates (event_id) WHERE event_id IS NOT NULL";
-  await legacy.prepare(oldIndex).run();
-  await legacy.prepare(`INSERT INTO organizer_event_candidates (id,tentative_name,event_id,current_draft_json,created_by,created_at,updated_at,last_updated_by,last_updated_role)
-    VALUES ('old','Old','event-alpha','{}','admin',1,1,'admin','admin')`).run();
-  await createIdentityRepository(legacy).ensureTables();
-  await createIdentityRepository(legacy).ensureTables();
-  assert.equal((await legacy.prepare("SELECT publication_operation FROM organizer_event_candidates WHERE id='old'").first()).publication_operation, "CREATE");
-  await legacy.prepare(oldIndex).run();
-  assert.match((await legacy.prepare("SELECT sql FROM sqlite_master WHERE name='organizer_candidates_event_id_idx'").first()).sql, /publication_operation/);
-  const insert = (id, operation) => legacy.prepare(`INSERT INTO organizer_event_candidates
-    (id,tentative_name,event_id,current_draft_json,created_by,created_at,updated_at,last_updated_by,last_updated_role,publication_operation)
-    VALUES (?1,'New','event-alpha','{}','admin',1,1,'admin','admin',?2)`).bind(id, operation).run();
-  await assert.rejects(insert("new-create", "CREATE"), /UNIQUE/);
-  await insert("new-amend", "AMEND");
-  await assert.rejects(insert("duplicate-amend", "AMEND"), /UNIQUE/);
-});
-
 test("ordinary candidate saves and imports cannot bypass the amendment-only path", async () => {
   await repository.createOrganizerAmendment(createInput());
   assert.equal((await repository.saveOrganizerCandidate({ candidateId: "amendment", actorAccountId: "owner", expectedVersion: 1, eventId: "event-alpha", draftJson, now })).ok, false);
@@ -180,29 +160,4 @@ test("ordinary candidate saves and imports cannot bypass the amendment-only path
   assert.equal((await repository.reviewOrganizerCandidate({ candidateId: "amendment", actorAccountId: "admin", expectedVersion: 1, decision: "approve", now })).ok, false);
   assert.equal((await repository.getOrganizerCandidate("amendment")).current_version, 1);
   assert.equal((await repository.getOrganizerAmendment("amendment")).changes_json, "[]");
-});
-
-test("active amendment index upgrades in place and releases only published or abandoned candidates", async () => {
-  const legacy = await mf.getD1Database("LEGACY");
-  await legacy.prepare("DELETE FROM organizer_event_candidates").run();
-  await legacy.prepare("DROP INDEX organizer_candidates_active_amendment_idx").run();
-  // This fixture deliberately restores a pre-upgrade database, including its readiness.
-  await legacy.prepare("DELETE FROM identity_runtime_state").run();
-  const oldIndex = "CREATE UNIQUE INDEX IF NOT EXISTS organizer_candidates_active_amendment_idx ON organizer_event_candidates (event_id) WHERE publication_operation = 'AMEND' AND status != 'published'";
-  await legacy.prepare(oldIndex).run();
-  const insert = (id, status) => legacy.prepare(`INSERT INTO organizer_event_candidates
-    (id,tentative_name,event_id,current_draft_json,created_by,created_at,updated_at,last_updated_by,last_updated_role,publication_operation,status)
-    VALUES (?1,'New','event-alpha','{}','admin',1,1,'admin','admin','AMEND',?2)`).bind(id, status).run();
-  await insert("failed-old", "failed");
-  await createIdentityRepository(legacy).ensureTables();
-  await createIdentityRepository(legacy).ensureTables();
-  await legacy.prepare(oldIndex).run();
-  assert.match((await legacy.prepare("SELECT sql FROM sqlite_master WHERE name='organizer_candidates_active_amendment_idx'").first()).sql, /abandoned/);
-  await assert.rejects(insert("blocked", "draft"), /UNIQUE/);
-  await legacy.prepare("UPDATE organizer_event_candidates SET status='abandoned' WHERE id='failed-old'").run();
-  await insert("new-active", "draft");
-  await insert("published-history", "published");
-  await insert("abandoned-history", "abandoned");
-  await assert.rejects(insert("second-active", "draft"), /UNIQUE/);
-  assert.equal((await legacy.prepare("SELECT status FROM organizer_event_candidates WHERE id='failed-old'").first()).status, "abandoned");
 });

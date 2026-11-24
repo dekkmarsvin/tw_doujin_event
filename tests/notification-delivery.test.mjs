@@ -3,6 +3,7 @@ import test, { after, beforeEach } from "node:test";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import { createServer } from "vite";
 import { resetSiteSettings } from "./support/site-settings-fixture.mjs";
+import { applyMigrations } from "./support/d1-migrations.mjs";
 
 // #546 5c: every notice is one email, written to the outbox with the change it
 // reports and sent after the write request, with retries by later requests.
@@ -15,6 +16,7 @@ const { createCirclePortalHandlers, SESSION_COOKIE } = await load("/app/circle-p
 const { hmacSign } = await load("/app/portal-crypto.ts");
 const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: "export default {fetch(){return new Response('ok')}}", d1Databases: { DB: "notification-delivery" } }));
 const db = await mf.getD1Database("DB");
+await applyMigrations(db);
 const repo = createIdentityRepository(db);
 after(async () => { await mf.dispose(); await vite.close(); });
 
@@ -124,15 +126,6 @@ test("a review notice is dropped once the item stopped waiting; an untried notic
   now += 72 * 3_600_000;
   sent = []; await deliver();
   assert.ok(sent.some(mail => mail.subject.includes("認領通過")), "a notice nobody tried to send still goes out");
-});
-
-test("account deletion leaves no row naming a former admin's address", async () => {
-  const id = await repo.upsertAccount(SECOND, now);
-  await db.prepare("INSERT INTO admin_notification_preferences (recipient, enabled_since, next_digest_at) VALUES (?1, 0, 0)").bind(SECOND).run();
-  assert.equal(await repo.removeAdmin(SECOND), "removed");
-  assert.equal(await repo.beginAccountDeletion({ accountId: id, email: SECOND, now }), true);
-  await repo.deleteAccount({ accountId: id, email: SECOND, emailAuditDigest: "digest", legacyEmailAuditDigest: "legacy", now });
-  assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM admin_notification_preferences WHERE recipient = ?1").bind(SECOND).first()).n, 0);
 });
 
 test("circle mail uses the account's language; only the language can be saved", async () => {

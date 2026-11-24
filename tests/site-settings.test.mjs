@@ -3,6 +3,7 @@ import test, { after, beforeEach } from "node:test";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import { createServer } from "vite";
 import { resetSiteSettings } from "./support/site-settings-fixture.mjs";
+import { applyMigrations } from "./support/d1-migrations.mjs";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const load = name => vite.environments.ssr.runner.import(name);
@@ -13,6 +14,7 @@ const { runPublicationTick } = await load("/app/publication-scheduler.ts");
 const { runRequestedServiceCheck, checkMailService, checkPublicationService } = await load("/app/site-service-check.ts");
 const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: "export default {fetch(){return new Response('ok')}}", d1Databases: { DB: "site-settings" } }));
 const db = await mf.getD1Database("DB");
+await applyMigrations(db);
 const repo = createIdentityRepository(db);
 const origin = "https://map.example.test", now = Date.UTC(2027, 0, 1);
 let admin, cookie, memberCookie, handlers;

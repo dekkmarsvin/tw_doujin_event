@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import test, { after, before, beforeEach } from "node:test";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer, isRunnableDevEnvironment } from "vite";
+import { applyMigrations } from "./support/d1-migrations.mjs";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const environment = vite.environments.ssr;
@@ -21,6 +22,7 @@ const miniflare = new Miniflare(convertV4MiniflareOptions({
   d1Databases: { DB: "portal-route-test" },
 }));
 const database = await miniflare.getD1Database("DB");
+await applyMigrations(database);
 after(async () => { await miniflare.dispose(); await vite.close(); });
 
 const ORIGIN = "https://verify.kotoban.top";
@@ -57,7 +59,6 @@ const TABLES = [
   "organizer_event_grants",
   "organizer_event_revisions",
   "organizer_event_candidates",
-  "map_contributor_grants",
   "login_tokens",
   "sessions",
   "accounts",
@@ -508,7 +509,6 @@ test("admin account detail is private, normalizes Email and leaves missing or un
   assert.equal(missing.headers.get("cache-control"), "no-store");
   assert.deepEqual(await missing.json(), { email: "absent@example.com", account: null });
   assert.equal((await database.prepare("SELECT COUNT(*) AS count FROM accounts WHERE email = 'absent@example.com'").first()).count, 0);
-  assert.equal((await database.prepare("SELECT COUNT(*) AS count FROM map_contributor_grants").first()).count, 0);
   assert.equal(sent.length, mailCount);
 
   const response = await handlers.adminAccountDetail(get("/api/admin/accounts?email=%20ACCOUNT-READER%40EXAMPLE.COM%20", admin));

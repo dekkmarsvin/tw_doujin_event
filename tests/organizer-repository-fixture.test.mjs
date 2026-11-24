@@ -4,18 +4,20 @@ import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer } from "vite";
 import { resetSiteSettings } from "./support/site-settings-fixture.mjs";
 import { organizerRepositoryFixtureScript, resetOrganizerRepositoryFixture } from "./support/organizer-repository-fixture.mjs";
+import { applyMigrations } from "./support/d1-migrations.mjs";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 after(() => vite.close());
 const { createIdentityRepository } = await vite.environments.ssr.runner.import("/db/identity-repository.ts");
-const { IDENTITY_TABLES } = await vite.environments.ssr.runner.import("/db/identity-runtime-schema.ts");
 const runtime = new Miniflare(convertV4MiniflareOptions({ modules: true,
   script: await organizerRepositoryFixtureScript(),
   d1Databases: { DB: "fixture-worker", BASELINE: "fixture-node" },
 }));
 after(() => runtime.dispose());
 const actualDb = await runtime.getD1Database("DB");
+await applyMigrations(actualDb);
 const baselineDb = await runtime.getD1Database("BASELINE");
+await applyMigrations(baselineDb);
 const baseline = createIdentityRepository(baselineDb);
 const actual = createIdentityRepository(actualDb);
 
@@ -36,8 +38,9 @@ async function snapshot(db, accounts) {
   assert.equal(new Set(Object.values(accounts)).size, 3);
   for (const id of Object.values(accounts)) assert.equal(typeof id, "string");
   const roles = new Map(Object.entries(accounts).map(([role, id]) => [id, role]));
-  const tables = await db.batch(IDENTITY_TABLES.map(({ name }) => db.prepare(`SELECT * FROM ${name}`)));
-  return Object.fromEntries(IDENTITY_TABLES.map(({ name }, index) => [name, tables[index].results
+  const names = (await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name").all()).results.map(({ name }) => name);
+  const tables = await db.batch(names.map((name) => db.prepare(`SELECT * FROM ${name}`)));
+  return Object.fromEntries(names.map((name, index) => [name, tables[index].results
     .map((row) => Object.fromEntries(Object.entries(row).map(([key, value]) => [key, roles.get(value) ?? value])))
     .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))]));
 }

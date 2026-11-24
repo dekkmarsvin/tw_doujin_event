@@ -384,7 +384,7 @@ Plausible 的做法不是「IP 保存 N 天」，而是**根本不存 IP**。頁
 
 以下純粹是**清單**：本站已在處理、但在上述對象的公開文本裡**找不到可直接對照的寫法**的資料類別。不含建議。
 
-本站現況取自 [`db/identity-runtime-schema.ts`](../../db/identity-runtime-schema.ts) 的實際 table 定義與 [`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts) 的常數（2026-08-19 讀）：`accounts`、`admins`、`login_tokens`、`sessions`、`circle_claims`、`circle_overrides`、`overrides_doc`、`audit_log`、`preview_mail_sink`；`LOGIN_TOKEN_TTL_MS` 15 分鐘、`SESSION_TTL_MS` 30 天、`CHALLENGE_TTL_MS` 24 小時。
+本站現況取自 [`db/identity-runtime-schema.ts`](https://github.com/dekkmarsvin/tw_doujin_event/blob/a65a268a2f749980d6c2892ff64dec78c978ab5d/db/identity-runtime-schema.ts) 的實際 table 定義與 [`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts) 的常數（2026-08-19 讀）：`accounts`、`admins`、`login_tokens`、`sessions`、`circle_claims`、`circle_overrides`、`overrides_doc`、`audit_log`、`preview_mail_sink`；`LOGIN_TOKEN_TTL_MS` 15 分鐘、`SESSION_TTL_MS` 30 天、`CHALLENGE_TTL_MS` 24 小時。
 
 | 本站資料 | 參考對象裡最近的對應 | 缺口 |
 |---|---|---|

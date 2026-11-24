@@ -8,6 +8,7 @@ import { createServer } from "vite";
 import { resetSiteSettings } from "../support/site-settings-fixture.mjs";
 import { amendmentFixture } from "../support/organizer-amendment-fixture.mjs";
 import { base, eventFileUrl, start } from "./support/journey.mjs";
+import { applyMigrations } from "../support/d1-migrations.mjs";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const runner = vite.environments.ssr.runner;
@@ -60,6 +61,7 @@ let releaseDetail;
 const detailGate = new Promise(resolve => { releaseDetail = resolve; });
 const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: "export default { fetch() { return new Response('ok'); } }", d1Databases: { DB: "amendment-ui-publication" } }));
 const db = await mf.getD1Database("DB");
+await applyMigrations(db);
 const repo = createIdentityRepository(db);
 const journey = await start("portal-organizer-amendment-publication");
 journey.report.sourceHead = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();

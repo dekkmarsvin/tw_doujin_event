@@ -34,12 +34,10 @@ export async function clearPreviewFixture(database: D1Database, input: { runId: 
       WHERE EXISTS (SELECT 1 FROM circle_overrides WHERE updated_by IN (${accounts}) AND event_id = overrides_doc.event_id)`,
     input.now, new Date(input.now).toISOString()),
     statement(`DELETE FROM circle_overrides WHERE updated_by IN (${accounts})`),
-    statement(`DELETE FROM review_notification_items WHERE recipient IN (?1, ?2) OR (kind = 'claim' AND subject_id IN (${claims}))`),
-    ...["review_notification_batches", "admin_notification_preferences"].map(table => statement(`DELETE FROM ${table} WHERE recipient IN (?1, ?2)`)),
     statement(`DELETE FROM audit_log WHERE actor_account_id IN (${accounts})
       OR (subject_type = 'claim' AND subject_id IN (${claims}))
       OR (subject_type = 'email' AND subject_id IN (?3, ?4))`, ...input.emailDigests),
-    ...["account_notification_items", "account_notification_batches", "account_notification_preferences"]
+    ...["account_notification_items", "account_notification_preferences"]
       .map(table => statement(`DELETE FROM ${table} WHERE account_id IN (${accounts})`)),
     statement(`DELETE FROM circle_claims WHERE account_id IN (${accounts})`),
     statement(`DELETE FROM sessions WHERE account_id IN (${accounts})`),

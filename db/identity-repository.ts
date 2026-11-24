@@ -6,11 +6,11 @@ import {
   type OrganizerVenueCatalog,
   type OrganizerVenueSpaceAreaMode,
 } from "../app/organizer-venue-catalog";
-import { createIdentityInitializer, seedOrganizerVenueCatalog, referenceInsertStatement as prepareReferenceInsert } from "./identity-runtime-initializer";
+import { seedOrganizerVenueCatalog, referenceInsertStatement as prepareReferenceInsert } from "./organizer-venue-seed";
 import { createVenueReference, createVenueSpaceReference, type OrganizerReferenceRecord } from "../app/organizer-reference-catalog";
 import { createOrganizerAmendmentRepository } from "./organizer-amendment-repository";
 import { createOrganizerApplicationRepository } from "./organizer-application-repository";
-import { createAccountNotificationRepository, createAccountNotificationWriter, deleteAccountNotifications, deleteLegacyReviewRecipient, enqueueReviewNotification, claimNotificationSource, circleNotificationSource, ownerNotificationSource, memberNotificationSource, organizerCandidateEdition } from "./account-notification-repository";
+import { createAccountNotificationRepository, createAccountNotificationWriter, deleteAccountNotifications, enqueueReviewNotification, claimNotificationSource, circleNotificationSource, ownerNotificationSource, memberNotificationSource, organizerCandidateEdition } from "./account-notification-repository";
 import { createSiteSettingsRepository, seedSiteSettings } from "./site-settings-repository";
 
 /**
@@ -21,8 +21,8 @@ import { createSiteSettingsRepository, seedSiteSettings } from "./site-settings-
  * tokens, one verified owner per circle), and those read far more clearly as
  * SQL.
  *
- * Runtime schema authority lives in `db/identity-runtime-schema.ts`. Pages has
- * no migration step, so the repository consumes its generated SQL on first use.
+ * The schema comes from `migrations/`, applied with `wrangler d1 migrations
+ * apply` (#546 5d); nothing here creates or alters a table.
  */
 
 export type OverridesPhase = "during" | "after";
@@ -102,15 +102,13 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   const notify = createAccountNotificationWriter(database);
   let tablesReady: Promise<void> | null = null;
 
-  const ensureRuntimeReady = createIdentityInitializer(database);
-
   /** Control-plane initialization is separate from the public read path.
    * Admin recovery and notification defaults depend on current configuration
    * and recipients, so they must not be skipped by a durable schema version.
    */
   async function ensureTables() {
     if (!tablesReady) {
-      tablesReady = ensureRuntimeReady()
+      tablesReady = seedOrganizerVenueCatalog(database)
         .then(() => seedAdmins())
         .then(async () => {
           if (options.initializeSiteSettings !== false) await seedSiteSettings(database, {
@@ -254,7 +252,6 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     if ((total?.total ?? 0) <= 1) return "last" as const;
     const results = await database.batch([
       database.prepare("DELETE FROM admins WHERE email = ?1").bind(email),
-      ...deleteLegacyReviewRecipient(database, email),
     ]);
     return results[0].meta.changes === 1 ? "removed" as const : "missing" as const;
   }
@@ -483,22 +480,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
 
     statements.push(
       ...deleteAccountNotifications(database, input.accountId),
-      ...deleteLegacyReviewRecipient(database, input.email),
-      database.prepare(`DELETE FROM map_draft_exports WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft' AND candidate_id IS NULL)`).bind(input.accountId),
-      database.prepare(`DELETE FROM map_draft_files WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft' AND candidate_id IS NULL)`).bind(input.accountId),
-      database.prepare(`DELETE FROM map_draft_comments WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft' AND candidate_id IS NULL)`).bind(input.accountId),
-      database.prepare(`DELETE FROM map_draft_revisions WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft' AND candidate_id IS NULL)`).bind(input.accountId),
-      database.prepare(`DELETE FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft' AND candidate_id IS NULL`).bind(input.accountId),
       database.prepare(`UPDATE map_drafts SET owner_account_id = '[shredded]' WHERE owner_account_id = ?1`).bind(input.accountId),
       database.prepare(`UPDATE map_draft_revisions SET created_by = NULL WHERE created_by = ?1`).bind(input.accountId),
-      database.prepare(`UPDATE map_draft_reviews SET actor_account_id = NULL WHERE actor_account_id = ?1`).bind(input.accountId),
-      database.prepare(`UPDATE map_draft_comments SET author_account_id = NULL WHERE author_account_id = ?1`).bind(input.accountId),
-      database.prepare(`UPDATE map_draft_files SET uploaded_by = NULL WHERE uploaded_by = ?1`).bind(input.accountId),
-      database.prepare(`UPDATE map_draft_exports SET created_by = NULL WHERE created_by = ?1`).bind(input.accountId),
-      database.prepare(`UPDATE map_contributor_grants SET granted_by = '[shredded]' WHERE granted_by = ?1`).bind(input.email),
-      database.prepare(`UPDATE map_contributor_grants SET revoked_by = '[shredded]' WHERE revoked_by = ?1`).bind(input.email),
-      database.prepare(`UPDATE map_contributor_grants SET suspended_by = '[shredded]' WHERE suspended_by = ?1`).bind(input.email),
-      database.prepare(`DELETE FROM map_contributor_grants WHERE account_id = ?1`).bind(input.accountId),
       database.prepare(`UPDATE organizer_venues SET created_by = '[shredded]' WHERE created_by = ?1`).bind(input.accountId),
       database.prepare(`UPDATE event_notices SET updated_by = '[shredded]' WHERE updated_by = ?1`).bind(input.accountId),
       // Pending requests have no decision to preserve. Reviewed applications
@@ -581,13 +564,6 @@ export function createIdentityRepository(database: D1Database, options: { bootst
              SELECT 1 FROM accounts WHERE id = ?2 AND disabled_at IS NULL AND deletion_started_at IS NOT NULL
            )`,
       ).bind(input.now, input.accountId, input.retrySessionId ?? null),
-      // Removing this in the same transaction makes every in-flight map file
-      // bind fail after its R2 put; the handler then removes that object.
-      database.prepare(
-        `DELETE FROM map_contributor_grants WHERE account_id = ?1 AND EXISTS (
-           SELECT 1 FROM accounts WHERE id = ?1 AND disabled_at IS NULL AND deletion_started_at IS NOT NULL
-         )`,
-      ).bind(input.accountId),
       database.prepare(
         `UPDATE organizer_event_grants SET revoked_by = '[account-deletion]', revoked_at = ?2
          WHERE account_id = ?1 AND revoked_at IS NULL AND EXISTS (
@@ -1072,7 +1048,6 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   }
 
   async function listLiveOverrides(eventId: string, phase: OverridesPhase) {
-    await ensureRuntimeReady();
     return readLiveOverrides(eventId, phase);
   }
 
@@ -1186,7 +1161,6 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   }
 
   async function getOverridesDoc(eventId: string) {
-    await ensureRuntimeReady();
     return database.prepare(`SELECT revision, json, updated_at, phase FROM overrides_doc WHERE event_id = ?1`)
       .bind(eventId).first<{ revision: number; json: string; updated_at: number; phase: OverridesPhase }>();
   }
@@ -3013,13 +2987,13 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   async function clearPreviewData() {
     await ensureTables();
     await database.batch([
-      ...["review_notification_items", "review_notification_batches", "account_notification_items", "account_notification_batches", "account_notification_preferences"].map(table => database.prepare(`DELETE FROM ${table}`)),
+      ...["account_notification_items", "account_notification_preferences"].map(table => database.prepare(`DELETE FROM ${table}`)),
     ]);
     await database.batch([
-      "github_webhook_deliveries", "organizer_publication_lease", "organizer_publication_jobs", "organizer_submission_snapshots",
+      "organizer_publication_lease", "organizer_publication_jobs", "organizer_submission_snapshots",
       "organizer_amendment_changes", "organizer_amendments", "organizer_applications", "organizer_category_sequences",
       "organizer_import_rows", "organizer_import_sources", "organizer_event_reviews", "organizer_event_invitations", "organizer_event_grants", "organizer_event_revisions", "organizer_workspace_preferences", "organizer_workspace_state", "organizer_event_candidates", "organizer_venue_spaces", "organizer_venues", "organizer_reference_records",
-      "map_draft_exports", "map_draft_files", "map_draft_reviews", "map_draft_comments", "map_draft_revisions", "map_drafts", "map_contributor_grants",
+      "map_draft_revisions", "map_drafts",
       "planning_shares", "login_tokens", "sessions", "circle_claims", "circle_overrides", "overrides_doc", "event_notices", "audit_log", "preview_mail_sink", "accounts",
     ].map((table) => database.prepare(`DELETE FROM ${table}`)));
     await seedOrganizerVenueCatalog(database);

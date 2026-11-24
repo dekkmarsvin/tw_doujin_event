@@ -3,6 +3,7 @@ import test, { after } from "node:test";
 import { parse } from "parse5";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer, isRunnableDevEnvironment } from "vite";
+import { applyMigrations } from "./support/d1-migrations.mjs";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const environment = vite.environments.ssr;
@@ -17,6 +18,7 @@ const miniflare = new Miniflare(convertV4MiniflareOptions({
   d1Databases: { DB: "preview-mail-route-test" },
 }));
 const database = await miniflare.getD1Database("DB");
+await applyMigrations(database);
 after(async () => { await miniflare.dispose(); await vite.close(); });
 
 const previewObjects = new Set(["events/ff47/circles/c-000001/published.webp", "events/ff47/circles/c-000001/draft.png"]);

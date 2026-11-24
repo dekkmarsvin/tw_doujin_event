@@ -3,6 +3,7 @@ import test, { after } from "node:test";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer } from "vite";
 import { previewResources, previewOrigin } from "../scripts/preview-e2e-resources.mjs";
+import { applyMigrations } from "./support/d1-migrations.mjs";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const load = file => vite.environments.ssr.runner.import(file);
@@ -12,6 +13,7 @@ const { previewMailRouteFor } = await load("/app/portal-mail.ts");
 const { onRequestPost, onRequestDelete } = await load("/functions/api/preview/mail.ts");
 const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: "export default {fetch(){return new Response('ok')}}", d1Databases: { DB: "fixture-preview" } }));
 const db = await mf.getD1Database("DB");
+await applyMigrations(db);
 const repository = createIdentityRepository(db);
 await repository.ensureTables();
 after(async () => { await mf.dispose(); await vite.close(); });

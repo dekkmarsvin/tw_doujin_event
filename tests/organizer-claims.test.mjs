@@ -3,6 +3,7 @@ import test, { after, beforeEach } from "node:test";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer } from "vite";
 import { organizerRepositoryFixtureScript, resetOrganizerRepositoryFixture } from "./support/organizer-repository-fixture.mjs";
+import { applyMigrations } from "./support/d1-migrations.mjs";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const { createIdentityRepository } = await vite.environments.ssr.runner.import("/db/identity-repository.ts");
@@ -11,6 +12,7 @@ const { circleObjectPrefix } = await vite.environments.ssr.runner.import("/app/h
 const { createEmptyOrganizerEventDraft } = await vite.environments.ssr.runner.import("/app/organizer-event.ts");
 const runtime = new Miniflare(convertV4MiniflareOptions({ modules: true, script: await organizerRepositoryFixtureScript(), d1Databases: { DB: "organizer-claims-test" } }));
 const database = await runtime.getD1Database("DB");
+await applyMigrations(database);
 const repo = createIdentityRepository(database);
 after(async () => { await runtime.dispose(); await vite.close(); });
 const now = 1_790_000_000_000;

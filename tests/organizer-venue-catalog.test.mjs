@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test, { after, beforeEach } from "node:test";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer, isRunnableDevEnvironment } from "vite";
+import { applyMigrations } from "./support/d1-migrations.mjs";
 
 const vite = await createServer({
   configFile: false,
@@ -22,6 +23,7 @@ const miniflare = new Miniflare(convertV4MiniflareOptions({
   d1Databases: { DB: "organizer-venue-catalog-test" },
 }));
 const database = await miniflare.getD1Database("DB");
+await applyMigrations(database);
 const repository = createIdentityRepository(database);
 after(async () => { await miniflare.dispose(); await vite.close(); });
 
