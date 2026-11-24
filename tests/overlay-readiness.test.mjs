@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { verifyOverlayReadiness } from "../scripts/overlay-readiness.mjs";
-import runtimeVersion from "../db/identity-runtime-version.json" with { type: "json" };
 
 const document = { schema: "circle-overrides/1", eventId: "ff47", revision: 10, overrides: [] };
 function ready(payload = document) {
-  return Response.json(payload, { headers: { "x-identity-runtime-version": String(runtimeVersion.version) } });
+  return Response.json(payload);
 }
 
 test("deployment readiness verifies two live reads with preview access and no conditional cache", async () => {
@@ -24,14 +23,13 @@ test("deployment readiness verifies two live reads with preview access and no co
   }
 });
 
-test("readiness rejects stale deployment, wrong event, failed read and false empty success", async () => {
+test("readiness rejects a failed read, wrong event and false empty success", async () => {
   for (const response of [
     new Response(null, { status: 503 }),
-    Response.json(document),
     ready({ ...document, eventId: "another" }),
     ready({ error: "unavailable" }),
   ]) {
-    await assert.rejects(verifyOverlayReadiness("https://example.pages.dev", "ff47", { fetchImpl: async () => response }), /readiness|runtime version/);
+    await assert.rejects(verifyOverlayReadiness("https://example.pages.dev", "ff47", { fetchImpl: async () => response }), /readiness/);
   }
   let calls = 0;
   await assert.rejects(verifyOverlayReadiness("https://example.pages.dev", "ff47", {

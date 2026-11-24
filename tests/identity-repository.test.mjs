@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer, isRunnableDevEnvironment } from "vite";
+import { applyMigrations } from "./support/d1-migrations.mjs";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { createIdentityRepository } = await environment.runner.import("/db/identity-repository.ts");
-const { IDENTITY_COLUMN_MIGRATIONS, IDENTITY_INDEXES, IDENTITY_TABLES } = await environment.runner.import("/db/identity-runtime-schema.ts");
 const { parseCircleOverridesPayload } = await environment.runner.import("/app/circle-overrides.ts");
 
 const miniflare = new Miniflare(convertV4MiniflareOptions({
@@ -16,81 +16,11 @@ const miniflare = new Miniflare(convertV4MiniflareOptions({
   d1Databases: { DB: "identity-test", LEGACY_DB: "identity-legacy-test" },
 }));
 const database = await miniflare.getD1Database("DB");
-const legacyDatabase = await miniflare.getD1Database("LEGACY_DB");
+await applyMigrations(database);
 const repository = createIdentityRepository(database);
 after(async () => { await miniflare.dispose(); await vite.close(); });
 
 const NOW = 1_786_500_000_000;
-
-test("creates every table and index on first use", async () => {
-  await repository.ensureTables();
-  // Idempotent: a second call must not throw on the IF NOT EXISTS statements.
-  await repository.ensureTables();
-  const tables = await database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name").all();
-  assert.deepEqual(
-    tables.results.map((row) => row.name),
-    IDENTITY_TABLES.map((table) => table.name).sort(),
-    "runtime tables must exactly match the schema authority",
-  );
-
-  const indexes = await database.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%' ORDER BY name").all();
-  assert.deepEqual(
-    indexes.results.map((row) => row.name),
-    IDENTITY_INDEXES.map((index) => index.name).sort(),
-    "runtime indexes must exactly match the schema authority",
-  );
-
-  for (const expected of IDENTITY_TABLES) {
-    const info = await database.prepare(`PRAGMA table_info(${expected.name})`).all();
-    assert.deepEqual(
-      info.results.map((column) => column.name),
-      [...expected.columnNames],
-      `${expected.name} columns must match the schema authority`,
-    );
-  }
-});
-
-test("additive column migrations upgrade an existing database idempotently", async () => {
-  // One CREATE per table, listing every column added after it existed: a table
-  // can be behind by more than one migration, and `circle_overrides` now is.
-  for (const [tableName, missingColumns] of [
-    ["circle_overrides", ["post_event_hidden", "retention_choice", "retention_expires_at", "hosted_thumbnail_key"]],
-    ["overrides_doc", ["phase"]],
-    ["audit_log", ["shredded_at"]],
-    // Indexed migrated columns. `CREATE INDEX` over a column that only arrives
-    // via ALTER has to run after the migration: creating it alongside the
-    // tables fails with `no such column` on exactly the databases that were
-    // already working, and takes every request down with it.
-    ["map_drafts", ["candidate_id"]],
-    ["login_tokens", ["audience", "minted_by"]],
-    ["organizer_publication_jobs", ["next_attempt_at", "pending_attempts", "workflow_run_attempt", "workflow_retry_attempt", "production_manifest_sha256"]],
-  ]) {
-    const definition = IDENTITY_TABLES.find((table) => table.name === tableName);
-    assert.ok(definition);
-    const oldColumns = definition.columns.filter((column) => !missingColumns.some((missing) => column.startsWith(`${missing} `)));
-    await legacyDatabase.prepare(`CREATE TABLE ${tableName} (${oldColumns.join(", ")})`).run();
-  }
-
-  const legacyRepository = createIdentityRepository(legacyDatabase);
-  await legacyRepository.ensureTables();
-  await legacyRepository.ensureTables();
-
-  for (const migration of IDENTITY_COLUMN_MIGRATIONS) {
-    const info = await legacyDatabase.prepare(`PRAGMA table_info(${migration.table})`).all();
-    assert.ok(info.results.some((column) => column.name === migration.column), `missing upgraded column ${migration.table}.${migration.column}`);
-  }
-
-  // The upgraded database must also end up with every index, including those
-  // over the columns the migration just added.
-  const upgradedIndexes = await legacyDatabase.prepare(
-    "SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%' ORDER BY name",
-  ).all();
-  assert.deepEqual(
-    upgradedIndexes.results.map((row) => row.name),
-    IDENTITY_INDEXES.map((index) => index.name).sort(),
-    "an upgraded database must carry the same indexes as a fresh one",
-  );
-});
 
 test("a login token is single use and cannot be replayed", async () => {
   await repository.createLoginToken({ tokenHash: "hash-a", email: "a@example.com", now: NOW, expiresAt: NOW + 900_000, ipHash: "ip" });

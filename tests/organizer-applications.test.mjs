@@ -3,6 +3,7 @@ import test, { after, before, beforeEach } from "node:test";
 import { resetSiteSettings } from "./support/site-settings-fixture.mjs";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer, isRunnableDevEnvironment } from "vite";
+import { applyMigrations } from "./support/d1-migrations.mjs";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 if (!isRunnableDevEnvironment(vite.environments.ssr)) throw new Error("SSR unavailable");
@@ -11,6 +12,7 @@ const { createCirclePortalHandlers } = await vite.environments.ssr.runner.import
 const { parseOrganizerApplication } = await vite.environments.ssr.runner.import("/app/organizer-applications.ts");
 const miniflare = new Miniflare(convertV4MiniflareOptions({ modules: true, script: "export default { fetch() { return new Response('ok'); } }", d1Databases: { DB: "applications-test" } }));
 const database = await miniflare.getD1Database("DB");
+await applyMigrations(database);
 const repository = createIdentityRepository(database, { bootstrapAdmins: ["admin@example.test"] });
 after(async () => { await miniflare.dispose(); await vite.close(); });
 before(() => repository.ensureTables());

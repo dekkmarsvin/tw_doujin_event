@@ -101,13 +101,6 @@ export const memberNotificationSource = `SELECT g.account_id, c.event_id, NULL A
   JOIN organizer_event_grants g ON g.candidate_id = c.id
     AND (g.account_id = target.account_id OR (g.role = 'owner' AND g.revoked_at IS NULL))`;
 
-/** Rows of the notification tables this design replaced (#546) that name an
- * address; they go with the admin or account until those tables are dropped. */
-export function deleteLegacyReviewRecipient(database: D1Database, email: string) {
-  return ["review_notification_items", "review_notification_batches", "admin_notification_preferences"]
-    .map(table => database.prepare(`DELETE FROM ${table} WHERE recipient = ?1`).bind(email));
-}
-
 export function deleteAccountNotifications(database: D1Database, accountId: string) {
   return ["account_notification_items", "account_notification_preferences"]
     .map(table => database.prepare(`DELETE FROM ${table} WHERE account_id = ?1`).bind(accountId));

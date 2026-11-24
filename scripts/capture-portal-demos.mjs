@@ -105,6 +105,8 @@ async function startServer() {
   await clearLocal();
   const manifest = require.resolve('wrangler/package.json');
   const bin = JSON.parse(await readFile(manifest, 'utf8')).bin.wrangler;
+  // A cleared local D1 has no schema until the migrations run (#546).
+  run(path.resolve(path.dirname(manifest), bin), ['d1', 'migrations', 'apply', 'DB', '--local', '--persist-to', '.wrangler/local-portal']);
   for (let attempt = 0; attempt < 2; attempt++) {
     serverLog = '';
     server = spawn(process.execPath, [path.resolve(path.dirname(manifest), bin), ...localPortalWranglerArgs({ ...config, THUMBNAIL_PUBLIC_ORIGIN: 'https://portal-pictures.test' })], { cwd: ROOT, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, env: { ...process.env, XDG_CONFIG_HOME: RUNTIME, WRANGLER_LOG_PATH: path.join(RUNTIME, 'logs'), WRANGLER_SEND_METRICS: 'false', CI: '1' } });

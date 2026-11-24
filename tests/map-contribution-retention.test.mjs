@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test, { after, beforeEach } from "node:test";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer, isRunnableDevEnvironment } from "vite";
+import { applyMigrations } from "./support/d1-migrations.mjs";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const environment = vite.environments.ssr;
@@ -15,6 +16,7 @@ const miniflare = new Miniflare(convertV4MiniflareOptions({
   d1Databases: { DB: "map-contribution-retention-test" },
 }));
 const database = await miniflare.getD1Database("DB");
+await applyMigrations(database);
 const repository = createIdentityRepository(database);
 after(async () => { await miniflare.dispose(); await vite.close(); });
 
@@ -43,4 +45,22 @@ test("purging a candidate map takes the layout plan it was traced from with it",
   });
   assert.deepEqual(deleted, ["organizer-map-backgrounds/candidate-a/candidate-map"]);
   assert.equal(await database.prepare("SELECT id FROM map_drafts WHERE id = 'candidate-map'").first(), null);
+});
+
+test("a map saved again after a failed purge is kept", async () => {
+  // An earlier run claimed the draft but could not delete its background;
+  // the organizer then saved it again.
+  await database.prepare(
+    `INSERT INTO map_drafts (id, event_id, period_key, venue_space_id, owner_account_id, status, current_revision, created_at, updated_at, last_activity_at, candidate_id, retention_action)
+     VALUES ('resaved-map', 'ff47', '1', 'hall', ?1, 'draft', 2, ?2, ?3, ?3, 'candidate-b', 'delete')`,
+  ).bind(accountId, NOW - 200 * DAY, NOW - DAY).run();
+  const deleted = [];
+  await purgeExpiredRecords(database, NOW, RETENTION_WINDOWS, undefined, {
+    delete: async (keys) => deleted.push(...(Array.isArray(keys) ? keys : [keys])),
+  });
+  assert.deepEqual(deleted, []);
+  assert.deepEqual(
+    { ...(await database.prepare("SELECT id, retention_action FROM map_drafts WHERE id = 'resaved-map'").first()) },
+    { id: "resaved-map", retention_action: null },
+  );
 });

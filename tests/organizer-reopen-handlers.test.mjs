@@ -3,6 +3,7 @@ import test, { after, beforeEach } from "node:test";
 import { resetSiteSettings } from "./support/site-settings-fixture.mjs";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer, isRunnableDevEnvironment } from "vite";
+import { applyMigrations } from "./support/d1-migrations.mjs";
 
 const vite = await createServer({
   configFile: false,
@@ -24,6 +25,7 @@ const databaseHost = new Miniflare(convertV4MiniflareOptions({
   d1Databases: { DB: "organizer-reopen-handlers-test" },
 }));
 const database = await databaseHost.getD1Database("DB");
+await applyMigrations(database);
 const repository = createIdentityRepository(database);
 
 after(async () => {

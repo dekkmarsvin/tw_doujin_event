@@ -25,11 +25,13 @@ npx wrangler pages project create tw-catalog --production-branch main
 
 ### 3. 建立 D1 與 binding
 
-建立資料庫 `tw-catalog-identity`，在 `wrangler.jsonc` 以 binding 名 `DB` 綁定。**不需要執行任何 migration。**
+建立資料庫 `tw-catalog-identity`，在 `wrangler.jsonc` 以 binding 名 `DB` 綁定，再套用 schema：
 
-runtime table 由 `ensureTables()` 在首次請求時以 `CREATE TABLE IF NOT EXISTS` 建立，表名與數量以 [`db/identity-runtime-schema.ts`](../../db/identity-runtime-schema.ts) 為準，各表用途見[資料 inventory](../contracts/data-inventory.md)。preview-only mail sink 使用 `preview_mail_sink`。production 也會有空的 sink 表，但沒有 preview flag 與 E2E token，路由一律回 404，且正常寄信路徑不會寫入它。
+```bash
+npx wrangler d1 migrations apply DB --remote
+```
 
-identity schema 的唯一 authority 是 `db/identity-runtime-schema.ts`；它從同一組 table／column／index declarations 產生首次請求使用的 SQL 與測試驗證 metadata。**本專案沒有任何一條路徑會執行 migration**，也沒有任何 ORM 或 migration 檔案——僅存的一份（只涵蓋 `event_maps`）已隨本機 authoring 堆疊依 [ADR-0049](../adr/0049-the-local-authoring-backup-is-withdrawn.md) 移除。
+表的結構以 [`migrations/`](../../migrations/) 為準，各表用途見[資料 inventory](../contracts/data-inventory.md)。部署前後的順序見[部署 runbook 的 D1 migrations](./deployment.md#d1-migrations)。
 
 #### preview 必須用另一個資料庫
 
@@ -43,6 +45,12 @@ npx wrangler d1 create tw-catalog-identity-preview
 "env": { "preview": { "d1_databases": [
   { "binding": "DB", "database_name": "tw-catalog-identity-preview", "database_id": "…" }
 ] } }
+```
+
+再對 preview 套用同一組 schema：
+
+```bash
+npx wrangler d1 migrations apply DB --remote --env preview
 ```
 
 三件容易做錯的事：

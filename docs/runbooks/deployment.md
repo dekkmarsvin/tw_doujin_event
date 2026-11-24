@@ -29,17 +29,25 @@
 
 不使用 advanced mode 是硬邊界：它會讓每一個請求（含 1.8 MB 的 `circles.json`）都經過 Worker。`public/_routes.json` 明列 HTML、既有 API 與 overlay；HTML 經 middleware 加上 CSP nonce（[ADR-0074](../adr/0074-html-responses-carry-per-request-csp-nonces.md)），其餘靜態資源仍由邊緣直送。
 
-### Identity runtime 初始化
+### D1 migrations
 
-Identity 保留首次使用時建表（#6／#24），沒有額外的手動 migration 步驟。`db/identity-runtime-initializer.ts` 以 D1 的 `identity_runtime_state` 保存完成版本；新 isolate 讀到相同或較新的版本即略過 schema／固定 seed，管理者與通知初始化仍由控制面獨立執行。
+D1 的 schema 由 `migrations/` 管理（#546 5d），程式不在執行時建表或改表。`0001_baseline.sql` 是 5d 當時正式站的完整結構（全部 `IF NOT EXISTS`），`0002_drop_retired_tables.sql` 刪除已停用的表。
 
-修改 schema、column migration、index、固定場館／reference seed 或初始化演算法時，遞增 `db/identity-runtime-version.json` 的 `version` 並更新 `fingerprint`。`tests/identity-runtime-initialization.test.mjs` 會計算初始化程式、schema 宣告與實際 seed bytes 的 SHA-256；不符時顯示新值。已發布的版本不可重用。僅控制面管理者設定改變不需要 schema 升版，也不能把信箱名單放進此檔。
+改 schema 時新增下一號 migration，**先套用到資料庫，再部署用到它的程式**；刪除欄位或表時順序相反，先部署不再使用它的程式（含排程清除 Worker），再套用 migration。
 
-升級必須維持前版程式可使用的 additive 結構；較新 marker 不能觸發舊 DDL 或被舊程式倒寫。失敗不記錄完成版本，下一次請求可重試。新部署的首次初始化仍可能較慢，同時開始的初始化仍靠既有冪等操作完成，並非 exactly-once。
+```bash
+npx wrangler d1 migrations list DB --remote
+npx wrangler d1 migrations apply DB --remote
+npx wrangler d1 migrations apply DB --remote --env preview
+```
 
-Production 的既有 `smoke-published-events.mjs` 與隔離 preview E2E 都會透過 `overlay-readiness.mjs` 連續讀取公開 overlay，確認版本 header、有效資料與再次讀取成功；不寫入 production fixture，也不把一次 smoke 當成效能 SLO。Pages 驗證與 publication Worker 的 source／binding／active-version 證據仍分開；retention Worker 不建立 schema。
+本機 portal、`npm run pages:dev` 與 portal 示範截圖啟動時自動套用；測試以 `tests/support/d1-migrations.mjs` 套用同一組檔案。5d 之前留下的本機資料庫（`.wrangler/`）可能缺欄位，遇到 `no such column` 時刪掉該資料夾重建。
 
-回復使用通過相容性測試的前版 Pages／受影響 Worker 程式，保留版本表及資料，不做 down migration。未來若需要破壞相容性的 schema 變更，必須另行定義切換與回復策略，不能沿用「較新版本直接略過」的假設。
+`0002` 保留 `identity_runtime_state` 並把版本設得很高：舊的 deployment 仍可從各自的網址開啟，裡面還有已移除的執行時建表程式，看到這個版本就不會重建已刪除的表。
+
+正式切換時，Pages 部署到套用 `0002` 之間的幾分鐘，已刪除帳號的舊管理者通知偏好列仍會留著，套用 `0002` 後隨表刪除。
+
+Production 的 `smoke-published-events.mjs` 與隔離 preview E2E 會透過 `overlay-readiness.mjs` 連續讀取公開 overlay 兩次，確認有效資料與再次讀取成功；不寫入 production fixture。
 
 ### HTML nonce 驗收
 

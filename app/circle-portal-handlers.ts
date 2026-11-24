@@ -6,7 +6,6 @@ import type { AdminCircleDetail } from "./admin-circle-detail";
 import type { AdminAccountCircleSearchResponse, AdminAccountDetailResponse } from "./admin-account-detail";
 import { normalizeCircleName, type CircleViewRecord } from "./circle-records";
 import { notificationParameters } from "./notification-navigation";
-import identityRuntimeVersion from "../db/identity-runtime-version.json";
 import { createAdminReferenceHandlers } from "./admin-reference-handlers";
 import { circleOverrideFieldsProblem, circleRetentionExpiresAt, isRetentionChoice, type CircleOverrideFields } from "./circle-overrides";
 import { getEventDefinition } from "./event-catalog";
@@ -3182,7 +3181,6 @@ export function createCirclePortalHandlers({
     const headers = {
       "content-type": "application/json; charset=utf-8",
       "cache-control": DYNAMIC_OVERLAY_CACHE_POLICY,
-      "x-identity-runtime-version": String(identityRuntimeVersion.version),
       etag,
     };
     if (request.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers });

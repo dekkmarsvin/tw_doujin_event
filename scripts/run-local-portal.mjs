@@ -14,6 +14,14 @@ const wrangler = fileURLToPath(new URL(
   JSON.parse(await readFile(manifest, "utf8")).bin.wrangler,
   pathToFileURL(manifest),
 ));
+// The schema comes from migrations/ (#546); a fresh or cleared local D1 gets it
+// before anything reads it.
+const migrate = spawnSync(process.execPath, [wrangler, "d1", "migrations", "apply", "DB", "--local", "--persist-to", ".wrangler/local-portal"], {
+  cwd: fileURLToPath(new URL("..", import.meta.url)),
+  stdio: "inherit",
+});
+if (migrate.status !== 0) throw new Error("local portal: could not apply the D1 migrations.");
+
 // Pages Functions serve event data from R2 (#546), so the staged fixture goes
 // into the portal's local bucket before the server starts.
 const seed = spawnSync(process.execPath, [fileURLToPath(new URL("./upload-event-data.mjs", import.meta.url)), "--persist-to", ".wrangler/local-portal"], {

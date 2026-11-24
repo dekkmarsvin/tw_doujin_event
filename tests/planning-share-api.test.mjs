@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test, { after, beforeEach } from "node:test";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import { createServer } from "vite";
+import { applyMigrations } from "./support/d1-migrations.mjs";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const load = name => vite.environments.ssr.runner.import(name);
@@ -18,6 +19,7 @@ const { onRequestGet: apiGet } = await load("/functions/api/shares/[shareId].ts"
 const { onRequestGet: pageGet } = await load("/functions/s/[shareId].ts");
 const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: "export default {fetch(){return new Response('ok')}}", d1Databases: { DB: "planning-shares" } }));
 const database = await mf.getD1Database("DB");
+await applyMigrations(database);
 const identity = createIdentityRepository(database);
 const repository = createPlanningShareRepository(database);
 after(async () => { await mf.dispose(); await vite.close(); });

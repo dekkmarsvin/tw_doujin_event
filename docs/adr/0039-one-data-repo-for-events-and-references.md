@@ -41,7 +41,7 @@ ADR-0014 真正在承重、且本 ADR **不改**的是它的核心句：「問�
 
 但目前沒有任何消費者使用那個跨活動性質：
 
-- `circle_claims` 的唯一索引是 `(event_id, circle_id)`，`circle_overrides` 同樣是 `(event_id, circle_id)`（[`db/identity-runtime-schema.ts`](../../db/identity-runtime-schema.ts)）。社團在下一場活動本來就要重新認領，覆蓋資料也不會沿用。
+- `circle_claims` 的唯一索引是 `(event_id, circle_id)`，`circle_overrides` 同樣是 `(event_id, circle_id)`（[`db/identity-runtime-schema.ts`](https://github.com/dekkmarsvin/tw_doujin_event/blob/a65a268a2f749980d6c2892ff64dec78c978ab5d/db/identity-runtime-schema.ts)）。社團在下一場活動本來就要重新認領，覆蓋資料也不會沿用。
 - 前端一次只載入一個活動定義：[`app/event-catalog.ts`](../../app/event-catalog.ts) 的 `ACTIVE_EVENT = EVENT_DEFINITIONS[0]`，由 build 時注入。跨活動比對在產品上沒有可達的畫面。
 
 也就是說，人工裁決的成本是每場活動都要付的，而它換到的能力目前沒有任何一處在用。
