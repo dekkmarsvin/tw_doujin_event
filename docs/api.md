@@ -75,7 +75,7 @@
 
 ## 網站管理
 
-階段 5 起由 admin 模組（[`server/admin.ts`](../server/admin.ts)）提供，經單一 router。主辦擁有者在自己活動的認領審核與撤下沿用同一套步驟。`/api/admin/organizer/*` 屬於主辦工作區，留待 organizer 模組。
+階段 5 起由 admin 模組（[`server/admin.ts`](../server/admin.ts)）提供，經單一 router。主辦擁有者在自己活動的認領審核與撤下沿用同一套步驟。`/api/admin/organizer/*` 屬於主辦工作區，見下節。
 
 | 方法 | 路徑 | 權限 | 呼叫端 | #546 |
 |---|---|---|---|---|
@@ -94,6 +94,8 @@
 | POST | `/api/admin/integrations/github/probe` | 管理者 | 前端未使用 | 已刪除（階段 4b） |
 
 ## 主辦工作區
+
+階段 5 起由 organizer 模組提供，經單一 router：[`server/organizer.ts`](../server/organizer.ts)（申請、活動候選、工作區、協作者與邀請、主辦擁有者的認領審核、公告與撤下）、[`server/organizer-content.ts`](../server/organizer-content.ts)（場館與參照、匯入、地圖、活動圖片、驗證與預覽）、[`server/organizer-publication.ts`](../server/organizer-publication.ts)（送審、管理者審核發布、重試、重新開啟與修正）。
 
 | 方法 | 路徑 | 權限 | 呼叫端 | #546 |
 |---|---|---|---|---|
