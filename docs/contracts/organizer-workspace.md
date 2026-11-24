@@ -420,7 +420,7 @@ data／main 的 PR、核准 check、allowlist 與 expected SHA merge 由 driver 
 
 編輯採置中 modal，提供儲存與取消，離開未儲存內容時確認放棄；刪除先列出目標及不可復原後果，受引用限制時只顯示原因與取消。寫入成功後清單重新讀取若失敗，顯示已儲存／刪除狀態、鎖住寫入，只允許重試 GET；不得重送已成功 POST。既有候選活動的角色與版本檢查不變，已送審 snapshot 和已發布 pin 不變；新分類版本須由活動明確選取，不會自動套用至既有活動，本次不擴張發布後修正可修改的 reference 範圍。
 
-**實作**：[`app/admin-reference-handlers.ts`](../../app/admin-reference-handlers.ts)、[`app/shared-reference-catalog.ts`](../../app/shared-reference-catalog.ts)、[`app/admin/admin-reference-panel.tsx`](../../app/admin/admin-reference-panel.tsx)、[`db/admin-reference-repository.ts`](../../db/admin-reference-repository.ts)、[`functions/api/admin/references.ts`](../../functions/api/admin/references.ts)。
+**實作**：[`app/admin-reference-handlers.ts`](../../app/admin-reference-handlers.ts)、[`app/shared-reference-catalog.ts`](../../app/shared-reference-catalog.ts)、[`app/admin/admin-reference-panel.tsx`](../../app/admin/admin-reference-panel.tsx)、[`db/admin-reference-repository.ts`](../../db/admin-reference-repository.ts)、[`server/admin.ts`](../../server/admin.ts)。
 **驗證**：[`tests/organizer-handlers.test.mjs`](../../tests/organizer-handlers.test.mjs)、[`tests/browser/admin-shared-references.mjs`](../../tests/browser/admin-shared-references.mjs)。
 
 ## 工作區通知信

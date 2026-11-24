@@ -75,6 +75,8 @@
 
 ## 網站管理
 
+階段 5 起由 admin 模組（[`server/admin.ts`](../server/admin.ts)）提供，經單一 router。主辦擁有者在自己活動的認領審核與撤下沿用同一套步驟。`/api/admin/organizer/*` 屬於主辦工作區，留待 organizer 模組。
+
 | 方法 | 路徑 | 權限 | 呼叫端 | #546 |
 |---|---|---|---|---|
 | GET | `/api/admin/review-queue` | 管理者 | `listReviewQueue` | 保留 |

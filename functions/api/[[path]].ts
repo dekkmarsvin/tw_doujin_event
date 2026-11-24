@@ -1,4 +1,4 @@
-import { authFor, circleFor, guard, sharesFor } from "../_portal";
+import { adminFor, authFor, circleFor, guard, sharesFor } from "../_portal";
 
 /**
  * Single router for the rewritten backend modules (#546 phase 5). Each rewritten
@@ -52,6 +52,24 @@ const routes: Route[] = [
     handle: (context, { circleId }) => circleFor(context).uploadCatalogImage(context.request, circleId) },
   { method: "POST", path: "/api/circle/:circleId/visibility", circleErrors: true,
     handle: (context, { circleId }) => circleFor(context).setPostEventVisibility(context.request, circleId) },
+  { method: "GET", path: "/api/admin/site-settings", handle: (context) => adminFor(context).adminGetSiteSettings(context.request) },
+  { method: "PUT", path: "/api/admin/site-settings", handle: (context) => adminFor(context).adminUpdateSiteSettings(context.request) },
+  { method: "POST", path: "/api/admin/service-check", handle: (context) => adminFor(context).adminRequestServiceCheck(context.request) },
+  { method: "GET", path: "/api/admin/review-queue", handle: (context) => adminFor(context).adminReviewQueue(context.request) },
+  { method: "GET", path: "/api/admin/claims", handle: (context) => adminFor(context).adminListClaims(context.request) },
+  { method: "POST", path: "/api/admin/claims", handle: (context) => adminFor(context).adminDecideClaim(context.request) },
+  { method: "GET", path: "/api/admin/overrides", handle: (context) => adminFor(context).adminSearchTakedownCircles(context.request) },
+  { method: "POST", path: "/api/admin/overrides", handle: (context) => adminFor(context).adminTakedown(context.request) },
+  { method: "GET", path: "/api/admin/circles/:circleId",
+    handle: (context, { circleId }) => adminFor(context).adminCircleDetail(context.request, circleId) },
+  { method: "GET", path: "/api/admin/admins", handle: (context) => adminFor(context).adminListAdmins(context.request) },
+  { method: "POST", path: "/api/admin/admins", handle: (context) => adminFor(context).adminManageAdmins(context.request) },
+  // `?circle=` searches accounts by claimed circle name; `?email=` reads one account.
+  { method: "GET", path: "/api/admin/accounts", handle: (context) => new URL(context.request.url).searchParams.has("circle")
+    ? adminFor(context).adminSearchAccountsByCircle(context.request) : adminFor(context).adminAccountDetail(context.request) },
+  { method: "POST", path: "/api/admin/accounts", handle: (context) => adminFor(context).adminDisableAccount(context.request) },
+  { method: "GET", path: "/api/admin/references", handle: (context) => adminFor(context).adminListReferences(context.request) },
+  { method: "POST", path: "/api/admin/references", handle: (context) => adminFor(context).adminCreateReference(context.request) },
 ];
 
 /** `/api/claims/:claimId` style patterns; a parameter is one non-empty segment,

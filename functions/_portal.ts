@@ -4,6 +4,7 @@ export { previewMailRouteFor } from "../app/portal-mail";
 import { createCirclePortalHandlers, type CircleLookup, type CirclePortalHandlers, type PortalDependencies } from "../app/circle-portal-handlers";
 import { createAuth } from "../server/auth";
 import { createCircle } from "../server/circle";
+import { createAdmin } from "../server/admin";
 import { createPlanningShareHandlers } from "../server/shares";
 import { createPlanningShareRepository } from "../db/planning-share-repository";
 import { buildCircleCatalog, isCircleCatalogPayload, normalizeCircleName, type CircleCatalogPayload } from "../app/circle-records";
@@ -261,6 +262,12 @@ export function authFor(context: { request: Request; env: PortalEnv }) {
 export function circleFor(context: { request: Request; env: PortalEnv }) {
   const dependencies = portalDependencies(context);
   return createCircle(dependencies, createAuth(dependencies)).routes;
+}
+
+/** The admin module's routes: site administration and moderation. */
+export function adminFor(context: { request: Request; env: PortalEnv }) {
+  const dependencies = portalDependencies(context);
+  return createAdmin(dependencies, createAuth(dependencies)).routes;
 }
 
 const shareRepositories = new WeakMap<D1Database, ReturnType<typeof createPlanningShareRepository>>();
