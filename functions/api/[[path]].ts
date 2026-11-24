@@ -1,4 +1,4 @@
-import { authFor, guard, sharesFor } from "../_portal";
+import { authFor, circleFor, guard, sharesFor } from "../_portal";
 
 /**
  * Single router for the rewritten backend modules (#546 phase 5). Each rewritten
@@ -29,6 +29,29 @@ const routes: Route[] = [
     handle: (context) => authFor(context).saveAccountNotificationPreferences(context.request) },
   { method: "POST", path: "/api/shares", handle: (context) => sharesFor(context).create(context.request), circleErrors: true },
   { method: "GET", path: "/api/shares/:shareId", handle: (context, { shareId }) => sharesFor(context).get(shareId), circleErrors: true },
+  { method: "GET", path: "/api/claims", handle: (context) => circleFor(context).listClaims(context.request), circleErrors: true },
+  { method: "POST", path: "/api/claims", handle: (context) => circleFor(context).createClaim(context.request), circleErrors: true },
+  { method: "DELETE", path: "/api/claims/:claimId", circleErrors: true,
+    handle: (context, { claimId }) => circleFor(context).withdrawClaim(context.request, claimId) },
+  { method: "POST", path: "/api/claims/:claimId/challenge", circleErrors: true,
+    handle: (context, { claimId }) => circleFor(context).runChallenge(context.request, claimId) },
+  { method: "GET", path: "/api/circle/search", handle: (context) => circleFor(context).searchCatalog(context.request), circleErrors: true },
+  { method: "GET", path: "/api/circle/:circleId/overrides", circleErrors: true,
+    handle: (context, { circleId }) => circleFor(context).getMyOverride(context.request, circleId) },
+  { method: "PUT", path: "/api/circle/:circleId/overrides", circleErrors: true,
+    handle: (context, { circleId }) => circleFor(context).putOverride(context.request, circleId) },
+  { method: "DELETE", path: "/api/circle/:circleId/overrides", circleErrors: true,
+    handle: (context, { circleId }) => circleFor(context).deleteMyOverride(context.request, circleId) },
+  { method: "POST", path: "/api/circle/:circleId/preview", circleErrors: true,
+    handle: (context, { circleId }) => circleFor(context).previewOverride(context.request, circleId) },
+  { method: "GET", path: "/api/circle/:circleId/thumbnail", circleErrors: true,
+    handle: (context, { circleId }) => circleFor(context).readThumbnail(context.request, circleId) },
+  { method: "POST", path: "/api/circle/:circleId/thumbnail", circleErrors: true,
+    handle: (context, { circleId }) => circleFor(context).uploadThumbnail(context.request, circleId) },
+  { method: "POST", path: "/api/circle/:circleId/catalog-image", circleErrors: true,
+    handle: (context, { circleId }) => circleFor(context).uploadCatalogImage(context.request, circleId) },
+  { method: "POST", path: "/api/circle/:circleId/visibility", circleErrors: true,
+    handle: (context, { circleId }) => circleFor(context).setPostEventVisibility(context.request, circleId) },
 ];
 
 /** `/api/claims/:claimId` style patterns; a parameter is one non-empty segment,

@@ -57,6 +57,8 @@
 
 ## 社團與認領
 
+階段 5 起由 circle 模組（[`server/circle.ts`](../server/circle.ts)）提供：`/api/claims*` 與 `/api/circle/*` 經單一 router，公開的 `/data/events/:eventId/overrides.json` 保留自己的 function 檔並呼叫同一模組。
+
 | 方法 | 路徑 | 權限 | 呼叫端 | #546 |
 |---|---|---|---|---|
 | GET | `/api/circle/search?q=` 或 `?circle=` | 登入 | `searchCircles`、`readClaimCircle` | 保留 |
