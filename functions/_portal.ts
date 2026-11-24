@@ -5,6 +5,7 @@ import { createCirclePortalHandlers, type CircleLookup, type CirclePortalHandler
 import { createAuth } from "../server/auth";
 import { createCircle } from "../server/circle";
 import { createAdmin } from "../server/admin";
+import { createOrganizer } from "../server/organizer";
 import { createPlanningShareHandlers } from "../server/shares";
 import { createPlanningShareRepository } from "../db/planning-share-repository";
 import { buildCircleCatalog, isCircleCatalogPayload, normalizeCircleName, type CircleCatalogPayload } from "../app/circle-records";
@@ -268,6 +269,13 @@ export function circleFor(context: { request: Request; env: PortalEnv }) {
 export function adminFor(context: { request: Request; env: PortalEnv }) {
   const dependencies = portalDependencies(context);
   return createAdmin(dependencies, createAuth(dependencies)).routes;
+}
+
+/** The organizer module's routes: applications, candidates, their content, publication and an Owner's moderation. */
+export function organizerFor(context: { request: Request; env: PortalEnv }) {
+  const dependencies = portalDependencies(context);
+  const auth = createAuth(dependencies);
+  return createOrganizer(dependencies, auth, createAdmin(dependencies, auth)).routes;
 }
 
 const shareRepositories = new WeakMap<D1Database, ReturnType<typeof createPlanningShareRepository>>();
