@@ -3,6 +3,7 @@ import type { ApiErrorCode } from "../app/i18n/api-error";
 export { previewMailRouteFor } from "../app/portal-mail";
 import { createCirclePortalHandlers, type CircleLookup, type CirclePortalHandlers, type PortalDependencies } from "../app/circle-portal-handlers";
 import { createAuth } from "../server/auth";
+import { createCircle } from "../server/circle";
 import { createPlanningShareHandlers } from "../server/shares";
 import { createPlanningShareRepository } from "../db/planning-share-repository";
 import { buildCircleCatalog, isCircleCatalogPayload, normalizeCircleName, type CircleCatalogPayload } from "../app/circle-records";
@@ -254,6 +255,12 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
 /** The auth module's routes: sign-in, session, sign-out and the caller's own account. */
 export function authFor(context: { request: Request; env: PortalEnv }) {
   return createAuth(portalDependencies(context)).routes;
+}
+
+/** The circle module's routes: claims, the circle's own content and the public overlay. */
+export function circleFor(context: { request: Request; env: PortalEnv }) {
+  const dependencies = portalDependencies(context);
+  return createCircle(dependencies, createAuth(dependencies)).routes;
 }
 
 const shareRepositories = new WeakMap<D1Database, ReturnType<typeof createPlanningShareRepository>>();
