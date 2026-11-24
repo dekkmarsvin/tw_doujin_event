@@ -29,6 +29,8 @@
 
 ## 公開
 
+分享清單（`/api/shares*` 與 `/s/:shareId`）階段 5 起由 shares 模組（[`server/shares.ts`](../server/shares.ts)）提供，API 經單一 router。
+
 | 方法 | 路徑 | 權限 | 呼叫端 | #546 |
 |---|---|---|---|---|
 | GET | `/data/events/:eventId/overrides.json` | 匿名 | Reader（`static-circle-overrides-client.ts`） | 保留。社團補充資料，撤下後立即消失，帶 ETag |

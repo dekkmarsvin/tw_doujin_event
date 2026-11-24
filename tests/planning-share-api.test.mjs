@@ -9,13 +9,13 @@ const vite = await createServer({ configFile: false, root: process.cwd(), server
 const load = name => vite.environments.ssr.runner.import(name);
 const { createPlanningShareRepository } = await load("/db/planning-share-repository.ts");
 const { createIdentityRepository } = await load("/db/identity-repository.ts");
-const { createPlanningShareHandlers } = await load("/app/planning-share-handlers.ts");
+const { createPlanningShareHandlers } = await load("/server/shares.ts");
 const { parseShareSnapshot } = await load("/app/planning-share-snapshot.ts");
 const { getPublishedEvent, getEventDefinition } = await load("/app/event-catalog.ts");
 const { peppered } = await load("/app/portal-crypto.ts");
 const { onRequest } = await load("/functions/_middleware.ts");
-const { onRequestPost } = await load("/functions/api/shares/index.ts");
-const { onRequestGet: apiGet } = await load("/functions/api/shares/[shareId].ts");
+const { onRequest: onRequestPost } = await load("/functions/api/[[path]].ts");
+const apiGet = onRequestPost;
 const { onRequestGet: pageGet } = await load("/functions/s/[shareId].ts");
 const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: "export default {fetch(){return new Response('ok')}}", d1Databases: { DB: "planning-shares" } }));
 const database = await mf.getD1Database("DB");

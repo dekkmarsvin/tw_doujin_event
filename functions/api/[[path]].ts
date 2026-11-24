@@ -1,4 +1,4 @@
-import { authFor, guard } from "../_portal";
+import { authFor, guard, sharesFor } from "../_portal";
 
 /**
  * Single router for the rewritten backend modules (#546 phase 5). Each rewritten
@@ -27,9 +27,12 @@ const routes: Route[] = [
     handle: (context) => authFor(context).getAccountNotificationPreferences(context.request) },
   { method: "PUT", path: "/api/account/notification-preferences", circleErrors: true,
     handle: (context) => authFor(context).saveAccountNotificationPreferences(context.request) },
+  { method: "POST", path: "/api/shares", handle: (context) => sharesFor(context).create(context.request), circleErrors: true },
+  { method: "GET", path: "/api/shares/:shareId", handle: (context, { shareId }) => sharesFor(context).get(shareId), circleErrors: true },
 ];
 
-/** `/api/claims/:claimId` style patterns; a parameter is one non-empty segment. */
+/** `/api/claims/:claimId` style patterns; a parameter is one non-empty segment,
+ * passed raw (not percent-decoded), as Pages passed `context.params`. */
 function match(pattern: string, pathname: string) {
   const expected = pattern.split("/");
   const actual = pathname.split("/");
@@ -38,7 +41,7 @@ function match(pattern: string, pathname: string) {
   for (const [index, part] of expected.entries()) {
     if (part.startsWith(":")) {
       if (!actual[index]) return null;
-      try { params[part.slice(1)] = decodeURIComponent(actual[index]); } catch { return null; }
+      params[part.slice(1)] = actual[index];
     } else if (part !== actual[index]) return null;
   }
   return params;
