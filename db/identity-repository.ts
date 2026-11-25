@@ -721,12 +721,16 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return result.results;
   }
 
-  /** All historical scopes matter when deleting an account: staged R2 objects
-   * are keyed by event/circle even when they were never published to D1. */
+  /** The circles whose hosted pictures go with this account when it is deleted:
+   * the ones it owns now, the same circles whose content `deleteAccount`
+   * removes. Only an owner can upload, and a circle's prefix holds whatever its
+   * current owner — or, after a revocation, its kept content — points at; a
+   * claim that is pending, rejected, revoked or withdrawn grants nothing over it. */
   async function listClaimScopesForAccount(accountId: string) {
     await ensureTables();
     const result = await database.prepare(
-      `SELECT DISTINCT event_id, circle_id FROM circle_claims WHERE account_id = ?1 ORDER BY event_id, circle_id`,
+      `SELECT DISTINCT event_id, circle_id FROM circle_claims WHERE account_id = ?1 AND status = 'verified'
+       ORDER BY event_id, circle_id`,
     ).bind(accountId).all<{ event_id: string; circle_id: string }>();
     return result.results;
   }
