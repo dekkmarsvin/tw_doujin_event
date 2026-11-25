@@ -45,10 +45,10 @@ export function createAdmin({ repository, lookupCircle, searchCircles, projectCi
   async function adminGetSiteSettings(request: Request) {
     const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
-    const [settings, publicationActivities, services] = await Promise.all([
-      repository.getSiteSettings(), repository.listActivePublicationActivities(), repository.getServiceChecks(),
+    const [settings, services] = await Promise.all([
+      repository.getSiteSettings(), repository.getServiceChecks(),
     ]);
-    return json({ settings, publicationMode: config.organizerPublicationMode ?? "disabled", publicationActivities, services });
+    return json({ settings, publicationMode: config.organizerPublicationMode ?? "disabled", services });
   }
 
   async function adminUpdateSiteSettings(request: Request) {

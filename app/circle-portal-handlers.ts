@@ -42,14 +42,15 @@ type PortalConfig = {
    */
   publishedEvent?: (eventId: string) => Promise<{ dataUpdatedAt: string; eventEndsAt: string } | null>;
   /** Merge remains off until the GitHub App and both repository rulesets are verified. */
-  organizerPublicationMode?: "disabled" | "fake" | "r2";
+  organizerPublicationMode?: "disabled" | "r2";
 };
 
 export type PortalDependencies = {
   loadPublishedAmendmentBaseline?: (source: AmendmentPublishedSource) => Promise<OrganizerAmendmentBaseline>;
-  /** Durable dispatch only; never wait for checks or deployment in a request.
-   * Omitted until the production driver and rollout gates are verified. */
-  dispatchOrganizerPublication?: (jobId: string) => Promise<void>;
+  /** Writes an approved snapshot to the event data bucket, `index.json`
+   * last (#569). Present only where publishing is enabled. */
+  publishApprovedEvent?: (source: { snapshotJson: string; approvalHash: string; candidateId: string; candidateVersion: number },
+    beforeWrite: () => Promise<void>) => Promise<unknown>;
   repository: IdentityRepository;
   sendMail: (message: PortalMail) => Promise<void>;
   /**
@@ -83,7 +84,5 @@ export type PortalDependencies = {
   thumbnailStore?: HostedThumbnailStore;
   /** Separate private R2 bucket. It must never share the public thumbnail origin. */
   mapContributionStore?: MapContributionFileStore;
-  /** Confirms readers do not see a failed job's approval before its candidate is reopened. */
-  publicationAuditor?: (jobId: string) => Promise<{ clear: boolean }>;
   config: PortalConfig;
 };

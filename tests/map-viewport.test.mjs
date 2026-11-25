@@ -5,7 +5,18 @@ import { createServer, isRunnableDevEnvironment } from "vite";
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
-const { calculateMapFitZoom, calculatePinchMapView, clampMapZoom, mapViewFromWheel, shouldShowMapMedia, zoomOffsetAroundPoint } = await environment.runner.import("/app/map-viewport.ts");
+const {
+  calculateMapFitZoom,
+  calculatePinchMapView,
+  clampMapZoom,
+  INITIAL_WHEEL_OVERVIEW_STATE,
+  isAtMinimumZoom,
+  mapViewFromWheel,
+  shouldEnterOverviewFromPinch,
+  shouldShowMapMedia,
+  stepWheelOverviewGesture,
+  zoomOffsetAroundPoint,
+} = await environment.runner.import("/app/map-viewport.ts");
 after(() => vite.close());
 
 test("button zoom preserves the map coordinate at the viewport center", () => {
@@ -73,4 +84,36 @@ test("pinch updates zoom and offset as one inset-aware anchored map view", () =>
   assert.equal(next.zoom, 1.28);
   assert.equal((center.x - anchor.inset.x - next.offset.x) / next.zoom, anchor.mapX);
   assert.equal((center.y - anchor.inset.y - next.offset.y) / next.zoom, anchor.mapY);
+});
+
+test("wheel gesture uses one 280ms boundary so momentum stops at fit and paused scroll-out enters overview", () => {
+  const min = 0.5;
+  assert.equal(isAtMinimumZoom(0.505, min), true);
+  assert.equal(isAtMinimumZoom(0.52, min), false);
+
+  // Momentum burst starting above minimum never enters overview even after reaching minimum.
+  let step = stepWheelOverviewGesture(INITIAL_WHEEL_OVERVIEW_STATE, { now: 1000, deltaY: 140, zoom: 0.9, minimum: min });
+  assert.equal(step.enterOverview, false);
+  step = stepWheelOverviewGesture(step.state, { now: 1080, deltaY: 160, zoom: 0.5, minimum: min });
+  assert.equal(step.enterOverview, false);
+
+  // Pause <= 280ms does not reset, pause > 280ms starts a fresh gesture and clears old delta.
+  let atMin = stepWheelOverviewGesture(INITIAL_WHEEL_OVERVIEW_STATE, { now: 2000, deltaY: 70, zoom: 0.5, minimum: min });
+  assert.equal(atMin.enterOverview, false);
+  atMin = stepWheelOverviewGesture(atMin.state, { now: 2300, deltaY: 60, zoom: 0.5, minimum: min });
+  assert.equal(atMin.enterOverview, false, "pause > 280ms resets accumulated delta from prior gesture");
+  atMin = stepWheelOverviewGesture(atMin.state, { now: 2360, deltaY: 70, zoom: 0.5, minimum: min });
+  assert.equal(atMin.enterOverview, true, "contiguous gesture >= 120px enters overview");
+
+  // Zooming back in clears accumulation.
+  let zoomIn = stepWheelOverviewGesture(INITIAL_WHEEL_OVERVIEW_STATE, { now: 3000, deltaY: 90, zoom: 0.5, minimum: min });
+  zoomIn = stepWheelOverviewGesture(zoomIn.state, { now: 3040, deltaY: -40, zoom: 0.55, minimum: min });
+  assert.equal(zoomIn.state.accumulated, 0);
+  assert.equal(zoomIn.enterOverview, false);
+});
+
+test("pinch only enters overview when started at minimum zoom and pinched past 0.86x", () => {
+  assert.equal(shouldEnterOverviewFromPinch({ distance: 100, zoom: 1.0, mapX: 0, mapY: 0, center: { x: 0, y: 0 }, startedAtMinimum: false }, 30, 0.5), false);
+  assert.equal(shouldEnterOverviewFromPinch({ distance: 100, zoom: 0.5, mapX: 0, mapY: 0, center: { x: 0, y: 0 }, startedAtMinimum: true }, 90, 0.5), false);
+  assert.equal(shouldEnterOverviewFromPinch({ distance: 100, zoom: 0.5, mapX: 0, mapY: 0, center: { x: 0, y: 0 }, startedAtMinimum: true }, 85, 0.5), true);
 });

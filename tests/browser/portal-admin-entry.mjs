@@ -31,17 +31,7 @@ async function open(role, entry = "/admin", pendingService = false, viewport, ev
     requestedAt: now, checkedAt: pendingService ? null : now, mail: pendingService ? null : { status: "unavailable", source: "Mailgun", reason: "金鑰驗證失敗。" },
     publication: pendingService ? null : { status: "unavailable", source: "GitHub App", reason: "GitHub 拒絕發布授權。" },
   };
-  const job = { eventId: null, edition: 1, candidateVersion: 3, currentVersion: 3, candidateStatus: "publishing", updatedAt: now, retryable: false };
-  const publicationActivities = eventOverview ? [
-    { ...job, id: "failed-amend-job", candidateId: "sample-failed-amend", eventId: "sample", eventName: "範例創作市集日期更正", edition: 3,
-      candidateVersion: 44, currentVersion: 44, candidateStatus: "failed", status: "failed", step: "waiting_deployment", retryable: false },
-    { ...job, id: "failed-retry-job", candidateId: "submitted-one", eventName: "可接續的活動", candidateStatus: "failed", status: "failed", step: "preparing_data", retryable: true },
-    { ...job, id: "long-wait-job", candidateId: "unlinked-one", eventName: "等待發布的活動", status: "queued", step: "preparing_data", updatedAt: 1 },
-  ] : [
-    { ...job, id: "job-one", candidateId: "candidate-one", eventName: "正在發布的活動", status: "publishing", step: "waiting_deployment" },
-    { ...job, id: "job-two", candidateId: "candidate-two", eventName: "已排程的活動", status: "queued", step: "preparing_data" },
-  ];
-  const siteState = () => ({ settings: siteSettings, publicationMode: eventOverview ? "disabled" : "github", services: serviceChecks, publicationActivities });
+  const siteState = () => ({ settings: siteSettings, publicationMode: eventOverview ? "disabled" : "r2", services: serviceChecks });
   let failure = 0, settingsFailure = false;
   let detailFailure = 0, partialTakedown = false;
   let accountFailure = 0, candidateFailure = 0, queueFailure = 0;
@@ -110,7 +100,6 @@ async function open(role, entry = "/admin", pendingService = false, viewport, ev
         return reply({ event: { ...event, eventIdLocked: true }, publicationAvailable: false,
           draft: { schema: "organizer-event-draft/1", event: { id: "sample", name: event.tentativeName, days: [] }, venue: { assignments: [] }, officialSource: { label: "", url: null } },
           venueCatalog: { venues: [] }, revisions: [], import: null,
-          publication: { id: "failed-amend-job", status: "failed", step: "waiting_deployment", error: "測試發布未完成。", failureCode: "infrastructure_error", retryable: false, started: true, candidateVersion: 44, updatedAt: now },
           workspace: { mode: "binder", onboardingCompletedAt: now, resume: { guidedTask: "identity_source", section: "event" },
             readiness: { completed: 5, total: 5, suggestedNextSection: "review", blockers: [], sections: ["event", "venue", "import", "map", "review"].map(id => ({ id, state: "complete" })) } } });
       }
@@ -223,8 +212,6 @@ try {
   const tasks = page.locator('section[aria-labelledby="tasks-heading"]');
   assert.equal(await tasks.locator("li", { hasText: "待審活動內容" }).getByRole("link").getAttribute("href"), "/organizer?candidate=submitted-one&section=review");
   assert.equal(await page.locator("#admin, #takedown, #accounts").count(), 0);
-  await page.getByText("第 1 版 · 發布中 · 更新網站", { exact: true }).waitFor();
-  await page.getByText("第 1 版 · 已排程 · 等待開始", { exact: true }).waitFor();
   assert.equal(await page.getByRole("button", { name: "重新整理", exact: true }).count(), 0, "the overview refreshes in the background");
   await refreshInBackground(page);
   await summary.getByRole("link", { name: /社團認領2/ }).waitFor();
@@ -511,7 +498,7 @@ try {
   await workVersions.getByText("2026年11月1日至2日", { exact: true }).waitFor();
   assert.equal(await workVersions.locator("li", { hasText: "公開中" }).getByText("第 2 版 公開中", { exact: true }).count(), 1, "the newest published edition is marked as served");
   const failedEdition = workVersions.locator("li", { hasText: "第 3 版 發布失敗" });
-  await failedEdition.getByText("未完成 · 更新網站", { exact: true }).waitFor();
+  await failedEdition.waitFor();
   assert.equal(await failedEdition.getByRole("link").first().textContent(), "查看處理方式", "a failed edition leads with its recovery");
   assert.equal(await failedEdition.getByRole("link").first().getAttribute("href"), "/organizer?candidate=sample-failed-amend&section=review");
   const earlierEditions = workVersions.locator("details", { hasText: "較早版本 1 筆" });
@@ -526,18 +513,12 @@ try {
   await publicOnly.getByText("無工作區", { exact: true }).waitFor();
   assert.equal(await publicOnly.getByRole("link", { name: "開啟工作區", exact: true }).count(), 0);
   assert.equal(await publicOnly.getByRole("link", { name: "查看公開頁", exact: true }).getAttribute("href"), "/events/sample-two/");
-  const publications = eventDesktop.page.locator('section[aria-labelledby="publication-jobs-heading"]');
-  await publications.getByText("第 3 版 · 未完成 · 更新網站", { exact: true }).waitFor();
-  assert.equal(await publications.getByRole("link", { name: "查看處理方式", exact: true }).count(), 2, "failed jobs stay visible with publishing disabled and regardless of retry permission");
-  await publications.getByText("第 1 版 · 已排程 · 已暫停", { exact: true }).waitFor();
   assert.equal(eventDesktop.requests.filter(request => request.path.startsWith("/api/organizer/events/")).length, 0, "the index does not read every private workspace");
   assert.equal(eventDesktop.requests.filter(request => request.path === "/api/admin/service-check").length, 0);
   await assertNoOverflow(eventDesktop.page);
   await journey.capture(eventDesktop.page, "admin-event-list-desktop");
   await eventDesktop.page.screenshot({ path: `${output}/issue510-desktop.png`, fullPage: true, mask: [eventDesktop.page.locator('[class*="identityWho"]')] });
-  const failedItem = publications.locator("li", { hasText: "範例創作市集日期更正" });
-  assert.equal(await failedItem.getByRole("link").getAttribute("href"), "/organizer?candidate=sample-failed-amend&section=review");
-  await failedItem.getByRole("link", { name: "查看處理方式", exact: true }).click();
+  await failedEdition.getByRole("link", { name: "查看處理方式", exact: true }).click();
   await eventDesktop.page.getByRole("heading", { name: "檢查與發布", exact: true }).waitFor();
   assert.equal(await eventDesktop.page.getByRole("combobox", { name: "活動版本", exact: true }).inputValue(), "sample-failed-amend", "a newer edition does not replace the requested failed workspace");
   assert.equal(new URL(eventDesktop.page.url()).searchParams.get("section"), "review");
@@ -567,7 +548,7 @@ try {
   await assertNoOverflow(eventMobile.page);
   await journey.capture(eventMobile.page, "admin-event-list-mobile");
   await eventMobile.page.screenshot({ path: `${output}/issue510-mobile.png`, fullPage: true, mask: [eventMobile.page.locator('[class*="identityWho"]')] });
-  await eventMobile.page.locator('section[aria-labelledby="publication-jobs-heading"] li', { hasText: "範例創作市集日期更正" }).getByRole("link", { name: "查看處理方式", exact: true }).click();
+  await mobileIndex.locator("li", { hasText: "第 3 版 發布失敗" }).getByRole("link", { name: "查看處理方式", exact: true }).click();
   await eventMobile.page.getByRole("heading", { name: "範例創作市集日期更正", exact: true }).waitFor();
   assert.equal(new URL(eventMobile.page.url()).searchParams.get("candidate"), "sample-failed-amend");
   await eventMobile.page.getByText("目前狀態：發布失敗", { exact: true }).waitFor();

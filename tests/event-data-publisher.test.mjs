@@ -140,10 +140,6 @@ test("a correction based on a superseded version is refused, and a mismatched so
   await assert.rejects(createR2AmendmentBaselineLoader(store)({ ...fixture.source }), { code: "amendment_baseline_changed" });
 });
 
-const { createR2PublicationDriver } = await runner.import("/app/publication-dispatch.ts");
-const job = (fixture) => ({ approval_hash: fixture.source.approvalHash, candidate_id: "source", candidate_version: 1 });
-const run = (driver, fixture, step, beginRemoteWrite = async () => {}) => driver.run({ job: job(fixture), step, snapshotJson: fixture.source.snapshotJson, beginRemoteWrite });
-
 test("every published index is kept whole for rollback, and an index without an ETag is never overwritten", async () => {
   const fixture = await amendmentFixture(runner);
   const store = seeded();
@@ -155,26 +151,15 @@ test("every published index is kept whole for rollback, and an index without an 
   await assert.rejects(publishApprovedSnapshot(unversioned, published(fixture), tick), { code: "event_index_unversioned" });
 });
 
-test("a retried first publication recognises its own approval instead of reporting a collision", async () => {
+test("approving again after a lost response recognises its own publication instead of reporting a collision", async () => {
   const fixture = await amendmentFixture(runner);
   const store = seeded();
-  const driver = createR2PublicationDriver(store);
-  await run(driver, fixture, "preparing_data");
+  await publishApprovedSnapshot(store, published(fixture), tick);
   const index = store.store.get("index.json").text;
-  // The request ended after the index was written; the executor retries the first step.
-  assert.equal(await driver.eventExists("event-alpha"), false, "collisions are decided by the publisher");
-  let intent = 0;
-  await run(driver, fixture, "preparing_data", async () => { intent++; });
+  let wrote = 0;
+  assert.deepEqual(await publishApprovedSnapshot(store, published(fixture), tick, async () => { wrote++; }), { alreadyPublished: true });
   assert.equal(store.store.get("index.json").text, index);
-  assert.equal(intent, 0, "nothing new is written, so no new remote-write intent");
-});
-
-test("a job retried from its last step publishes if readers do not see it yet", async () => {
-  const fixture = await amendmentFixture(runner);
-  const store = seeded();
-  const result = await run(createR2PublicationDriver(store), fixture, "verifying_production");
-  assert.equal(result.productionVerified, true);
-  assert.equal(store.read("index.json").events[0].source.approvalHash, fixture.source.approvalHash);
+  assert.equal(wrote, 0, "nothing new is written");
 });
 
 test("a correction cannot start from a version whose maps differ from its source snapshot", async () => {

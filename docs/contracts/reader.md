@@ -180,8 +180,8 @@ type CircleCatalogPayload = {
 **實作**：[`app/map-annotations.ts`](../../app/map-annotations.ts)、[`app/map-annotation-drawing.tsx`](../../app/map-annotation-drawing.tsx)、[`app/staged-event-data.ts`](../../app/staged-event-data.ts)
 **測試**：`tests/map-annotations.test.mjs`、`tests/map-contribution-draft.test.mjs`、`tests/map-contribution-handlers.test.mjs`、`tests/publication-artifacts.test.mjs`
 
-**實作**：[`app/accessible-event-map-renderer.tsx`](../../app/accessible-event-map-renderer.tsx)、[`app/event-map.ts`](../../app/event-map.ts)、[`app/map-viewport.ts`](../../app/map-viewport.ts)、[`app/use-map-viewport.ts`](../../app/use-map-viewport.ts)、[`app/map-label-presentation.ts`](../../app/map-label-presentation.ts)、[`app/map-marker-presentation.ts`](../../app/map-marker-presentation.ts)、[`app/map-marker-icons.tsx`](../../app/map-marker-icons.tsx)、[`app/map-facility-directory.ts`](../../app/map-facility-directory.ts)、[`app/map-facility-panel.tsx`](../../app/map-facility-panel.tsx)、[`app/map-view-state.ts`](../../app/map-view-state.ts)
-**測試**：`tests/map-viewport.test.mjs`、`tests/map-desktop-geometry.test.mjs`、`tests/map-label-renderer.test.mjs`、`tests/map-marker-presentation.test.mjs`、`tests/map-view-state.test.mjs`、`tests/map-import.test.mjs`、`tests/browser/map-viewport.mjs`
+**實作**：[`app/accessible-event-map-renderer.tsx`](../../app/accessible-event-map-renderer.tsx)、[`app/venue-overview-renderer.tsx`](../../app/venue-overview-renderer.tsx)、[`app/venue-overview.mjs`](../../app/venue-overview.mjs)、[`app/event-map.ts`](../../app/event-map.ts)、[`app/map-viewport.ts`](../../app/map-viewport.ts)、[`app/use-map-viewport.ts`](../../app/use-map-viewport.ts)、[`app/map-label-presentation.ts`](../../app/map-label-presentation.ts)、[`app/map-marker-presentation.ts`](../../app/map-marker-presentation.ts)、[`app/map-marker-icons.tsx`](../../app/map-marker-icons.tsx)、[`app/map-facility-directory.ts`](../../app/map-facility-directory.ts)、[`app/map-facility-panel.tsx`](../../app/map-facility-panel.tsx)、[`app/map-view-state.ts`](../../app/map-view-state.ts)
+**測試**：`tests/map-viewport.test.mjs`、`tests/venue-overview.test.mjs`、`tests/map-desktop-geometry.test.mjs`、`tests/map-label-renderer.test.mjs`、`tests/map-marker-presentation.test.mjs`、`tests/map-view-state.test.mjs`、`tests/map-import.test.mjs`、`tests/browser/map-viewport.mjs`、`tests/browser/reader-venue-overview.mjs`
 **活動資料**：`map.json`（只有一組「活動日 × 場地」，或尚未改用 scoped map 的既有活動）或 `map-manifest.json` + `maps/<periodKey>/<venueSpaceId>.json`（多組），存在活動資料 bucket 的版本目錄，讀者依 `index.json` 列出的版本讀取
 **流程**：[地圖 authoring](../runbooks/map-authoring.md)
 
@@ -322,9 +322,18 @@ type AccessibleEventMapRendererProps = {
 
 一般介面與輔助科技名稱使用「**社團攤位配置圖**」或「活動地圖」。「向量」是內部渲染技術，不作為使用者可見的地圖名稱。
 
+### 單一場館園區總覽
+
+當活動具備場地切換（`venueAssignments.length > 1`）、全部場地屬於同一個 `venueId`，且該場館在 `reference-records.json` 提供有效的 `venue-overview/1` 並涵蓋全部已分配 `venueSpaceId` 時，啟用單一場館園區總覽（跨場館活動與單一場地活動不啟用）：
+
+- **首次開啟與查看全場維持停在室內配置圖 fit。** 只有在已達室內最小倍率（`zoom <= minimum + 0.006`）時，由使用者再執行新一段縮小操作（滾輪非手機單指平移模式累積超過 `120` px、停頓間隔以 `280ms` 切分新一段手勢；新一段雙指捏合至 `<= minimum * 0.86`；或按下控制列已呈現園區總覽圖示的縮小按鈕），才切換為園區總覽。從較高倍率連續滾輪／捏合的同段慣性停在 `fit`，不直接穿越進總覽。
+- **資料與繪圖邊界**：總覽由結構化 `venue-overview/1` 記錄交給 `VenueOverviewRenderer` 動態繪製 2.5D SVG，不接受任意 SVG 字串或外部網址。只有出現在活動 `venueAssignments` 的 `venueSpaceId` 成為可聚焦、可點擊的場地按鈕並顯示 `venueSpaceName`；其餘未指派建築維持非互動裝飾背景。目前場地以高對比外框與文字標籤標示（不只靠顏色）。
+- **視域、控制與焦點**：總覽顯示於當下可見矩形內（閃避工具列、桌機詳情欄及手機工作面板），同時保留室內 `.floor` 掛載（設為隱藏與 `inert`）以維持 `getInset()`，並以當下可見矩形置中室內平面，確保手機半開詳情下退出總覽時室內圖仍位於可見區中央。總覽開啟時隱藏手機攤位浮標與室內設施按鈕／面板，縮小按鈕改為停用，放大按鈕改為「返回場地地圖」。
+- **退出與歷史**：點擊不同場地走既有場地切換；點擊目前場地、放大按鈕、滾輪放大或按 `Escape`（於非全屏詳情／未開工具選單時優先於詳情欄與手機 dock 攔截，不清除選取）則退出總覽並保留選取與面板狀態。搜尋選取、行程定位、切換日期、下拉切場地與瀏覽器上一頁恢復皆在入口關閉總覽；總覽狀態不寫入 URL 或瀏覽器歷史。退出時將焦點還原至仍可見且可操作之控制項（手機面板展開至 `full` 隱藏 `.controls` 時回落至可見的面板把手）。
+
 ### 目前不做
 
-- **minimap 與場館示意圖。** 多館總覽目前只有場地選項上的數量（見[使用者流程](#使用者流程)），不畫各場地的相對位置或館間路線。單一場館且完整地圖可直接理解時不強制加入 minimap；未來若加入，仍須與主地圖共用同一 layout 投影，不建立第二份座標資料。
+- **minimap、跨場館總覽與總覽跨館統計。** 單一場館的縮放總覽只提供園區相對方位與場地切換；跨多個 `venueId` 的複合園區總覽、建物上顯示跨場地收藏／行程計數與主地圖 minimap 目前不做。各場地的社團、收藏與待前往數只出現在場地切換的選項上（見[使用者流程](#使用者流程)）。
 - 對非一般攤位文字做 OCR。
 - 將原始配置圖作為一般使用者地圖底圖。
 - 圖磚式地圖（Leaflet 等）。見 [ADR-0001](../adr/0001-adopt-webcatalog-patterns-selectively.md)。

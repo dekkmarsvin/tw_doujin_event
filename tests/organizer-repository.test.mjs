@@ -17,17 +17,8 @@ const vite = await createServer({
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { createIdentityRepository } = await environment.runner.import("/db/identity-repository.ts");
-const { createOrganizerPublicationExecutor, PublicationFailure, publicationHasStarted, QUEUED_PUBLICATION_TIMEOUT_MS } = await environment.runner.import("/app/organizer-publication.ts");
-const { publicationFailureMessage } = await environment.runner.import("/app/organizer-publication-presentation.ts");
 const { sha256Hex } = await environment.runner.import("/app/portal-crypto.ts");
 const { circleRetentionExpiresAt } = await environment.runner.import("/app/circle-overrides.ts");
-const { createPublicationDispatcher } = await environment.runner.import("/app/publication-dispatch.ts");
-const { organizerFor } = await environment.runner.import("/functions/_portal.ts");
-const { hmacSign } = await environment.runner.import("/app/portal-crypto.ts");
-const { runPublicationTick, createScheduledPublicationDispatcher,
-  PUBLICATION_CRON, PUBLICATION_RETRY_MAX_MS, PUBLICATION_TICK_MAX_TRANSITIONS, PUBLICATION_JOB_MAX_TRANSITIONS,
-  PUBLICATION_TICK_START_BUDGET_MS } = await environment.runner.import("/app/publication-scheduler.ts");
-const { afterWrite } = await environment.runner.import("/functions/_after-write.ts");
 
 const miniflare = new Miniflare(convertV4MiniflareOptions({
   modules: true,
@@ -57,638 +48,89 @@ const initialDraft = {
   officialSource: { label: "", url: null },
 };
 
-async function publicationFixture(suffix = "") {
-  const id = `publication-candidate${suffix}`;
-  const eventId = `second-event${suffix}`;
+/** A submitted AMEND candidate correcting second-event's date, with circle deadlines to recount. */
+async function correctedDateFixture() {
+  const id = "publication-candidate";
+  const eventId = "second-event";
   await repository.createOrganizerCandidate({ id, tentativeName: "Publication", ownerEmail: "owner@example.test",
     createdByAccountId: adminId, draftJson: JSON.stringify({ ...initialDraft, event: { ...initialDraft.event, id: eventId } }), now: NOW });
   await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 1 });
-  await database.prepare("UPDATE organizer_event_candidates SET event_id = ?2 WHERE id = ?1").bind(id, eventId).run();
-  const snapshotJson = JSON.stringify({ candidateId: id, candidateVersion: 1, eventId });
+  await database.prepare("UPDATE organizer_event_candidates SET event_id = ?2, publication_operation = 'AMEND' WHERE id = ?1").bind(id, eventId).run();
+  const draft = { schema: "organizer-event-draft/1", event: { id: eventId, name: "第二場", days: [{ id: "1", label: "第一天", date: "2026-11-07" }] },
+    venue: { assignments: [] }, officialSource: { label: "", url: null } };
+  const snapshotJson = JSON.stringify({ schema: "organizer-submission-snapshot/4", operation: "AMEND", candidateId: id, candidateVersion: 1,
+    eventId, draft, amendment: { changes: [], settings: { days: [{ id: "1", date: "2026-11-21" }] } } });
   const hash = await sha256Hex(snapshotJson);
   const snapshot = await repository.storeOrganizerSubmissionSnapshot({ candidateId: id, candidateVersion: 1,
     actorAccountId: ownerId, snapshotJson, sha256: hash, now: NOW + 2 });
   await repository.submitOrganizerCandidate({ candidateId: id, actorAccountId: ownerId, expectedVersion: 1, now: NOW + 3 });
-  const publication = { jobId: `publication-job${suffix}`, snapshotId: snapshot.snapshotId, approvalHash: hash };
-  const approved = await repository.reviewOrganizerCandidate({ candidateId: id, expectedVersion: 1,
-    decision: "approve", actorAccountId: adminId, publication, now: NOW + 4 });
-  assert.equal(approved.status, "publishing");
-  return { id, jobId: publication.jobId };
-}
-
-function checkpoint(step) {
-  return ({ preparing_data: { data_pr_number: 1, data_head_sha: "a".repeat(40) },
-    merging_data: { data_merge_sha: "b".repeat(40) },
-    preparing_main: { main_pr_number: 2, main_head_sha: "c".repeat(40) },
-    merging_main: { main_merge_sha: "d".repeat(40) }, waiting_deployment: { workflow_run_id: 3 } })[step] ?? {};
-}
-
-// Isolated pre-approved jobs exercise the executor before AMEND submission is
-// exposed. These are local D1 fixtures, not a claim of UI approval acceptance.
-for (const [name, operation, snapshotOperation, schema, eventId, valid] of [
-  ["explicit AMEND", "AMEND", "AMEND", "organizer-submission-snapshot/4", "second-event", true],
-  ["CREATE cannot impersonate AMEND", "CREATE", "AMEND", "organizer-submission-snapshot/4", "second-event", false],
-  ["AMEND cannot use legacy CREATE snapshot", "AMEND", undefined, "organizer-submission-snapshot/3", "second-event", false],
-  ["AMEND requires explicit operation", "AMEND", "CREATE", "organizer-submission-snapshot/4", "second-event", false],
-  ["AMEND cannot target another event", "AMEND", "AMEND", "organizer-submission-snapshot/4", "other-event", false],
-]) test(`publication operation is bound to candidate and snapshot: ${name}`, async () => {
-  const { id, jobId } = await publicationFixture();
-  const snapshotJson = JSON.stringify({ schema, operation: snapshotOperation, candidateId: id, candidateVersion: 1, eventId });
-  const hash = await sha256Hex(snapshotJson);
-  await database.batch([
-    database.prepare("UPDATE organizer_event_candidates SET publication_operation = ?1 WHERE id = ?2").bind(operation, id),
-    database.prepare("UPDATE organizer_submission_snapshots SET snapshot_json = ?1, sha256 = ?2 WHERE candidate_id = ?3").bind(snapshotJson, hash, id),
-    database.prepare("UPDATE organizer_publication_jobs SET approval_hash = ?1 WHERE id = ?2").bind(hash, jobId),
-  ]);
-  let runs = 0;
-  const execute = createOrganizerPublicationExecutor(repository, {
-    eventExists: async () => { assert.fail("AMEND is not a CREATE collision lookup"); },
-    run: async ({ step, beginRemoteWrite }) => { runs++; await beginRemoteWrite(); return { metadata: checkpoint(step) }; },
-  }, () => NOW + 10);
-  await execute(jobId);
-  const job = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal(runs, valid ? 1 : 0);
-  assert.equal(job.step, valid ? "waiting_data_checks" : "preparing_data");
-  assert.equal(job.status, valid ? "publishing" : "failed");
-  assert.equal(job.failure_code, valid ? null : "snapshot_mismatch");
-  assert.equal(job.remote_write_intent_at !== null, valid);
-});
-
-// ADR-0068: deadlines count from the event's end, so a corrected date moves
-// every purge deadline of that event once the correction is live, and nothing else.
-async function correctedDateFixture() {
-  const { id, jobId } = await publicationFixture();
-  const draft = { schema: "organizer-event-draft/1", event: { id: "second-event", name: "第二場", days: [{ id: "1", label: "第一天", date: "2026-11-07" }] },
-    venue: { assignments: [] }, officialSource: { label: "", url: null } };
-  const snapshotJson = JSON.stringify({ schema: "organizer-submission-snapshot/4", operation: "AMEND", candidateId: id, candidateVersion: 1,
-    eventId: "second-event", draft, amendment: { changes: [], settings: { days: [{ id: "1", date: "2026-11-21" }] } } });
-  const hash = await sha256Hex(snapshotJson);
-  const rows = [["early", "second-event", "purge", 1], ["late", "second-event", "purge", 9_999_999_999_999],
-    ["kept", "second-event", "keep", null], ["unanswered", "second-event", null, null], ["other", "other-event", "purge", 1]];
-  await database.batch([
-    database.prepare("UPDATE organizer_event_candidates SET publication_operation = 'AMEND' WHERE id = ?1").bind(id),
-    database.prepare("UPDATE organizer_submission_snapshots SET snapshot_json = ?1, sha256 = ?2 WHERE candidate_id = ?3").bind(snapshotJson, hash, id),
-    database.prepare("UPDATE organizer_publication_jobs SET approval_hash = ?1 WHERE id = ?2").bind(hash, jobId),
-    ...rows.map(([circle, event, choice, expires]) => database.prepare(`INSERT INTO circle_overrides
+  const rows = [["early", eventId, "purge", 1], ["late", eventId, "purge", 9_999_999_999_999],
+    ["kept", eventId, "keep", null], ["unanswered", eventId, null, null], ["other", "other-event", "purge", 1]];
+  await database.batch(rows.map(([circle, event, choice, expires]) => database.prepare(`INSERT INTO circle_overrides
       (id,event_id,circle_id,fields_json,updated_by,created_at,updated_at,retention_choice,retention_expires_at)
-      VALUES (?1,?2,?3,'{}',?4,?5,?5,?6,?7)`).bind(`override-${circle}`, event, circle, ownerId, NOW, choice, expires)),
-  ]);
-  const driver = { eventExists: async () => false, run: async ({ step }) => ({ metadata: checkpoint(step), productionVerified: step === "verifying_production" }) };
-  let clock = NOW + 10;
-  /** Ticks until the job settles, as the scheduled Worker would. */
-  const settle = async () => {
-    for (let i = 0; i < 20; i += 1) {
-      const job = await repository.getOrganizerPublicationJob(jobId);
-      if (job.status === "published" || job.status === "failed") return job;
-      await runPublicationTick({ repository, driver, now: () => clock });
-      clock = Math.max(clock + 1_000, job.next_attempt_at ?? 0);
-    }
-    assert.fail("publication did not settle");
+      VALUES (?1,?2,?3,'{}',?4,?5,?5,?6,?7)`).bind(`override-${circle}`, event, circle, ownerId, NOW, choice, expires)));
+  const claim = (actorAccountId = adminId, approvalHash = hash) => repository.claimOrganizerApproval({ candidateId: id, expectedVersion: 1,
+    actorAccountId, snapshotId: snapshot.snapshotId, approvalHash, now: NOW + 4 });
+  const publish = async () => {
+    await claim();
+    return repository.publishOrganizerCandidate({ candidateId: id, expectedVersion: 1,
+      actorAccountId: adminId, snapshotId: snapshot.snapshotId, approvalHash: hash, eventEndsAt: "2026-11-21T23:59:59+08:00", now: NOW + 5 });
   };
   const deadlines = async () => Object.fromEntries((await database.prepare("SELECT circle_id, retention_expires_at FROM circle_overrides").all()).results
     .map((row) => [row.circle_id, row.retention_expires_at]));
   const recounted = circleRetentionExpiresAt("purge", Date.parse("2026-11-21T23:59:59+08:00"));
-  return { id, jobId, settle, deadlines, now: () => clock, recounted };
+  return { id, claim, publish, deadlines, recounted };
 }
 
+// ADR-0068: deadlines count from the event's end, so a corrected date moves
+// every purge deadline of that event once the correction is live, and nothing else.
 test("publishing a corrected event date recounts that event's purge deadlines and nothing else", async () => {
-  const { settle, deadlines, recounted } = await correctedDateFixture();
-  assert.equal((await settle()).status, "published");
+  const { id, publish, deadlines, recounted } = await correctedDateFixture();
+  assert.deepEqual(await publish(), { ok: true, alreadyPublished: false });
   assert.deepEqual(await deadlines(), { early: recounted, late: recounted, kept: null, unanswered: null, other: 1 });
+  const candidate = await repository.getOrganizerCandidate(id);
+  assert.deepEqual([candidate.status, candidate.published_version, candidate.approved_by], ["published", 1, adminId]);
+  assert.deepEqual(await publish(), { ok: true, alreadyPublished: true }, "approving again after a lost response is harmless");
 });
 
-// Completion and the recount commit together: a job marked published on its
-// own is skipped from then on, and the old deadlines would stand for good.
-test("a completion that fails to commit leaves nothing published, and its retry recounts the deadlines", async () => {
-  const { id, jobId, settle, deadlines, now, recounted } = await correctedDateFixture();
+// The status change and the recount commit together: a candidate marked
+// published on its own would keep the old deadlines for good.
+test("a completion that fails to commit leaves the candidate submitted, and approving again recounts the deadlines", async () => {
+  const { id, publish, deadlines, recounted } = await correctedDateFixture();
   const before = await deadlines();
   await database.prepare(`CREATE TRIGGER fail_retention_recount BEFORE UPDATE OF retention_expires_at ON circle_overrides
     BEGIN SELECT RAISE(ABORT, 'injected retention failure'); END`).run();
-  let failed;
-  try { failed = await settle(); }
+  try { await assert.rejects(publish()); }
   finally { await database.prepare("DROP TRIGGER IF EXISTS fail_retention_recount").run(); }
-  assert.deepEqual([failed.status, failed.step, failed.failure_code, failed.retryable], ["failed", "verifying_production", "infrastructure_error", 1]);
-  assert.equal((await repository.getOrganizerCandidate(id)).status, "failed");
-  assert.equal((await repository.getOrganizerCandidate(id)).published_version, null);
+  assert.equal((await repository.getOrganizerCandidate(id)).status, "approved", "the claim stands for the retry");
   assert.deepEqual(await deadlines(), before, "no part of the completion landed");
-  assert.equal((await database.prepare("SELECT count(*) AS count FROM organizer_publication_lease").first()).count, 0);
-  assert.equal((await repository.retryOrganizerPublicationJob({ jobId, now: now() })).ok, true);
-  const published = await settle();
-  assert.deepEqual([published.status, published.step], ["published", "completed"]);
-  assert.equal((await repository.getOrganizerCandidate(id)).status, "published");
+  assert.deepEqual(await publish(), { ok: true, alreadyPublished: false });
   assert.deepEqual(await deadlines(), { early: recounted, late: recounted, kept: null, unanswered: null, other: 1 });
-  assert.equal((await database.prepare("SELECT count(*) AS count FROM organizer_publication_lease").first()).count, 0);
 });
 
-test("durable ticks resume all waiting stages after runtime recreation without workspace requests", async () => {
-  const { jobId } = await publicationFixture();
-  let clock = NOW + 10;
-  const counts = new Map();
-  const driver = { eventExists: async () => false, run: async ({ step }) => {
-    counts.set(step, (counts.get(step) ?? 0) + 1);
-    return { pending: step.startsWith("waiting_") && counts.get(step) <= 5,
-      metadata: checkpoint(step), productionVerified: step === "verifying_production" };
-  } };
-  let recreated = repository;
-  for (let i = 0; i < 30; i += 1) {
-    if (i === 3) recreated = createIdentityRepository(database);
-    await runPublicationTick({ repository: recreated, driver, now: () => clock });
-    const job = await recreated.getOrganizerPublicationJob(jobId);
-    if (job.status === "published") break;
-    assert.equal(job.status, "publishing");
-    assert.ok(job.next_attempt_at - clock <= PUBLICATION_RETRY_MAX_MS);
-    if (job.next_attempt_at > clock) {
-      const calls = [...counts.values()].reduce((a, b) => a + b, 0);
-      assert.deepEqual((await runPublicationTick({ repository: recreated, driver, now: () => clock })).results, []);
-      assert.equal([...counts.values()].reduce((a, b) => a + b, 0), calls);
-    }
-    clock = Math.max(clock + 60_000, job.next_attempt_at);
-  }
-  const job = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal(job.status, "published");
-  assert.equal(job.step, "completed");
-  for (const step of ["waiting_data_checks", "waiting_main_checks", "waiting_deployment"]) assert.equal(counts.get(step), 6);
-  for (const step of ["preparing_data", "merging_data", "preparing_main", "merging_main"]) assert.equal(counts.get(step), 1);
-  assert.ok(PUBLICATION_RETRY_MAX_MS < QUEUED_PUBLICATION_TIMEOUT_MS);
-  assert.equal(PUBLICATION_CRON, "* * * * *");
+test("only an active admin approving the submitted snapshot can claim it, and a claimed version cannot be sent back", async () => {
+  const { id, claim } = await correctedDateFixture();
+  assert.equal(await claim(ownerId), false, "an owner cannot approve");
+  assert.equal(await claim(adminId, "f".repeat(64)), false, "a different approval hash is not the submitted snapshot");
+  assert.equal((await repository.getOrganizerCandidate(id)).status, "submitted");
+  assert.equal(await claim(), true);
+  assert.equal((await repository.reviewOrganizerCandidate({ candidateId: id, expectedVersion: 1, actorAccountId: adminId, now: NOW + 5 })).ok, false);
+  // A request refused earlier must not release a claim made after it.
+  await repository.releaseOrganizerApproval({ candidateId: id, expectedVersion: 1, actorAccountId: adminId, claimedAt: NOW + 3, now: NOW + 6 });
+  assert.equal((await repository.getOrganizerCandidate(id)).status, "approved");
+  await repository.releaseOrganizerApproval({ candidateId: id, expectedVersion: 1, actorAccountId: adminId, claimedAt: NOW + 4, now: NOW + 6 });
+  assert.equal((await repository.reviewOrganizerCandidate({ candidateId: id, expectedVersion: 1, actorAccountId: adminId, now: NOW + 7 })).ok, true,
+    "a refused publication returns to review");
 });
 
-test("ready publications advance in the same tick within the shared transition budget", async () => {
-  const jobs = [];
-  for (const suffix of ["-one", "-two", "-three"]) jobs.push(await publicationFixture(suffix));
-  const calls = [];
-  const driver = { eventExists: async () => false, run: async ({ job, step, assertLease }) => {
-    await assertLease();
-    calls.push(`${job.id}/${step}`);
-    return { metadata: checkpoint(step), productionVerified: step === "verifying_production" };
-  } };
-  const tick = await runPublicationTick({ repository, driver, now: () => NOW + 10 });
-  assert.equal(tick.results.reduce((sum, item) => sum + item.transitions, 0), PUBLICATION_TICK_MAX_TRANSITIONS);
-  assert.ok(tick.results.every(item => item.transitions <= PUBLICATION_JOB_MAX_TRANSITIONS && item.result === "advanced"));
-  const statuses = await Promise.all(jobs.map(async ({ jobId }) => (await repository.getOrganizerPublicationJob(jobId)).status));
-  assert.deepEqual(statuses.sort(), ["published", "published", "queued"]);
-  await runPublicationTick({ repository: createIdentityRepository(database), driver, now: () => NOW + 60_000 });
-  for (const { jobId } of jobs) assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "published");
-  assert.equal(new Set(calls).size, calls.length, "completed checkpoints are never re-run");
-});
-
-test("elapsed time stops new transitions after preserving the completed checkpoint", async () => {
-  const { jobId } = await publicationFixture();
-  let clock = NOW + 10;
-  const calls = [];
-  const driver = { eventExists: async () => false, run: async ({ step }) => {
-    calls.push(step);
-    if (calls.length === 1) clock += PUBLICATION_TICK_START_BUDGET_MS;
-    return { metadata: checkpoint(step), productionVerified: step === "verifying_production" };
-  } };
-  const tick = await runPublicationTick({ repository, driver, now: () => clock });
-  assert.deepEqual(calls, ["preparing_data"]);
-  assert.equal(tick.results[0].elapsedMs, PUBLICATION_TICK_START_BUDGET_MS);
-  assert.equal((await repository.getOrganizerPublicationJob(jobId)).step, "waiting_data_checks");
-  await runPublicationTick({ repository, driver, now: () => clock + 1 });
-  assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "published");
-  assert.equal(calls.filter(step => step === "preparing_data").length, 1);
-});
-
-test("deployment metadata convergence uses one minute even after a long external wait", async () => {
-  const { jobId } = await publicationFixture();
-  await database.prepare("UPDATE organizer_publication_jobs SET step = 'waiting_deployment', data_merge_sha = ?2, main_merge_sha = ?3 WHERE id = ?1")
-    .bind(jobId, "b".repeat(40), "d".repeat(40)).run();
-  let clock = NOW + 10;
-  let pendingReason;
-  const dispatch = createScheduledPublicationDispatcher(repository, { eventExists: async () => false,
-    run: async () => ({ pending: true, pendingReason, metadata: { workflow_run_id: 3, workflow_run_attempt: 1 } }) }, () => clock);
-  for (let i = 0; i < 4; i++) {
-    assert.equal(await dispatch(jobId), "pending");
-    const job = await repository.getOrganizerPublicationJob(jobId);
-    if (i === 3) assert.equal(job.next_attempt_at - clock, PUBLICATION_RETRY_MAX_MS);
-    clock = job.next_attempt_at;
-  }
-  pendingReason = "deployment_metadata";
-  assert.equal(await dispatch(jobId), "pending");
-  const job = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal(job.next_attempt_at - clock, 60_000);
-  assert.equal(job.step, "waiting_deployment");
-  assert.equal(job.workflow_run_id, 3);
-  assert.equal(job.workflow_run_attempt, 1);
-});
-
-test("cron expires abandoned queued work without any UI request and never dispatches old revisions", async () => {
-  const { id, jobId } = await publicationFixture();
-  const driver = { eventExists: async () => assert.fail("must not query"), run: async () => assert.fail("must not run") };
-  const now = NOW + 4 + QUEUED_PUBLICATION_TIMEOUT_MS;
-  const tick = await runPublicationTick({ repository, driver, now: () => now });
-  assert.deepEqual(tick, { expired: [jobId], results: [] });
-  assert.equal((await repository.getOrganizerCandidate(id)).status, "failed");
-  assert.equal((await repository.getOrganizerPublicationJob(jobId)).failure_code, "queued_timeout");
-  await repository.retryOrganizerPublicationJob({ jobId, now: now + 1 });
-  await database.prepare("UPDATE organizer_event_candidates SET current_version = 2 WHERE id = ?1").bind(id).run();
-  assert.deepEqual((await runPublicationTick({ repository, driver, now: () => now + 2 })).results, []);
-});
-
-test("expiry rechecks the lease after its SELECT and cannot fail a delivery that started concurrently", async () => {
-  const { jobId } = await publicationFixture();
-  const clock = NOW + 4 + QUEUED_PUBLICATION_TIMEOUT_MS;
-  let injected = false;
-  const concurrentDatabase = { prepare: (sql) => database.prepare(sql), batch: (statements) => database.batch(statements) };
-  const concurrent = createIdentityRepository(concurrentDatabase);
-  // Finish schema initialization before injecting into the expiry transaction.
-  await concurrent.ensureTables();
-  concurrentDatabase.batch = async (statements) => {
-    if (!injected) {
-      injected = true;
-      assert.equal((await repository.claimOrganizerPublicationLease({ jobId, now: clock, ttlMs: 30_000 })).ok, true);
-    }
-    return database.batch(statements);
-  };
-  assert.deepEqual(await concurrent.expireStalledOrganizerPublicationJobs({ now: clock, timeoutMs: QUEUED_PUBLICATION_TIMEOUT_MS }), { expired: [] });
-  assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "publishing");
-});
-
-test("overlapping cron ticks have one leased mutation and keep the checkpoint", async () => {
-  const { jobId } = await publicationFixture();
-  await createScheduledPublicationDispatcher(repository, { eventExists: async () => false,
-    run: async () => ({ metadata: checkpoint("preparing_data") }) }, () => NOW + 10)(jobId);
-  let release;
-  const barrier = new Promise((resolve) => { release = resolve; });
-  let entered;
-  const started = new Promise((resolve) => { entered = resolve; });
-  let calls = 0;
-  let clock = NOW + 60_000;
-  const driver = { eventExists: async () => false, run: async () => { calls += 1; entered(); await barrier; clock += PUBLICATION_TICK_START_BUDGET_MS; return {}; } };
-  const first = runPublicationTick({ repository, driver, now: () => clock });
-  await started;
-  const competing = await runPublicationTick({ repository: createIdentityRepository(database), driver, now: () => NOW + 60_000 });
-  assert.deepEqual(competing.results, [{ jobId, result: "skipped", transitions: 1, elapsedMs: 0 }]);
-  release();
-  await first;
-  assert.equal(calls, 1);
-  const job = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal(job.step, "merging_data");
-  assert.equal(job.data_head_sha, "a".repeat(40));
-  assert.equal(job.pending_attempts, 0);
-});
-
-// The scheduled Worker is gone (#546 5c); each write request finishes an
-// interrupted publication afterwards instead.
-test("after a write, interrupted publications advance only in r2 or a preview-gated fake", async (t) => {
-  const { jobId } = await publicationFixture();
-  t.mock.method(Date, "now", () => NOW + 10);
-  t.mock.method(console, "log", () => {});
-  t.mock.method(console, "error", () => {});
-  for (const env of [{}, { ORGANIZER_PUBLICATION_MODE: "fake" }]) {
-    await afterWrite({ ...env, DB: database }, "https://map.kotoban.top");
-    assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "queued");
-  }
-  await afterWrite({ DB: database, ORGANIZER_PUBLICATION_MODE: "fake", PREVIEW_MAIL_SINK: "d1" }, "https://map.kotoban.top");
-  const finalJob = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal(finalJob.status, "published", JSON.stringify({ step: finalJob.step, failureCode: finalJob.failure_code, error: finalJob.error }));
-});
-
-test("Pages runtime exposes publication by mode and a fake retry finishes through real D1", async (t) => {
-  const { id, jobId } = await publicationFixture();
-  t.mock.method(Date, "now", () => NOW + 10);
-  const sessionId = "runtime-admin-session";
-  await repository.addAdmin("admin@example.test", "bootstrap", NOW);
-  await repository.createSession(adminId, NOW, NOW + 60_000, sessionId);
-  const secret = "runtime-test-secret";
-  const cookie = `__Host-ff47_session=${sessionId}.${await hmacSign(secret, sessionId)}`;
-  const request = (path, method = "GET") => new Request(`https://portal.example.test${path}`, { method, headers: {
-    cookie, origin: "https://portal.example.test", "content-type": "application/json",
-  }, ...(method === "POST" ? { body: "{}" } : {}) });
-  const base = { DB: database, EVENT_ID: "sample", SESSION_SECRET: secret, HASH_PEPPER: "pepper",
-    ADMIN_EMAILS: "admin@example.test", ASSETS: { fetch: async () => new Response(null, { status: 404 }) } };
-  const path = `/api/organizer/events/${id}`;
-  const eventData = { get: async () => null, put: async () => ({}) };
-  for (const [mode, preview, expected] of [["disabled", true, false], ["fake", false, false], ["fake", true, true], ["r2", false, true]]) {
-    const env = { ...base, EVENT_DATA: eventData, ORGANIZER_PUBLICATION_MODE: mode, ...(preview ? { PREVIEW_MAIL_SINK: "d1" } : {}) };
-    const runtime = organizerFor({ request: request(path), env });
-    const detail = await runtime.getOrganizerCandidate(request(path), id);
-    assert.equal(detail.status, 200);
-    assert.equal((await detail.json()).publicationAvailable, expected, `${mode}/${preview}`);
-  }
-  const lease = await repository.claimOrganizerPublicationLease({ jobId, now: NOW + 9, ttlMs: 30_000 });
-  const step = (await repository.getOrganizerPublicationJob(jobId)).step;
-  assert.equal(await repository.updateOrganizerPublicationJob({ jobId, leaseToken: lease.token, expectedStep: step, nextStep: step, status: "failed", retryable: true, failureCode: "dispatch_failed", error: "Test dispatch failure", now: NOW + 9 }), true);
-  await repository.releaseOrganizerPublicationLease(jobId, lease.token);
-  const retryPath = `/api/organizer/publications/${jobId}/retry`;
-  const runtime = organizerFor({ request: request(retryPath, "POST"), env: { ...base, PREVIEW_MAIL_SINK: "d1", ORGANIZER_PUBLICATION_MODE: "fake" } });
-  const response = await runtime.adminRetryOrganizerPublication(request(retryPath, "POST"), jobId);
-  assert.equal(response.status, 200, await response.clone().text());
-  assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "published");
-  assert.equal((await repository.getOrganizerPublicationJob(jobId)).step, "completed");
-  assert.equal((await repository.getOrganizerCandidate(id)).status, "published");
-});
-
-test("fake dispatch is preview-only and completes in the request", async () => {
-  const { jobId } = await publicationFixture();
-  const input = { repository, eventExists: async () => false, now: () => NOW + 10 };
-  assert.equal(createPublicationDispatcher({ ...input, mode: "disabled", allowFake: true }), undefined);
-  assert.equal(createPublicationDispatcher({ ...input, mode: "fake", allowFake: false }), undefined);
-  assert.equal(createPublicationDispatcher({ ...input, mode: "github", allowFake: false }), undefined, "the Git pipeline is gone");
-  const dispatch = createPublicationDispatcher({ ...input, mode: "fake", allowFake: true });
-  await dispatch(jobId);
-  const job = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal(job.status, "published"); assert.equal(job.step, "completed");
-  assert.equal(job.remote_write_intent_at, null, "fake makes no remote publication claim");
-  await dispatch(jobId);
-  assert.deepEqual(await repository.getOrganizerPublicationJob(jobId), job);
-});
-
-test("r2 dispatch runs within the request and fails closed without touching the published index", async () => {
-  const { jobId } = await publicationFixture("-r2");
-  const index = JSON.stringify({ schema: "event-index/1", registry: "r0", events: [] });
-  const writes = [];
-  const eventData = { get: async (key) => key === "index.json" ? { text: async () => index, etag: "e1" } : null,
-    put: async (key) => { writes.push(key); return {}; } };
-  assert.equal(createPublicationDispatcher({ repository, eventExists: async () => false, mode: "r2", allowFake: false }), undefined, "r2 needs the event data bucket");
-  await createPublicationDispatcher({ repository, eventExists: async () => false, mode: "r2", allowFake: false, eventData, now: () => NOW + 10 })(jobId);
-  const job = await repository.getOrganizerPublicationJob(jobId);
-  // This fixture's snapshot cannot become reader files; publication stops there.
-  assert.equal(job.status, "failed");
-  assert.equal(job.step, "preparing_data");
-  assert.equal(job.retryable, 0);
-  assert.deepEqual(writes, []);
-});
-
-test("expired publication lease records a retryable failure without losing its step", async () => {
-  const { jobId } = await publicationFixture();
-  let clock = NOW + 10;
-  const execute = createOrganizerPublicationExecutor(repository, {
-    eventExists: async () => false,
-    run: async () => { clock += 31_000; return { metadata: checkpoint("preparing_data") }; },
-  }, () => clock);
-  await execute(jobId);
-  const job = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal(job.status, "failed");
-  assert.equal(job.failure_code, "lease_lost");
-  assert.equal(job.retryable, 1);
-  assert.equal(job.step, "preparing_data");
-  assert.equal((await repository.retryOrganizerPublicationJob({ jobId, now: clock + 1 })).ok, true);
-});
-
-test("an expired executor cannot overwrite or release a newer lease", async () => {
-  const { jobId } = await publicationFixture();
-  let clock = NOW + 10;
-  let newer;
-  const execute = createOrganizerPublicationExecutor(repository, {
-    eventExists: async () => false,
-    run: async () => {
-      clock += 31_000;
-      newer = await repository.claimOrganizerPublicationLease({ jobId, now: clock, ttlMs: 30_000 });
-      return {};
-    },
-  }, () => clock);
-  await assert.rejects(execute(jobId), (error) => error.code === "lease_lost");
-  assert.equal(newer.ok, true);
-  assert.equal(await repository.hasOrganizerPublicationLease(jobId, newer.token, clock), true);
-  assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "publishing");
-});
-
-test("nullish metadata preserves the checkpoint from a pending delivery", async () => {
-  const { jobId } = await publicationFixture();
-  let pending = true;
-  const execute = createOrganizerPublicationExecutor(repository, {
-    eventExists: async () => false,
-    run: async () => pending ? { pending: true, metadata: checkpoint("preparing_data") }
-      : { metadata: { data_pr_number: null, data_head_sha: undefined } },
-  }, () => NOW + 10);
-  await execute(jobId);
-  pending = false;
-  await execute(jobId);
-  const job = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal(job.step, "waiting_data_checks");
-  assert.equal(job.status, "publishing");
-  assert.equal(job.data_pr_number, 1);
-  assert.equal(job.data_head_sha, "a".repeat(40));
-});
-
-test("repeated approval reuses the same job and rejects a different approval hash", async () => {
-  const { id, jobId } = await publicationFixture();
-  const job = await repository.getOrganizerPublicationJob(jobId);
-  const input = { candidateId: id, expectedVersion: 1, decision: "approve", actorAccountId: adminId,
-    publication: { jobId: "another-job", snapshotId: job.snapshot_id, approvalHash: job.approval_hash }, now: NOW + 20 };
-  const original = await repository.getOrganizerCandidate(id);
-  const result = await repository.reviewOrganizerCandidate(input);
-  assert.equal(result.ok, true);
-  assert.equal(result.publicationJobId, jobId);
-  assert.equal(result.alreadyReviewed, true);
-  assert.deepEqual(await repository.getOrganizerCandidate(id), original);
-  assert.equal(await repository.getOrganizerPublicationJob("another-job"), null);
-  assert.equal((await repository.reviewOrganizerCandidate({ ...input,
-    publication: { ...input.publication, approvalHash: "mismatch" } })).reason, "approval_mismatch");
-
-  await database.prepare("UPDATE organizer_event_candidates SET status = 'submitted', approved_at = NULL WHERE id = ?1").bind(id).run();
-  const reused = await repository.reviewOrganizerCandidate(input);
-  assert.equal(reused.ok, true);
-  assert.equal(reused.publicationJobId, jobId);
-  assert.equal((await repository.getOrganizerCandidate(id)).status, "publishing");
-});
-
-test("publication resumes main and smoke failures without recreating successful data or main steps", async () => {
-  const { id, jobId } = await publicationFixture();
-  const calls = [];
-  let failure = "preparing_main";
-  const execute = createOrganizerPublicationExecutor(repository, {
-    eventExists: async () => false,
-    run: async ({ step, assertLease }) => {
-      await assertLease();
-      calls.push(step);
-      if (step === failure) throw new PublicationFailure("test_outage", "temporary", true);
-      return { metadata: checkpoint(step), productionVerified: step === "verifying_production" };
-    },
-  }, () => NOW + 10);
-  for (let i = 0; i < 4; i++) await execute(jobId);
-  let job = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal(job.status, "failed");
-  assert.equal(job.step, "preparing_main");
-  assert.equal(job.data_merge_sha, "b".repeat(40));
-  assert.equal((await repository.getOrganizerCandidate(id)).status, "failed");
-  await execute(jobId);
-  assert.equal(calls.length, 4, "a webhook cannot silently retry a failed publication");
-  await repository.retryOrganizerPublicationJob({ jobId, now: NOW + 11 });
-  failure = "verifying_production";
-  for (let i = 0; i < 5; i++) await execute(jobId);
-  job = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal(job.status, "failed");
-  assert.equal(job.step, "verifying_production");
-  assert.equal(job.main_merge_sha, "d".repeat(40));
-  await repository.retryOrganizerPublicationJob({ jobId, now: NOW + 12 });
-  failure = null;
-  await execute(jobId);
-  await execute(jobId);
-  assert.equal((await repository.getOrganizerCandidate(id)).status, "published");
-  for (const step of ["preparing_data", "merging_data", "preparing_main", "merging_main"]) {
-    assert.equal(calls.filter((value) => value === step).length, step === "preparing_main" ? 2 : 1);
-  }
-  assert.equal((await repository.getLatestOrganizerPublicationJob(id)).id, jobId);
-});
-
-test("a job nobody dispatched times out into the existing retry path", async () => {
-  const { id, jobId } = await publicationFixture();
-  const queuedAt = (await repository.getOrganizerPublicationJob(jobId)).updated_at;
-  const expire = (now) => repository.expireStalledOrganizerPublicationJobs({ now, timeoutMs: QUEUED_PUBLICATION_TIMEOUT_MS });
-
-  assert.deepEqual(await expire(queuedAt + QUEUED_PUBLICATION_TIMEOUT_MS - 1), { expired: [] });
-  assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "queued");
-
-  const timedOut = queuedAt + QUEUED_PUBLICATION_TIMEOUT_MS;
-  assert.deepEqual(await expire(timedOut), { expired: [jobId] });
-  const job = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal(job.status, "failed");
-  assert.equal(job.failure_code, "queued_timeout");
-  assert.equal(job.retryable, 1);
-  assert.equal(job.step, "preparing_data", "the job failed on the step it never started");
-  assert.equal((await repository.getOrganizerCandidate(id)).status, "failed");
-
-  // The two layers have to meet here. This is the job the approval flow
-  // creates, and its owner is the one who must not be sent looking for
-  // progress that was never made. Asserting the step alone let the wording key
-  // on `assemble`, which only the older creation path ever wrote.
-  assert.equal(publicationHasStarted(job), false);
-  assert.match(publicationFailureMessage({
-    failureCode: job.failure_code, retryable: Boolean(job.retryable), started: publicationHasStarted(job),
-  }), /發布沒有開始/);
-
-  // No second way to start a publication: recovery is the retry that already exists.
-  const retried = await repository.retryOrganizerPublicationJob({ jobId, now: timedOut + 1 });
-  assert.equal(retried.ok, true);
-  assert.equal(retried.step, "preparing_data");
-  assert.equal((await repository.getOrganizerCandidate(id)).status, "publishing");
-
-  // A live lease owns its job even where a lost delivery left the row queued.
-  const lease = await repository.claimOrganizerPublicationLease({ jobId, now: timedOut + 2, ttlMs: 30_000 });
-  assert.equal(lease.ok, true);
-  await database.prepare("UPDATE organizer_publication_jobs SET status = 'queued', updated_at = ?1 WHERE id = ?2")
-    .bind(queuedAt, jobId).run();
-  assert.deepEqual(await expire(timedOut + 3), { expired: [] });
-  assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "queued");
-});
-
-test("a timeout that follows real progress keeps the retryable wording", async () => {
-  const { jobId } = await publicationFixture();
-  const queuedAt = (await repository.getOrganizerPublicationJob(jobId)).updated_at;
-  const lease = await repository.claimOrganizerPublicationLease({ jobId, now: queuedAt, ttlMs: 30_000 });
-  // What the executor writes when a step completes: it refuses to advance a
-  // step whose checkpoint is missing, so a job past `preparing_data` always
-  // carries one. This timeout really did stop part-way.
-  assert.equal(await repository.updateOrganizerPublicationJob({
-    jobId, leaseToken: lease.token, expectedStep: "preparing_data", nextStep: "merging_data",
-    status: "failed", error: "temporary", retryable: true, now: queuedAt,
-    metadata: { data_pr_number: 7, data_head_sha: "a".repeat(40) },
-  }), true);
-  // Retry cannot take over a live global lease; the failed delivery releases
-  // its lease before a later retry claims the same job.
-  await repository.releaseOrganizerPublicationLease(jobId, lease.token);
-  assert.equal((await repository.retryOrganizerPublicationJob({ jobId, now: queuedAt + 1 })).ok, true);
-
-  const timedOut = queuedAt + 1 + QUEUED_PUBLICATION_TIMEOUT_MS;
-  assert.deepEqual(await repository.expireStalledOrganizerPublicationJobs({
-    now: timedOut, timeoutMs: QUEUED_PUBLICATION_TIMEOUT_MS,
-  }), { expired: [jobId] });
-  const job = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal(job.failure_code, "queued_timeout");
-  assert.equal(job.step, "merging_data", "retry keeps the step the job failed on");
-  assert.equal(publicationHasStarted(job), true);
-  assert.doesNotMatch(publicationFailureMessage({
-    failureCode: job.failure_code, retryable: Boolean(job.retryable), started: publicationHasStarted(job),
-  }), /發布沒有開始/);
-});
-
-test("CREATE collision is permanent, leaves content locked and never calls the adapter", async () => {
-  const { id, jobId } = await publicationFixture();
-  const execute = createOrganizerPublicationExecutor(repository, {
-    eventExists: async () => true, run: async () => assert.fail("must not publish"),
-  }, () => NOW + 10);
-  await execute(jobId);
-  const job = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal(job.failure_code, "event_id_collision");
-  assert.equal(job.retryable, 0);
-  assert.equal((await repository.retryOrganizerPublicationJob({ jobId, now: NOW + 11 })).reason, "not_retryable");
-  assert.equal((await repository.getOrganizerCandidate(id)).status, "failed");
-});
-
-test("tampered snapshot fails closed before any remote publication effect", async () => {
-  const { jobId } = await publicationFixture();
-  await database.prepare("UPDATE organizer_submission_snapshots SET snapshot_json = '{}' ").run();
-  await createOrganizerPublicationExecutor(repository, {
-    eventExists: async () => assert.fail("must not query remote"), run: async () => assert.fail("must not publish"),
-  }, () => NOW + 10)(jobId);
-  assert.equal((await repository.getOrganizerPublicationJob(jobId)).failure_code, "snapshot_mismatch");
-});
-
-test("pending checks preserve step and release the delivery lease for a later delivery", async () => {
-  const { jobId } = await publicationFixture();
-  let pending = true;
-  const execute = createOrganizerPublicationExecutor(repository, {
-    eventExists: async () => false,
-    run: async ({ step }) => ({ pending: step === "waiting_data_checks" && pending, metadata: checkpoint(step) }),
-  }, () => NOW + 10);
-  await execute(jobId);
-  await execute(jobId);
-  await execute(jobId);
-  assert.equal((await repository.getOrganizerPublicationJob(jobId)).step, "waiting_data_checks");
-  pending = false;
-  await execute(jobId);
-  assert.equal((await repository.getOrganizerPublicationJob(jobId)).step, "merging_data");
-});
-
-test("production verification must explicitly pass before completing publication", async () => {
-  const { jobId } = await publicationFixture();
-  const execute = createOrganizerPublicationExecutor(repository, {
-    eventExists: async () => false, run: async ({ step }) => ({ metadata: checkpoint(step) }),
-  }, () => NOW + 10);
-  for (let i = 0; i < 8; i++) await execute(jobId);
-  const job = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal(job.status, "failed");
-  assert.equal(job.failure_code, "production_smoke_failed");
-  assert.equal(job.step, "verifying_production");
-});
-
-test("deployment retry durably authorizes only the next attempt of the original pinned run", async () => {
-  const { jobId } = await publicationFixture();
-  let clock = NOW + 10;
-  let failAttempt = false;
-  let desiredAttempt = 1;
-  const execute = createOrganizerPublicationExecutor(repository, { eventExists: async () => false,
-    run: async ({ step, job }) => {
-      if (step === "waiting_deployment") {
-        if (job.workflow_run_attempt !== desiredAttempt) return { pending: true, metadata: { workflow_run_id: 55, workflow_run_attempt: desiredAttempt } };
-        if (failAttempt) throw new PublicationFailure("publication_deployment_failed", "Cancelled deployment", true);
-        return {};
-      }
-      return { metadata: checkpoint(step), productionVerified: step === "verifying_production" };
-    } }, () => clock++);
-  for (let i = 0; i < 7; i += 1) await execute(jobId);
-  let job = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal(job.workflow_run_id, 55); assert.equal(job.workflow_run_attempt, 1);
-  failAttempt = true;
-  await execute(jobId);
-  assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "failed");
-  assert.equal((await repository.retryOrganizerPublicationJob({ jobId, now: clock++ })).ok, true);
-  job = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal(job.workflow_retry_attempt, 2);
-  assert.equal(job.workflow_run_id, 55);
-  assert.equal(job.workflow_run_attempt, 1);
-  const originalHash = job.approval_hash;
-  desiredAttempt = 2; failAttempt = false;
-  await execute(jobId); // pins attempt before interpreting its result
-  assert.equal((await repository.getOrganizerPublicationJob(jobId)).workflow_run_attempt, 2);
-  await execute(jobId); await execute(jobId);
-  job = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal(job.status, "published");
-  assert.equal(job.workflow_run_id, 55); assert.equal(job.approval_hash, originalHash);
-  assert.equal(job.data_merge_sha, "b".repeat(40)); assert.equal(job.main_merge_sha, "d".repeat(40));
-});
-
-test("executor rejects an attempt change without the existing explicit retry transition", async () => {
-  const { jobId } = await publicationFixture();
-  await database.prepare("UPDATE organizer_publication_jobs SET workflow_run_id = 55, workflow_run_attempt = 1 WHERE id = ?1").bind(jobId).run();
-  await createOrganizerPublicationExecutor(repository, { eventExists: async () => false,
-    run: async () => ({ pending: true, metadata: { workflow_run_attempt: 2 } }) }, () => NOW + 10)(jobId);
-  const job = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal(job.status, "failed"); assert.equal(job.failure_code, "checkpoint_mismatch");
-  assert.equal(job.workflow_run_attempt, 1);
+test("an approving admin's account deleted mid-publication is not written back", async () => {
+  const { id, claim, publish } = await correctedDateFixture();
+  assert.equal(await claim(), true);
+  await database.prepare("UPDATE accounts SET deletion_started_at = ?2 WHERE id = ?1").bind(adminId, NOW + 5).run();
+  assert.equal((await publish()).ok, false);
+  const candidate = await repository.getOrganizerCandidate(id);
+  assert.deepEqual([candidate.status, candidate.published_version], ["approved", null], "another admin approving again finishes it");
+  assert.equal((await database.prepare("SELECT count(*) AS count FROM organizer_event_reviews WHERE candidate_id = ?1 AND to_status = 'approved'").bind(id).first()).count, 0);
 });
 
 test("an admin creates an empty event entry and its invited owner gains only that event", async () => {
@@ -1049,13 +491,8 @@ test("event id locks at submission while requested changes can produce a new rev
   await repository.submitOrganizerCandidate({
     candidateId: "candidate-pf", actorAccountId: ownerId, expectedVersion: 3, now: NOW + 7,
   });
-  assert.deepEqual(await repository.reviewOrganizerCandidate({
-    candidateId: "candidate-pf", expectedVersion: 3, decision: "approve",
-    actorAccountId: adminId, note: "ready", now: NOW + 8,
-  }), { ok: true, status: "approved" });
-
   const candidate = await repository.getOrganizerCandidate("candidate-pf");
-  assert.equal(candidate.status, "approved");
+  assert.equal(candidate.status, "submitted");
   assert.equal(candidate.current_version, 3);
   assert.equal(candidate.event_id, "pf45-rf14");
   const revisions = await repository.listOrganizerCandidateRevisions("candidate-pf");
@@ -1134,66 +571,6 @@ test("map revisions are scoped by candidate, period and venue-space while owner 
     expectedVersion: 2, expectedMapRevision: 1, contentJson: JSON.stringify(changed), now: NOW + 5,
   }), { ok: true, version: 3, mapRevision: 2 });
   assert.equal((await repository.getOrganizerMapDraft("candidate-pf", "map-pf-day1")).current_revision, 2);
-});
-
-test("approved snapshots create one leased publication job", async () => {
-  await repository.createOrganizerCandidate({
-    id: "candidate-pf", tentativeName: "PF", ownerEmail: "owner@example.test",
-    createdByAccountId: adminId, draftJson: JSON.stringify(initialDraft), now: NOW,
-  });
-  await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 1 });
-  const draft = structuredClone(initialDraft);
-  draft.event.id = "pf45";
-  await repository.saveOrganizerCandidate({
-    candidateId: "candidate-pf", actorAccountId: ownerId, expectedVersion: 1,
-    eventId: "pf45", draftJson: JSON.stringify(draft), now: NOW + 2,
-  });
-  const snapshotJson = JSON.stringify({ schema: "organizer-submission-snapshot/1", candidateId: "candidate-pf", candidateVersion: 2 });
-  const snapshot = await repository.storeOrganizerSubmissionSnapshot({
-    candidateId: "candidate-pf", candidateVersion: 2, actorAccountId: ownerId,
-    snapshotJson, sha256: "a".repeat(64), now: NOW + 3,
-  });
-  assert.equal(snapshot.ok, true);
-  await repository.submitOrganizerCandidate({ candidateId: "candidate-pf", actorAccountId: ownerId, expectedVersion: 2, now: NOW + 4 });
-  await repository.reviewOrganizerCandidate({
-    candidateId: "candidate-pf", expectedVersion: 2, decision: "approve",
-    actorAccountId: adminId, now: NOW + 5,
-  });
-  const publication = await repository.createOrganizerPublicationJob({
-    candidateId: "candidate-pf", candidateVersion: 2, snapshotId: snapshot.snapshotId,
-    approvalHash: "a".repeat(64), now: NOW + 6,
-  });
-  assert.equal(publication.ok, true);
-  const lease = await repository.claimOrganizerPublicationLease({ jobId: publication.jobId, now: NOW + 7, ttlMs: 60_000 });
-  assert.equal(lease.ok, true);
-  assert.deepEqual(await repository.claimOrganizerPublicationLease({ jobId: publication.jobId, now: NOW + 8, ttlMs: 60_000 }), { ok: false, reason: "busy" });
-  assert.equal(await repository.updateOrganizerPublicationJob({
-    jobId: publication.jobId, leaseToken: lease.token, expectedStep: "assemble", nextStep: "assemble",
-    status: "failed", error: "simulated", now: NOW + 9,
-  }), true);
-  await repository.releaseOrganizerPublicationLease(publication.jobId, lease.token);
-  assert.deepEqual(await repository.retryOrganizerPublicationJob({ jobId: publication.jobId, now: NOW + 10 }), {
-    ok: true, step: "assemble",
-  });
-  assert.deepEqual(await repository.retryOrganizerPublicationJob({ jobId: publication.jobId, now: NOW + 11 }), {
-    ok: false, reason: "status", status: "queued",
-  });
-  const retriedLease = await repository.claimOrganizerPublicationLease({ jobId: publication.jobId, now: NOW + 12, ttlMs: 60_000 });
-  assert.equal(retriedLease.ok, true);
-  assert.equal(await repository.updateOrganizerPublicationJob({
-    jobId: publication.jobId, leaseToken: retriedLease.token, expectedStep: "assemble", nextStep: "completed",
-    status: "published", now: NOW + 13,
-  }), false, "merge alone cannot mark a publication complete");
-  await repository.updateOrganizerPublicationJob({
-    jobId: publication.jobId, leaseToken: retriedLease.token, expectedStep: "assemble", nextStep: "verifying_production",
-    status: "publishing", now: NOW + 13,
-  });
-  assert.equal(await repository.updateOrganizerPublicationJob({
-    jobId: publication.jobId, leaseToken: retriedLease.token, expectedStep: "verifying_production", nextStep: "completed",
-    status: "published", productionVerified: true, now: NOW + 13,
-  }), true);
-  assert.equal((await repository.getOrganizerCandidate("candidate-pf")).status, "published");
-
 });
 
 /**
@@ -1329,7 +706,7 @@ test("a booth list larger than one bound parameter still imports atomically", as
   assert.equal(replaced.source.sha256, "c".repeat(64));
 });
 
-test("account deletion shreds the private workbook name alongside its uploader", async () => {
+test("account deletion removes the uploader and keeps the workbook names the approval record holds", async () => {
   await repository.createOrganizerCandidate({
     id: "candidate-shred", tentativeName: "活動", ownerEmail: "owner@example.test",
     createdByAccountId: adminId, draftJson: JSON.stringify(initialDraft), now: NOW,
@@ -1365,8 +742,10 @@ test("account deletion shreds the private workbook name alongside its uploader",
     "SELECT created_by, file_name, worksheet, sha256 FROM organizer_import_sources WHERE candidate_id = 'candidate-shred'",
   ).first();
   assert.equal(source.created_by, "[shredded]");
-  assert.equal(source.file_name, "[shredded]");
-  assert.equal(source.worksheet, null);
+  // The organizer's file and sheet names describe the event's data, as the
+  // approved snapshot does (#573).
+  assert.equal(source.file_name, "PF45 內部攤位表 最終版.xlsx");
+  assert.equal(source.worksheet, "不要外流");
   // The provenance hash is not personal data and outlives the account.
   assert.equal(source.sha256, "d".repeat(64));
 });

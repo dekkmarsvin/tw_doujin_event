@@ -14,6 +14,7 @@ type UiIconName =
   | "globe"
   | "heart"
   | "locate"
+  | "map"
   | "map-pin"
   | "minus"
   | "north"
@@ -57,6 +58,7 @@ export function UiIcon({ name, ...props }: { name: UiIconName } & SVGProps<SVGSV
     {name === "minus" && <path d="M5 12h14" />}
     {name === "locate" && <><circle cx="12" cy="12" r="6" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" /></>}
     {name === "north" && <><path d="m12 3 5 14-5-3-5 3 5-14Z" /><path d="M12 14v7" /></>}
+    {name === "map" && <><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21" /><path d="M9 3v15" /><path d="M15 6v15" /></>}
     {name === "map-pin" && <><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z" /><circle cx="12" cy="10" r="2" /></>}
     {name === "upload" && <><path d="M12 16V4" /><path d="m7 9 5-5 5 5" /><path d="M5 14v5h14v-5" /></>}
     {name === "book" && <><path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H19v14H7.5A2.5 2.5 0 0 0 5 19.5Z" /><path d="M5 19.5A2.5 2.5 0 0 0 7.5 22H19v-5" /></>}

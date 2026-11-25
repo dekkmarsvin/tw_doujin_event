@@ -1,24 +1,19 @@
 # 資料 inventory
 
-> **凍結（2026-11-21）**：描述舊後端，後端依 [#546](https://github.com/dekkmarsvin/tw_doujin_event/issues/546) 重寫後隨對應程式刪除。只用來理解現況，不作為新需求的依據。
+網站營運設定 `site_settings` 僅供管理者讀寫，保存目前申請模式、邀請 email 名單、通知起點、發布開關、聯絡連結與認領審核中說明，保留至覆寫。後兩者經 session 回應給登入中的帳號；每次儲存的 `site_settings.updated` 稽核會複製新的聯絡設定，因此覆寫不會抹去先前的值。操作者只保存 account ID，顯示時讀取目前帳號；不另存歷任管理者 email。單筆 `site_service_check` 只保存最近一次請求／完成時間及安全的來源／原因分類，下次檢查覆寫，沒有信件、憑證、provider 原始內容或診斷歷史；詳見[網站營運設定](./admin.md#網站營運設定)。
 
-網站營運設定 `site_settings` 僅供管理者讀寫，保存目前申請模式、邀請 email 名單、通知起點及發布開關，保留至覆寫。操作者只保存 account ID，顯示時讀取目前帳號；不另存歷任管理者 email。單筆 `site_service_check` 只保存最近一次請求／完成時間及安全的來源／原因分類，下次檢查覆寫，沒有信件、憑證、provider 原始內容或診斷歷史；詳見[網站營運設定](./admin.md#網站營運設定)。
+本站實際持有哪些資料、寫在哪一欄、由什麼動作寫入、保存多久。**這份文件只記事實**；保存期限、排程與帳號刪除依序由 [ADR-0018](../adr/0018-retention-is-the-circles-choice.md)、[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)、[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)、[ADR-0027](../adr/0027-personal-data-lifecycle-and-account-deletion.md) 與 [ADR-0054](../adr/0054-the-retention-choice-is-withdrawn-publish-or-delete.md) 決定。
 
-本站實際持有哪些資料、寫在哪一欄、由什麼動作寫入、保存多久。**這份文件只記事實**；保存期限、排程與帳號刪除依序由 [ADR-0018](../adr/0018-retention-is-the-circles-choice.md)、[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)、[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)、[ADR-0027](../adr/0027-personal-data-lifecycle-and-account-deletion.md) 、[ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md) 與 [ADR-0054](../adr/0054-the-retention-choice-is-withdrawn-publish-or-delete.md) 決定。
-
-**schema 權威**：[`migrations/`](../../migrations/)（#546 5d 起；下文提到的部分表已由 `0002_drop_retired_tables.sql` 刪除）
-**寫入端**：[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`functions/`](../../functions)
+**schema 權威**：[`migrations/`](../../migrations/)（`0001_baseline.sql` 建立，`0002_drop_retired_tables.sql` 刪除已停用的表）
+**寫入端**：[`server/`](../../server)（auth、circle、admin、organizer、shares 模組）、[`db/`](../../db)、[`functions/`](../../functions)
 **行為契約**：[社團自助控制面](./circle-portal.md)、[主辦單位工作區](./organizer-workspace.md)。權限、可編輯範圍、狀態機與來源邊界只寫在契約，本文不重複。
 **外部對照**：[性質相近的服務如何公開自己的資料收集](../research/data-collection-policies-in-comparable-projects.md)
-
-## Runtime 初始化狀態
-
 
 ## 三件要先知道的事
 
 1. **production 已公開並可能持有真實個人資料。** 正式入口 <https://map.kotoban.top/circle> 可公開到達；本 inventory 描述的是現行 production 實際可能累積的資料，不得再以過去的 Access 閘控假設資料庫為空。preview 仍受 Access 保護且使用隔離資源（[ADR-0029](../adr/0029-public-production-gated-preview.md)）。
-2. **有效期不等於保存期。** 下表的 TTL 常數決定的是「這筆還算不算數」，保存期決定的是「這一列還在不在」。兩者不同源：有效期寫在 `app/circle-portal-handlers.ts`，保存期寫在 [`db/retention-purge.ts`](../../db/retention-purge.ts) 的 `RETENTION_WINDOWS`，或（社團自述內容）寫在資料列自己身上。
-3. **憑證與到期內容會被清除，必要決策紀錄會保留。** 每天 03:17 UTC 由獨立的排程 Worker（[`workers/retention-purge/`](../../workers/retention-purge)）刪除過期憑證、到期社團自述與地圖草稿／原始檔；`accounts`、`circle_claims`、`audit_log` 不設期限，地圖審閱 metadata 依 ADR-0033 保留。分類的標準見 [ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)：**這筆資料過了今天還有沒有用**。
+2. **有效期不等於保存期。** 下表的 TTL 常數決定的是「這筆還算不算數」，保存期決定的是「這一列還在不在」。兩者不同源：有效期寫在 `server/auth.ts`、`server/circle.ts` 與 `server/organizer.ts`，保存期寫在 [`db/retention-purge.ts`](../../db/retention-purge.ts) 的 `RETENTION_WINDOWS`，或（社團自述內容）寫在資料列自己身上。
+3. **憑證與到期內容會被清除，必要決策紀錄會保留。** 每天 03:17 UTC 由獨立的排程 Worker（[`workers/retention-purge/`](../../workers/retention-purge)）刪除過期憑證、到期社團自述、久未活動的主辦地圖草稿與已完成的通知；`accounts`、`circle_claims`、`audit_log` 不設期限。分類的標準見 [ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)：**這筆資料過了今天還有沒有用**。
 
 ## 有效期與速率上限（現行常數）
 
@@ -27,8 +22,8 @@
 | `LOGIN_TOKEN_TTL_MS` | 15 分鐘 | 登入連結多久失效 |
 | `SESSION_TTL_MS` | 7 天 | session 與 cookie `Max-Age` |
 | `CHALLENGE_TTL_MS` | 24 小時 | 認領驗證碼多久失效 |
-| `loginPerEmailPerHour` | 5 | 同一 email 每小時可索取的登入連結 |
-| `loginPerIpPerHour` | 20 | 同一 IP 雜湊每小時可索取的登入連結 |
+| `LOGIN_LIMITS.perEmailPerHour` | 5 | 同一 email 每小時可索取的登入連結 |
+| `LOGIN_LIMITS.perIpPerHour` | 20 | 同一 IP 雜湊每小時可索取的登入連結 |
 | `claimsPerAccountPerDay` | 3 | 每帳號每日認領次數 |
 | `organizerInvitesPerEmailPerHour` | 3 | 同一收件匣每小時可收到的 Organizer 邀請；只計**他人寄來的**，與本人自助索取分開計數 |
 | `organizerInvitesPerActorPerHour` | 10 | 同一邀請人每小時可寄出的 Organizer 邀請 |
@@ -45,11 +40,13 @@
 | `sessions` | 7 天 | 到期或撤銷，取先發生者 |
 | `previewMailSink` | 7 天 | 建立時。preview 限定，且是全站唯一存有信件內文的地方 |
 | `auditIpHashes` | 90 天 | 稽核紀錄寫入時；到期只清空 `audit_log.ip_hash`，操作紀錄保留 |
-| `mapDraftInactivity` | 180 天 | `draft`／`changes_requested` 最後一次活動；`submitted` 不套用此時鐘 |
-| `planningShares`（`SHARE_LIFETIME_AFTER_EVENT`） | 活動結束後 30 天 | 活動的 `eventEndsAt`；到期由 retention purge 刪除整列，連結改回 404 |
-| `mapDecisionRaw` | 30 天 | `approved`／`rejected`／`exported`／`withdrawn` 的決定時間；只刪原始檔，metadata 保留 |
+| `mapDraftInactivity` | 180 天 | 狀態為 `draft` 的主辦地圖最後一次活動；其他狀態不套用此時鐘 |
+| `planningShares`（`SHARE_LIFETIME_AFTER_EVENT`） | 活動結束後 30 天 | 活動的 `eventEndsAt`；到期後回 410，排程清除刪除整列後改回 404 |
+| `reviewNotifications` | 30 天 | 通知完成（已受理、取消或失敗）時；只刪 `account_notification_items` 中已不在待寄的列 |
 
-社團自述內容不在這張表裡：[ADR-0054](../adr/0054-the-retention-choice-is-withdrawn-publish-or-delete.md) 撤回了保存期限選項，新資料列不設期限；只有在那之前選了 `purge` 的既有列，仍照寫在列上的到期日由 Worker 清除（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)）。
+`RETENTION_WINDOWS` 另有 `mapDecisionRaw`（30 天），目前沒有資料使用它。
+
+社團自述內容不在這張表裡：[ADR-0054](../adr/0054-the-retention-choice-is-withdrawn-publish-or-delete.md) 撤下了控制面的保存期限選項，控制面送出的資料列不設期限；API 仍接受 `retention: "purge"`，選了 `purge` 的列照寫在列上的到期日由 Worker 清除（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)）。
 
 ## 資料類別
 
@@ -63,10 +60,10 @@
 | `email` | **明文電子郵件** | 唯一索引；經 `normalizeEmail()` 正規化 |
 | `created_at`、`last_login_at` | 時間戳 | |
 | `disabled_at` | 停用時間 | 管理者可停用非管理者帳號；寫入後立即撤銷 sessions，並阻止再次登入 |
-| `deletion_started_at` | 自助刪除開始時間 | 先原子封鎖新寫入並撤銷其他 sessions，再刪除私人 R2 物件；發起刪除的 session 只可重試刪除 route |
+| `deletion_started_at` | 自助刪除開始時間 | 先原子封鎖新寫入並撤銷其他 sessions，再刪除 R2 代管圖片；發起刪除的 session 只可重試刪除 route |
 
 **目的**：讓社團以 email 一次性連結登入並維護自己的公開資料。
-**保存期**：不設期限。 **到期處置**：登入中的非管理者可輸入完整 email 自助刪除（[ADR-0027](../adr/0027-personal-data-lifecycle-and-account-deletion.md)）。帳號、tokens、sessions 與 claims 一併刪除；仍由該帳號擁有的補充資料從資料列與公開文件移除，擁有者名額釋放。管理者須先由另一位管理者移出名單。
+**保存期**：不設期限。 **到期處置**：登入中的非管理者可輸入完整 email 自助刪除（[ADR-0027](../adr/0027-personal-data-lifecycle-and-account-deletion.md)）。依 [#573](https://github.com/dekkmarsvin/tw_doujin_event/issues/573) 的原則，移除身分、憑證與以本人名義呈現的內容，保留去識別化的稽核與決策紀錄：帳號、tokens、sessions 與審核中、已撤回或目前通過的 claims 一併刪除；仍由該帳號擁有的補充資料從資料列與公開文件移除，擁有者名額釋放。管理者須先由另一位管理者移出名單；身為某候選活動唯一有效成員時回 `409 account_sole_owner`，須先加入另一位成員。
 
 ### `admins` — 管理者名單
 
@@ -117,9 +114,9 @@
 | `circle_name_key`、`circle_name_at_claim`、`source_row_at_claim` | 認領當時的稽核快照。[ADR-0010](../adr/0010-circle-identity-is-an-allocated-serial.md)／[ADR-0013](../adr/0013-drop-the-legacy-circle-id-compatibility-path.md) 後已不再是修復機制 |
 | `method`、`target_url`、`evidence_url`、`evidence_note` | **社團提供的證據**，含自由文字 |
 | `challenge_token_hash`、`challenge_expires_at`、`challenge_attempts` | 驗證碼狀態，24 小時 |
-| `status`、`verified_at`、`reviewed_by`、`reviewed_at` | 審核結果，`reviewed_by` 是**管理者身分** |
+| `status`、`verified_at`、`reviewed_by`、`reviewed_at` | 審核結果；`reviewed_by` 是審核者（網站管理者或活動成員）的**明文 email**，該帳號刪除時塗銷 |
 
-**目的**：證明某帳號是某社團本人。 **保存期**：不設期限。 **到期處置**：隨帳號刪除；partial unique index 的擁有者名額同步釋放。已轉移給別人的社團不會因前任刪帳號而移除現任內容。
+**目的**：證明某帳號是某社團本人。 **保存期**：不設期限。 **到期處置**：審核中、已撤回與目前通過的認領隨帳號刪除，partial unique index 的擁有者名額同步釋放；已婉拒或已撤銷的認領保留結果與審核者，`account_id` 改為每列不同的 `[shredded]:<id>`，佐證網址、說明與驗證碼清空，審核者裁決稽核中複製的佐證網址也一併移除。已轉移給別人的社團，現任內容與其代管圖片都不會因前任刪帳號而移除。
 
 ### `circle_overrides` — 社團自填的補充資料
 
@@ -128,12 +125,12 @@
 | `fields_json` | 社團自填內容（販售資訊、本次品書的圖片網址與尺寸、筆名、連結、縮圖、標籤）。上限見[社團自助控制面契約](./circle-portal.md#欄位上限) |
 | `previous_fields_json` | **前一版內容，保留一份** |
 | `revision`、`created_at`、`updated_at`、`updated_by` | 版本與作者 |
-| `status`、`takedown_reason`、`takendown_by`、`takendown_at` | 管理者撤下紀錄 |
+| `status`、`takedown_reason`、`takendown_by`、`takendown_at` | 撤下紀錄；`takendown_by` 是撤下者（網站管理者或活動成員）的**明文 email**，該帳號刪除時塗銷 |
 | `post_event_hidden` | 活動後退出旗標 |
-| `retention_choice`、`retention_expires_at` | 保存期限：社團自選 `keep`／`purge`，NULL 為尚未表態；到期時間自活動結束起算並存在列上（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)）。**控制面自 ADR-0054 起不再提供這個選擇**，新資料列一律為 NULL；既有的 `purge` 列仍照到期日清除；活動發布（含發布後更正改期）時，該活動的到期日依新的活動結束時間重算（[ADR-0068](../adr/0068-published-event-settings-are-declared-amendments.md)） |
+| `retention_choice`、`retention_expires_at` | 保存期限：社團自選 `keep`／`purge`，NULL 為尚未表態；到期時間自活動結束起算並存在列上（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)）。**控制面自 ADR-0054 起不再提供這個選擇**，控制面送出的新資料列為 NULL；API 仍接受 `purge`，這些列照到期日清除；活動發布（含發布後更正改期）時，該活動的到期日依新的活動結束時間重算（[ADR-0068](../adr/0068-published-event-settings-are-declared-amendments.md)） |
 | `hosted_thumbnail_key` | 目前代管縮圖的 R2 object key；公開 URL 仍在 `fields_json`，這欄只供更換與刪除生命週期使用。品書沒有對應欄位：它的物件鍵由 `fields_json` 中的網址推回 |
 
-**目的**：讓社團在主辦攤位資料之外供應自己的即時內容。**撤下與活動後退出都是改欄位，不是刪列**——內容立刻離開公開文件，但仍留在資料庫。 **保存期**：不設期限；[ADR-0054](../adr/0054-the-retention-choice-is-withdrawn-publish-or-delete.md) 之前選了 `purge` 的既有列，仍在活動結束滿 90 天時由排程 Worker **刪除資料列**。社團**隨時可自行刪除**，不必等期限。 **處置**：刪除，公開文件同步失去該筆；`audit_log` 只留下刪除發生過與是誰做的。 內容由社團本人維護。
+**目的**：讓社團在主辦攤位資料之外供應自己的即時內容。**撤下與活動後退出都是改欄位，不是刪列**——撤下立刻離開公開文件，活動後退出在活動結束後才離開，兩者都仍留在資料庫。 **保存期**：不設期限；選了 `purge` 的列在活動結束滿 90 天時由排程 Worker **刪除資料列**。社團**隨時可自行刪除**，不必等期限。 **處置**：刪除，公開文件同步失去該筆；`audit_log` 只留下刪除發生過與是誰做的。 內容由社團本人維護。
 
 ### R2 代管代表圖
 
@@ -160,68 +157,33 @@
 | `organizer_workspace_state` | 每個候選活動不可逆的 onboarding 完成時間／完成者，以及最近通過完整驗證的 candidate version；不屬於候選內容 revision |
 | `organizer_workspace_preferences` | 每個候選活動 × 帳號的上次引導任務、上次建置冊區段與更新時間；協作者各自保存 |
 | `organizer_event_revisions` | 每一版草稿 JSON、作者與角色。immutable |
-| `organizer_event_grants` | 誰對哪個候選活動有 `owner` 或 `editor` 權限，含授權與撤銷者 |
-| `organizer_event_invitations` | 尚未接受的邀請：**明文電子郵件**、角色、邀請人，以及接受或撤銷紀錄 |
+| `organizer_event_grants` | 誰是哪個候選活動的成員（存為 `owner`；舊的 `editor` 列視同成員），含授權與撤銷者 |
+| `organizer_event_invitations` | 尚未接受的成員邀請：**明文電子郵件**、邀請人，以及接受或撤銷紀錄 |
 | `organizer_event_reviews` | 送審與管理決策的狀態轉換、actor、note 與時間。immutable |
 | `organizer_import_sources` | 匯入來源 metadata：**主辦私人試算表的檔名與工作表名**、原始檔 SHA-256、來源說明與欄位 mapping |
 | `organizer_import_rows` | 主辦確認過的正規化攤位列：活動日、場地、展區、攤位代碼、**社團名稱**、stable key 與 identity group |
-| `organizer_submission_snapshots` | 送審當下固定的完整內容與其 SHA-256（approval hash）。immutable |
-| `organizer_amendments` | 修正候選對應的來源候選／版本／published job、固定公開基準 JSON 及 SHA-256；包含已公開活動、名單、身分及地圖，不保存原私人試算表檔名或递迴嵌入歷史 snapshot |
+| `organizer_submission_snapshots` | 送審當下固定的完整內容與其 SHA-256（approval hash），含匯入來源的**試算表檔名與工作表名**。immutable |
+| `organizer_amendments` | 修正候選對應的來源候選／版本／核准 snapshot（存在沿用舊名的 `source_job_id` 欄；舊修正存的是當時的發布工作 ID）、固定公開基準 JSON 及 SHA-256；包含已公開活動、名單、身分及地圖，不保存原私人試算表檔名或递迴嵌入歷史 snapshot |
 | `organizer_amendment_changes` | 每次明確修正宣告的不可變 JSON、candidate version、對應 revision ID 與時間；社團名稱與攤位變動隨候選保存，不直接公開此控制面紀錄 |
 | `organizer_venues` | 主辦工作區建立的場館：名稱、正規化名稱鍵、來源 URL、建立者與時間 |
 | `organizer_venue_spaces` | 場館內的場地：所屬場館、名稱、正規化名稱鍵、來源 URL、預設展區模式、建立者與時間 |
 | `organizer_reference_records` | 主辦／分類／場館／場地的 canonical 公開來源記錄、固定擷取時間與建立者；建立目錄不等於公開发布，完整選定 bytes 封入送審 snapshot |
-| `organizer_publication_jobs` | 發布工作的狀態、步驟、PR 編號、head／merge SHA、workflow run id、錯誤訊息、failure_code、retryable 與 sticky `remote_write_intent_at`；重試保留原 job 與核准 snapshot，退回修改後舊 job 標為不可重試歷史 |
-| `organizer_publication_lease` | 全域同時只允許一個發布工作前進的租約 |
-| `github_webhook_deliveries` | GitHub webhook 的 delivery id、事件、payload SHA-256 與處理結果；用於去重 |
 
 **目的**：讓受邀或申請獲准的活動整理者在不接觸 repository 的前提下準備一場可送審的活動。**原始試算表 bytes 不在本站**——它只在瀏覽器裡解析與雜湊，API 只接受正規化後的資料列。
-**保存期**：候選活動與其 workspace state 不設期限；workspace preference 保存至帳號刪除。 **到期處置**：帳號刪除時刪除該帳號的 workspace preference，清空 onboarding 完成者，其他 actor 與 email 依既有塗銷規則去識別化；匯入的攤位資料是主辦提供的活動資料，不隨個別帳號刪除。
-`audit_log` 記的 `organizer_event.*` 只留版本、列數與原始檔 SHA-256，**不留 workbook 檔名或工作表名**——它們是主辦自己的資料，會比所描述的匯入列活得更久。
+**保存期**：候選活動與其 workspace state 不設期限；workspace preference 保存至帳號刪除。 **到期處置**：帳號刪除時先撤銷再刪除該帳號的成員 grant，刪除 workspace preference，清空 onboarding 完成者；邀請列保留，比對到的身分塗銷；其他 actor 與 email 依既有塗銷規則去識別化。匯入的攤位資料是主辦提供的活動資料，不隨個別帳號刪除；匯入來源的檔名與工作表名描述的是活動資料，保留不清空，只把上傳者去識別化；送審 snapshot 也保留同樣內容，它是核准記錄，不改寫（內容雜湊就是 approval hash，改寫會讓之後的核准、重試與修正無法核對）。
+`audit_log` 記的 `organizer_event.*` 只留版本、列數與原始檔 SHA-256，**不留 workbook 檔名或工作表名**——它們是主辦自己的資料，會比所描述的匯入列活得更久。建立活動的稽核記暫定名稱；成員邀請的稽核記收件人 email 的 keyed digest，作為邀請紀錄的證據保留，收件人刪除帳號時不塗銷。
 可重用 reference 目錄不設期限；帳號刪除時將 `created_by` 去識別化，保留主辦提供的名稱／官方來源。`organizer_reference.created` audit 記候選 id 與記錄種類；獨立管理入口改記 shared 範圍、記錄種類與必要場地 id，不複製分類內容。
 活動申請與決策不設 TTL，僅本人與管理者可讀。帳號刪除時移除 pending 申請；已審核申請清空 `data_json`、`reason`，`account_id` 去識別化，保留決策／時間及候選連結。審核者刪除帳號時 `reviewed_by` 去識別化且理由清空。已進入候選的官方活動資料沿用候選保存規則。
 
-### `map_contributor_grants` — 地圖貢獻授權
+### `map_drafts` 與 `map_draft_revisions` — 主辦的地圖草稿
 
-> 地圖貢獻者角色已在 #546 階段 5a 移除，這張表不再寫入，隨 D1 migration 刪除。
+`map_drafts` 保存候選活動每個「活動日 × 場地」的地圖：`candidate_id`、活動、period、場地、owner、狀態、目前 revision、最後活動時間與清除 claim。`map_draft_revisions` 保存每版 JSON（含只給主辦看的輔助線）、作者與建立時間；每次修改新增 revision，落後版本不得覆寫。描摹用的地圖底圖存在私人 `MAP_CONTRIBUTIONS` R2 bucket，沒有公開網域，只經候選授權讀取。
 
-`account_id`、授權者／時間，以及撤銷或停權者／時間。有效角色是撤銷與停權時間都為 NULL 的列；管理者可再次授權同一帳號。
+**目的**：讓主辦整理地圖並送審；地圖只隨核准的送審 snapshot 公開。**保存期**：狀態為 `draft` 的地圖 180 天無活動後整份刪除，先刪 R2 底圖再刪資料列；其他狀態不自動刪除。刪除寫入 `map_draft.purged` 稽核。帳號刪除時地圖保留，草稿 owner 改為 `[shredded]`、revision 作者清空。
 
-**目的**：讓管理者明確控制誰可整理主辦官方配置證據。**保存期**：帳號存在期間不設期限；刪除帳號時刪除資料列。授權、撤銷與停權另寫入 `audit_log`。
+### R2 活動資料（`EVENT_DATA`）
 
-### `map_drafts` 與 `map_draft_revisions` — 私人地圖草稿
-
-`map_drafts` 保存活動、period、場地、owner、狀態、目前 revision、活動／決定時間、內部 transition token、清除 claim 與 `candidate_id`。**`candidate_id` 是兩條管線的分界**：非 NULL 的列屬於主辦單位工作區的候選活動，公開地圖貢獻流程的每一句 SQL 都要求它是 NULL（見[地圖貢獻控制面契約](https://github.com/dekkmarsvin/tw_doujin_event/blob/ea03bcd723344296514201cb44c832dbdee3a05d/docs/contracts/map-contributions.md)）。`map_draft_revisions` 保存每版私人 JSON、作者與建立時間。每次修改新增 revision；落後版本不得覆寫。partial unique index 保證同一 `event_id + period_key + venue_space_id` 最多一份仍有效的 `approved`／`exported`；核准替代稿時，同一 D1 batch 會先把明確指定的既有稿轉為 `withdrawn`。
-
-**目的**：允許平行整理與可重現審閱，不直接改寫公開快照。**保存期**：`draft` 180 天無活動後整份刪除；`changes_requested` 180 天無活動後刪除 revisions 並將 owner 去識別化；`submitted` 審閱前不自動刪除。已審內容的後續處置見下兩類。
-
-### `map_draft_reviews` — 地圖審閱紀錄
-
-`draft_id`、revision、前後狀態、actor role／account、note 與時間。提交也記為狀態轉換；審閱列不可改寫。
-
-**目的**：回答哪一版何時被提交、要求修改、核准、拒絕或匯出。**保存期**：不設期限；帳號刪除或 `changes_requested` 到期時將 actor 去識別化。
-
-### `map_draft_comments` — 地圖審閱留言
-
-`draft_id`、留言當下的 revision、author role／account、留言內容，以及可選的 `target_kind` / `target_ref`。帶 target 的留言是「只改這一個元素」的請求，`target_ref` 用草稿自己的寫法定位（攤位用代碼、非一般攤位區用 id）。只存文字，不含原始圖位元組。
-
-與 `map_draft_reviews` 分表：後者被保存期限與帳號刪除當成稽核來源，維持一次狀態轉換一列；自由留言混入會讓「這列要保存多久」取決於它是哪一種列。
-
-讀取面不回傳 `author_account_id`——草稿上的參與者彼此之間只以角色識別。留言會更新 `map_drafts.last_activity_at`，因此討論中的草稿不會被當成已棄置而清除。
-
-**目的**：讓審閱端累積留言，並對特定攤位或區域提出局部修改請求。**保存期**：隨草稿。草稿被刪除時一併刪除；`changes_requested` 到期匿名化時比照審閱 note，將 author 去識別化並保留內容；帳號刪除時全站留言的 author 去識別化，未送審草稿的留言隨草稿刪除。
-
-### `map_draft_files` 與私人 R2 原始檔
-
-D1 保存草稿 revision、私人 object key、官方來源 URL、文件日期、頁碼、SHA-256、MIME、容量、尺寸／頁數、上傳者／時間、審閱結果與原始檔刪除時間。JPEG、PNG、WebP 與 PDF bytes 位於獨立的 `MAP_CONTRIBUTIONS` R2 bucket；該 bucket 沒有公開網域，只能經 owner／管理者權限檢查讀取。
-
-**目的**：保留 layout 可追溯的主辦官方證據。**保存期**：未提交或被要求修改的檔案隨草稿 180 天期限處理；`approved`／`rejected`／`exported`／`withdrawn` 決定 30 天後刪除原始 bytes 並清空 object key，永久保留來源 metadata 與審閱結果。帳號刪除時，從未提交的檔案立即刪除；已審檔案的上傳者去識別化。
-
-### `map_draft_exports` — event-data 候選匯出
-
-保存已核准 draft revision 的 `target_path`、候選 JSON、語意差異 JSON、SHA-256、建立者與時間；同一 draft revision 最多一份，重試回傳原列。候選只供管理者下載並建立 event-data repository 的可審查變更，不是公開資料 endpoint。
-
-**目的**：固定審閱者核准的精確幾何與匯出內容，避免下載時重新計算而漂移。**保存期**：不設期限；帳號刪除時將建立者去識別化。公開地圖仍只來自 event-data repository 的 reviewed snapshot 與 pin。
+核准發布時寫入，不經使用者上傳：各版本的公開活動檔（`events/<eventId>/<version>/`，讀者經 Function 讀取）、發布輸入（同版本的 `source/`，含社團分組，不對外提供）、社團配號表（`registry/<version>/` 的 allocations 與 evidence）、每份發布過的 index 副本（`history/`）與目前的 `index.json`。內容是主辦提供的活動資料與社團名稱，不含帳號或 email。**保存期**：版本寫入後不再修改，不設期限，供回滾使用；不隨個別帳號刪除。
 
 ### `event_notices` — 主辦的活動公告
 
@@ -243,48 +205,47 @@ D1 保存草稿 revision、私人 object key、官方來源 URL、文件日期�
 
 - 登入：`auth.link_requested`、`auth.session_created`、`auth.signed_out`
 - 認領：`claim.created`、`claim.auto_verified`、`claim.verify_conflict`、`claim.challenge_failed`、`claim.withdrawn`（社團自己撤回）、`claim.admin_approve`／`claim.admin_reject`／`claim.admin_revoke`、`claim.organizer_approve`／`claim.organizer_reject`／`claim.organizer_revoke`
-- 社團自填內容：`override.updated`、`override.retention`、`override.post_event_visibility`、`override.takendown`、`override.deleted`（社團自助刪除，留下是哪個帳號做的、不留內容）、`override.purged`（到期清除，`actor_role` 為 `system`，`detail_json` 只有 `eventId`）
-- 管理者名冊：`admin.added`、`admin.removed`
+- 社團自填內容：`override.updated`、`override.retention`、`override.post_event_visibility`、`override.takendown`、`override.organizer_takendown`、`override.deleted`（社團自助刪除，留下是哪個帳號做的、不留內容）、`override.purged`（到期清除，`actor_role` 為 `system`，`detail_json` 只有 `eventId`）
+- 管理者名冊與網站設定：`admin.added`、`admin.removed`、`site_settings.updated`
 - 帳號：`account.disabled`、`account.deleted`（刪除完成後只留下已塗銷紀錄）
-- 地圖貢獻：`map_contributor.grant`／`map_contributor.revoke`／`map_contributor.suspend`、`map_draft.created`、`map_draft.submitted`、`map_draft.commented`、`map_draft.changes_requested`／`map_draft.reject`／`map_draft.approve`、`map_draft.exported`、`map_draft.purged`、`map_draft.content_purged`、`map_draft.raw_purged`
-- 主辦單位工作區：`organizer_event.created`、`organizer_event.owner_granted_on_create`（建立者即負責人時的直接授予）、`organizer_event.invitation_failed`、`organizer_event.updated`、`organizer_event.onboarding_completed`、`organizer_event.import_replaced`、`organizer_event.map_created`／`organizer_event.map_updated`／`organizer_event.map_background_updated`、`organizer_event.owner_invite`／`organizer_event.owner_revoke`／`organizer_event.editor_invite`／`organizer_event.editor_revoke`、`organizer_event.submitted`、`organizer_event.approved`／`organizer_event.changes_requested`／`organizer_event.reopened`、`organizer_publication.retried`
-- 場館與 reference：`organizer_venue.created`、`organizer_venue_space.created`、`organizer_reference.created`、`organizer_reference.address_completed`（場館記錄補上地址；記候選 id 與記錄種類，或獨立管理入口的 shared 範圍與種類，不複製地址）
+- 主辦單位工作區：`organizer_event.created`、`organizer_event.owner_granted_on_create`（建立者即負責人時的直接授予）、`organizer_event.invitation_failed`、`organizer_event.updated`、`organizer_event.onboarding_completed`、`organizer_event.import_replaced`、`organizer_event.map_created`／`organizer_event.map_updated`／`organizer_event.map_background_updated`、`organizer_event.owner_invite`／`organizer_event.owner_resend`／`organizer_event.owner_revoke`（成員邀請、重寄與撤銷）、`organizer_event.image_uploaded`、`organizer_event.submitted`、`organizer_event.approved`／`organizer_event.changes_requested`／`organizer_event.reopened`、`organizer_publication.retried`
+- 場館與 reference：`organizer_venue.created`、`organizer_venue_space.created`、`organizer_reference.created`、`organizer_reference.address_completed`（場館記錄補上地址；記候選 id 與記錄種類，或獨立管理入口的 shared 範圍與種類，不複製地址）、獨立管理入口的 `organizer_reference.edited`／`organizer_reference.revised`／`organizer_reference.deleted`
 - 已發布活動修正：`organizer.amendment.create`、`organizer.amendment.save`（在修正 revision 的同一 batch 寫入）
 - 活動申請審核：`organizer_application.approved`／`organizer_application.rejected`（同一 batch，只記審核者、申請識別與動作；不複製理由或申請內容）；核准授權沿用 `organizer_event.owner_granted_on_create`。
-- 排程清除：`retention.purged`（由排程 Worker 寫入，`actor_role` 為 `system`）
+- 排程清除：`retention.purged`、`map_draft.purged`（由排程 Worker 寫入，`actor_role` 為 `system`）
 
 兩點值得單獨記下：
 
 - `auth.link_requested` 的 `subject_id` 是以 `HASH_PEPPER` 為金鑰、帶 `audit-email-v1` domain separation 的 HMAC；不存明文，也不是可直接字典比對的無金鑰 SHA-256。
 - `shredded_at` 非 NULL 代表該列已塗銷，不應再當成原始稽核內容解讀。
 
-發布的 `published`／`failed` 結果目前在 `organizer_publication_jobs`，不是額外的 audit action；重試會清空該 job 的錯誤與 failure code，不能把它當作每次失敗的永久歷史。一般 handler 的事後 `writeAudit` 不保證與業務寫入同一交易，部分 repository 路徑才使用同一 batch。
+發布成功記為候選的 published 狀態與 `organizer_event.approved` 稽核；失敗不留紀錄，候選停在已核准或回到送審。一般 handler 的事後 `writeAudit` 不保證與業務寫入同一交易，部分 repository 路徑才使用同一 batch。
 
-依 [ADR-0069](../adr/0069-restored-unpublished-amendments-retain-failed-history.md) 終止已還原的未公開 AMEND 時，candidate 以 `abandoned` 保留，舊 job 維持 failed 且不可重試，因此保留最後失敗的 error、failure code、metadata、intent 與 checkpoint。`organizer.amendment.abandoned` 與狀態變更、review 在同一 batch 寫入；detail 保存管理者填寫的原因、原 job／approval／baseline hash、還原 PR／head／merge SHA、核對當時的 data／main SHA 與公開來源。這不改變一般 retry 的覆寫語意，也不聲稱保存每次嘗試的歷史。
+**保存期**：action 與時間不設期限，**永不刪列**；`ip_hash` 只保留 90 天。 **到期處置**：帳號刪除時，該帳號做的動作清空 actor、IP 與自由內容；以該帳號為主體的列改為固定值；以 keyed email digest 為主體的列（例如 `auth.link_requested`）保留 digest，清空 detail 與 IP，早期未加金鑰的 SHA-256 列則改為固定值；三者都寫入 `shredded_at`。仍保留「何時發生哪個動作」。別人所做、只在 detail 以 keyed digest 提到該帳號的列（例如成員邀請）保留。
 
-**保存期**：action 與時間不設期限，**永不刪列**；`ip_hash` 只保留 90 天。 **到期處置**：帳號刪除時把可連結的 account／email 主體改為固定值、清空 actor、IP 與自由內容，並寫入 `shredded_at`。仍保留「何時發生哪個動作」。
+### 通知待寄表
 
-### 管理者待審通知資料
+通知信在事件發生時各寄一封（[社團入口](./circle-portal.md#帳號通知信)、[待審通知](./admin.md#待審通知)）。`account_notification_items` 是唯一的待寄表，與它所通知的變更寫在同一個 D1 batch：事件型別、schema 版本、單次轉換識別、收件 account ID、event／circle／candidate／source 範圍、對象（社團帳號、活動申請人、活動成員或網站管理者）、當時名稱與內容版本、變更項目、事件與到期時間、寄送 lease、狀態與完成時間。不保存完整修改內容、證據、登入憑證、信件全文或其他人的 email；收件地址寄送時才從 `accounts` 讀取。
 
-`admin_notification_preferences` 保存管理者明文 email、收信開關、頻率、設定版本、啟用起點、下一摘要時間與交易 token；只接受本人經授權修改。預設及行為見[個人待審通知](./admin.md#待審通知)。管理者移除或帳號刪除時清除。
+寫入請求完成後的背景工作寄出到期的通知。暫時失敗 10 分鐘後由之後的請求重試；已開始寄送的通知在事件發生 48 小時後仍未成功即放棄；永久拒絕直接記為失敗。accepted 只代表供應商受理。完成（accepted／cancelled／failed）30 天後由排程 Worker 刪除；帳號刪除時刪除本人的列。
 
-`review_notification_items` 保存收件者 email、待審類型、來源 ID、送審識別、活動代碼、建立時間、所屬摘要及完成狀態。`review_notification_batches` 保存每位收件者的摘要識別、lease、嘗試次數、重試時間、供應商訊息 ID 與去除敏感內容的錯誤分類。兩表不保存申請內文、證據或信件全文；完成／取消 30 天後由既有清除 Worker 刪除，pending 保留至受理或取消。管理者移除／帳號刪除立即清除收件者紀錄，停用則取消 pending。
+`account_notification_preferences` 以 account ID 保存通知語言與版本（`cadence` 與 `enabled_since` 欄位仍在 schema 中，但不再使用）。帳號刪除時刪除。
 
-`circle_claims.notification_submission_id` 與 `organizer_event_candidates.notification_submission_id` 是不含個資的本次送審識別；活動申請與地圖分別沿用 application ID、transition token。它們防止舊通知誤指向後一次送審。
+`circle_claims.notification_submission_id` 與 `organizer_event_candidates.notification_submission_id` 是不含個資的本次送審識別，防止舊通知誤指向後一次送審。
 
 ### `preview_mail_sink` — 僅 preview
 
-`email`、`subject`、`text`、`created_at`。只有 preview 環境以 `PREVIEW_MAIL_SINK=d1` 明確選用時才寫入，收件人限 `PREVIEW_TEST_RECIPIENTS` 的 `.test` 假地址。production 有空表但沒有路由寫得進去。
+`email`、`subject`、`text`、`created_at`。只有 preview 環境以 `PREVIEW_MAIL_SINK=d1` 明確選用時才寫入，收件人限 `PREVIEW_TEST_RECIPIENTS` 的 `.test` 假地址，以及 E2E 每次執行的保留別名（`+e2e-<runId>`）；其他 preview 人工收件人經 Mailgun 寄出。存的可以是登入信、邀請信或通知信。production 有空表但沒有路由寫得進去。
 
-**保存期**：7 天，全站最短。 **到期處置**：由排程 Worker **刪除資料列**。期限最短的理由是它存的是登入信全文（含連結），而 preview 的沙盒收件人是真實的個人信箱；測試不需要昨天的信。preview 環境的 Worker 另行部署為 `tw-catalog-retention-purge-preview`。
+**保存期**：7 天。 **到期處置**：由排程 Worker **刪除資料列**。期限最短的理由是它存的是登入信全文（含連結），而 preview 的沙盒收件人是真實的個人信箱；測試不需要昨天的信。preview 環境的 Worker 另行部署為 `tw-catalog-retention-purge-preview`。
 
-preview 清除端點會先刪除隔離 preview 的公開縮圖與私人地圖貢獻 R2 bucket 內全部物件，再由 `clearPreviewData()` 清空除 `admins` 外的所有 runtime tables，**保留 admins**。它只在 preview 可達，且與排程清除無關。
+遠端 preview 的清除端點只清除保留的 E2E 執行留下的帳號、登入資料、認領、補充資料、通知、稽核與臨時管理者，不清空 bucket。完整 reset 只限本機可拋棄環境：先清空 `THUMBNAILS` 與 `MAP_CONTRIBUTIONS`，再由 `clearPreviewData()` 清空 runtime tables 並重灌場館資料；`admins`、`site_settings`、`site_service_check` 與 `EVENT_DATA` 保留。兩者都與排程清除無關。
 
 ## IP 的處理
 
-原始 IP 取自 `cf-connecting-ip`，缺少時退回 `x-forwarded-for`。**不以原始值儲存**：存的是 `SHA-256(HASH_PEPPER ‖ IP)`，寫入 `login_tokens.request_ip_hash` 與 `audit_log.ip_hash`。
+原始 IP 取自 `cf-connecting-ip`，缺少時退回 `x-forwarded-for`。**不以原始值儲存**：存的是 `SHA-256(HASH_PEPPER ‖ IP)`，寫入 `login_tokens.request_ip_hash`、`planning_shares.request_ip_hash` 與 `audit_log.ip_hash`。
 
-pepper 是固定值，不輪替。`login_tokens` 的值隨該列在 24 小時內刪除；`audit_log.ip_hash` 由排程 Worker 在 90 天後清為 `NULL`，稽核 action 本身不刪除。
+pepper 是固定值，不輪替。`login_tokens` 的值在建立滿 24 小時後的下一次每日清除隨該列刪除；`planning_shares` 的值隨該列到期刪除；`audit_log.ip_hash` 由排程 Worker 在 90 天後清為 `NULL`，稽核 action 本身不刪除。
 
 **例外**：Turnstile siteverify 會把**原始 IP** 送給 Cloudflare（見下）。
 
@@ -292,9 +253,9 @@ pepper 是固定值，不輪替。`login_tokens` 的值隨該列在 24 小時內
 
 | 對象 | 收到什麼 | 何時 |
 |---|---|---|
-| **Mailgun**（`api.mailgun.net`） | 收件人**明文 email**、主旨、內文（登入與邀請信含一次性連結；待審摘要只含分類、活動代碼、筆數與管理入口） | 索取登入連結、Organizer 邀請及已啟用的管理者待審摘要 |
+| **Mailgun**（`api.mailgun.net`） | 收件人**明文 email**、主旨、內文（登入與邀請信含一次性連結；待審通知只含類型、活動代碼與審核入口） | 索取登入連結、Organizer 邀請及通知信 |
 | **Cloudflare Turnstile**（`challenges.cloudflare.com`） | 瀏覽器載入 widget；伺服器 siteverify 送 token 與**原始 IP** | 每次索取登入連結（[ADR-0016](../adr/0016-human-verification-guards-the-mailer.md)） |
-| **Cloudflare**（Pages／Workers／D1／R2） | 平台本身，承載全部上述資料、代管縮圖與私人地圖來源檔 | 全時 |
+| **Cloudflare**（Pages／Workers／D1／R2） | 平台本身，承載全部上述資料、代管縮圖、活動資料與私人地圖底圖 | 全時 |
 | **Cloudflare Access** | preview 的維護者身分與 CI service token | 存取 `*.tw-catalog.pages.dev` preview deployment 時；production 正式網域不使用（[ADR-0029](../adr/0029-public-production-gated-preview.md)） |
 
 認領證據抓取（`fetchEvidence()`）由 Worker 主動連向社團自己登錄的 URL，**對該主機揭露的是本站，不是使用者**。
@@ -303,28 +264,22 @@ pepper 是固定值，不輪替。`login_tokens` 的值隨該列在 24 小時內
 
 ## 閱讀端不在本表範圍
 
-一般參觀者不登入、不建立任何伺服器端紀錄。瀏覽器端只有兩個 `localStorage` 鍵：規劃資料（`event-map-planning-v1`，見[收藏與走訪規劃契約](./reader.md#儲存與版本)）與介面字級偏好。本站程式不設 cookie；分析只有上述由 Cloudflare 自動注入的 Web Analytics beacon。代管縮圖由本站圖片網域載入；社團選用外部網址時則由設定的圖片主機直接載入。
+一般參觀者不登入；只有主動分享行程時會建立伺服器端紀錄（見上方 `planning_shares`）。瀏覽器端的 `localStorage` 保存規劃資料（`event-map-planning-v1`，見[收藏與走訪規劃契約](./reader.md#儲存與版本)）、介面字級偏好與介面語言（`ui-locale`）。本站程式不設 cookie；分析只有上述由 Cloudflare 自動注入的 Web Analytics beacon。代管縮圖由本站圖片網域載入；社團選用外部網址時則由設定的圖片主機直接載入。
 
-規劃資料只留在使用者裝置，是刻意的隱私姿態，不是本站持有的資料——見 [ADR-0002](../adr/0002-planning-data-stays-on-device.md)。
+規劃資料只留在使用者裝置，是刻意的隱私姿態，不是本站持有的資料——見 [ADR-0002](../adr/0002-planning-data-stays-on-device.md)。分享行程是例外：只送出社團 ID、活動日與順序，不含備註、群組或其他私人欄位。
 
 ## 已經有的機制
 
 驗收條件要求「cleanup／expiry 行為有可執行機制與 tests，不只存在於文件」。這一節記的是它現在由什麼東西兌現。
 
-- **排程清除**：[`db/retention-purge.ts`](../../db/retention-purge.ts) 的 `purgeExpiredRecords()`，由 [`workers/retention-purge/`](../../workers/retention-purge) 每天 03:17 UTC 觸發，刪除過期的 `login_tokens`、`sessions`、`preview_mail_sink`、到期社團自述與地圖草稿／原始檔，並清除超過 90 天的 `audit_log.ip_hash`。每次執行寫一列 `retention.purged`，包含沒處理到東西的那些。
-- **它不會建立 schema。** 這個模組先讀 `sqlite_master`，表不在就跳過，不呼叫 `ensureTables()`。理由寫在模組頂端：**能建立資料庫的清除程式，就是能讓資料庫復活的清除程式。**
+- **排程清除**：[`db/retention-purge.ts`](../../db/retention-purge.ts) 的 `purgeExpiredRecords()`，由 [`workers/retention-purge/`](../../workers/retention-purge) 每天 03:17 UTC 觸發，刪除過期的 `login_tokens`、`sessions`、`preview_mail_sink`、`planning_shares`、到期社團自述、久未活動的主辦地圖草稿與已完成 30 天的通知，並清除超過 90 天的 `audit_log.ip_hash`。每次執行寫一列 `retention.purged`，包含沒處理到東西的那些。
+- **它不會建立 schema。** schema 只由 `migrations/` 建立；這個模組先讀 `sqlite_master`，表不在就跳過。理由寫在模組頂端：**能建立資料庫的清除程式，就是能讓資料庫復活的清除程式。**
 - **社團自助刪除**：`deleteOverride()`，走[既有的擁有權鏈](../adr/0020-self-service-deletion-reuses-the-existing-ownership-chain.md)（登入 → 已驗證的認領），不發放任何持有即授權的編輯連結。刪除後 `overrides_doc` 同步重建並遞增 revision，`audit_log` 留下 `override.deleted`——是哪個帳號做的，不留內容。
-- **帳號自助刪除與 audit 塗銷**：handler 先刪除從未提交的私人地圖來源檔，再由 `deleteAccount()` 以同一個 D1 batch 刪除帳號關聯資料、釋放認領、移除仍由它擁有的補充資料與未提交地圖草稿、更新公開文件，並將已審地圖 actor 與 audit 個資去識別化。`account.deleted` 本身以已塗銷列記錄。
+- **帳號自助刪除與 audit 塗銷**：handler 先刪除該帳號目前擁有的社團在 R2 的代管圖片目錄（與 D1 刪除的補充資料同一組社團），以及曾擁有、撤銷後目前無人擁有的社團中、保留內容沒有引用的草稿圖片；未通過的認領不涉及任何圖片，再由 `deleteAccount()` 以同一個 D1 batch 刪除帳號關聯資料、釋放認領、移除仍由它擁有的補充資料、更新公開文件，並將 audit 個資去識別化。`account.deleted` 本身以已塗銷列記錄。
 - **管理者停用帳號**：`disableAccount()` 寫入 `disabled_at` 並撤銷 live sessions；讀取端既有檢查阻止再次登入。
 
 ## 尚未納入政策正文
 
 preview mail sink 只接受保留的 `.test` 地址，人工 preview 信則經 Mailgun 由 `verify.kotoban.top` 寄出；政策正文仍只描述正式服務。兩者的隔離與 7 天清除由部署契約與測試把關，不把測試環境細節重複成一般使用者告知。
 
-已定案而**不再**列於此的：既有資料類別的保存期與到期處置（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)、[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)、[ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md)）、清除機制（[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)）、每一類的 owner（ADR-0021：專案維運者）、政策文件的位置與變更通知方式（[ADR-0023](../adr/0023-the-privacy-notice-ships-without-professional-review.md)，告知第七節）。
-
-### 帳號結果與內容通知資料
-
-`account_notification_preferences` 以 account ID 保存內容摘要 cadence、version、啟用起點及交易 token；不新增收件地址。`account_notification_items` 保存事件型別、schema 版本、單次轉換識別、收件 account ID、event/circle/candidate/source 範圍、當事人關係、當時名稱與內容版本、變更項目及時間；不保存完整修改內容、證據、token 或其他人 email。`account_notification_batches` 保存固定批次、lease、首次嘗試／重試時間、次數、provider ID、安全錯誤分類及終態。
-
-必要通知各自批次、一般內容按帳號摘要，避免摘要重試擋住結果信。暫時失敗倍增至 6 小時，自首次嘗試起至多 48 小時；永久拒絕／明確配置錯誤終止。accepted 是供應商受理，不是收件匣或已讀；外部結果不確定可重複寄出。三類終態 accepted/cancelled/failed 自完成起 30 天由原 retention Worker 清除；停用取消 pending，帳號刪除清除三表本人資料，含已選批次。既有待審摘要保留原偏好與重試規則，兩種 consumer 分表消費。
+已定案而**不再**列於此的：既有資料類別的保存期與到期處置（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)、[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)）、清除機制（[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)）、每一類的 owner（ADR-0021：專案維運者）、政策文件的位置與變更通知方式（[ADR-0023](../adr/0023-the-privacy-notice-ships-without-professional-review.md)，告知第七節）。

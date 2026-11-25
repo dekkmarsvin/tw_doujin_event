@@ -24,7 +24,7 @@
 | [社團入口](./contracts/circle-portal.md) | `/circle`：登入、認領、可編輯範圍、預覽、分享、活動後退出、保存與刪除 |
 | [主辦工作區](./contracts/organizer-workspace.md) | `/organizer`：活動申請、建置冊、匯入、地圖與地圖編輯器、修正宣告、送審與發布 |
 | [管理入口](./contracts/admin.md) | `/admin`：審核、帳號、網站營運設定、共用資料 |
-| [資料 inventory](./contracts/data-inventory.md) | 本站持有哪些資料、存在哪裡、保存多久。仍描述 #546 之前的資料表，待更新 |
+| [資料 inventory](./contracts/data-inventory.md) | 本站持有哪些資料、存在哪裡、保存多久 |
 
 ## 流程
 
