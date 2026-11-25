@@ -17,6 +17,7 @@ const OTHER_EVENT_CIRCLE = "c-900003"; // in sample-two
 const admin = await api.signIn(ADMIN);
 const owner = await api.signIn("owner@example.test");
 const stranger = await api.signIn("other@example.test");
+let strangerSouthClaim; // the claim that frees SOUTH for the stranger below
 
 async function claim(cookie, circleId) {
   const response = await api.call("POST", "/api/claims", { cookie, body: { circleId } });
@@ -125,7 +126,23 @@ test("deleting the account takes its circle's content and pictures down and free
   assert.equal((await api.call("DELETE", "/api/account", { cookie: member, body: { confirm: email } })).status, 200);
   assert.equal(await published(SOUTH), undefined);
   for (const key of [kept.uploadKey, abandoned.uploadKey]) assert.equal(await api.thumbnails.head(key), null, key);
-  await claim(stranger, SOUTH);
+  strangerSouthClaim = await claim(stranger, SOUTH);
+});
+
+test("deleting an account leaves the pictures of a circle someone else owns", async () => {
+  const email = "third@example.test";
+  const third = await api.signIn(email);
+  const refused = await claim(third, SOUTH);
+  await approve(strangerSouthClaim);
+  const decided = await api.call("POST", "/api/admin/claims", { cookie: admin, body: { claimId: refused, decision: "reject" } });
+  assert.equal(decided.status, 200, await decided.clone().text());
+  const picture = await upload(stranger, SOUTH);
+  const saved = await save(stranger, SOUTH, { saleInfo: "現任社團", thumbnail: picture.thumbnail }, { hostedThumbnailKey: picture.uploadKey });
+  assert.equal(saved.status, 200, await saved.clone().text());
+
+  assert.equal((await api.call("DELETE", "/api/account", { cookie: third, body: { confirm: email } })).status, 200);
+  assert.ok(await api.thumbnails.head(picture.uploadKey), "a refused claim grants nothing over the owner's pictures");
+  assert.equal((await published(SOUTH)).thumbnail.url, picture.thumbnail.url);
 });
 
 test("content its circle chose to hide after the event leaves readers when the event ends", async () => {

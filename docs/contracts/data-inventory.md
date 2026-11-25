@@ -60,7 +60,7 @@
 | `email` | **明文電子郵件** | 唯一索引；經 `normalizeEmail()` 正規化 |
 | `created_at`、`last_login_at` | 時間戳 | |
 | `disabled_at` | 停用時間 | 管理者可停用非管理者帳號；寫入後立即撤銷 sessions，並阻止再次登入 |
-| `deletion_started_at` | 自助刪除開始時間 | 先原子封鎖新寫入並撤銷其他 sessions，再刪除 R2 代管圖片（範圍見[已知問題](#已知問題)）；發起刪除的 session 只可重試刪除 route |
+| `deletion_started_at` | 自助刪除開始時間 | 先原子封鎖新寫入並撤銷其他 sessions，再刪除 R2 代管圖片；發起刪除的 session 只可重試刪除 route |
 
 **目的**：讓社團以 email 一次性連結登入並維護自己的公開資料。
 **保存期**：不設期限。 **到期處置**：登入中的非管理者可輸入完整 email 自助刪除（[ADR-0027](../adr/0027-personal-data-lifecycle-and-account-deletion.md)）。帳號、tokens、sessions 與 claims 一併刪除；仍由該帳號擁有的補充資料從資料列與公開文件移除，擁有者名額釋放。管理者須先由另一位管理者移出名單；身為某候選活動唯一有效成員時回 `409 account_sole_owner`，須先加入另一位成員。
@@ -116,7 +116,7 @@
 | `challenge_token_hash`、`challenge_expires_at`、`challenge_attempts` | 驗證碼狀態，24 小時 |
 | `status`、`verified_at`、`reviewed_by`、`reviewed_at` | 審核結果；`reviewed_by` 是審核者（網站管理者或活動成員）的**明文 email**，該帳號刪除時塗銷 |
 
-**目的**：證明某帳號是某社團本人。 **保存期**：不設期限。 **到期處置**：隨帳號刪除；partial unique index 的擁有者名額同步釋放。已轉移給別人的社團，D1 中的現任內容不會因前任刪帳號而移除（R2 圖片見[已知問題](#已知問題)）。
+**目的**：證明某帳號是某社團本人。 **保存期**：不設期限。 **到期處置**：隨帳號刪除；partial unique index 的擁有者名額同步釋放。已轉移給別人的社團，現任內容與其代管圖片都不會因前任刪帳號而移除。
 
 ### `circle_overrides` — 社團自填的補充資料
 
@@ -277,7 +277,7 @@ pepper 是固定值，不輪替。`login_tokens` 的值在建立滿 24 小時後
 - **排程清除**：[`db/retention-purge.ts`](../../db/retention-purge.ts) 的 `purgeExpiredRecords()`，由 [`workers/retention-purge/`](../../workers/retention-purge) 每天 03:17 UTC 觸發，刪除過期的 `login_tokens`、`sessions`、`preview_mail_sink`、`planning_shares`、到期社團自述、久未活動的主辦地圖草稿與已完成 30 天的通知，並清除超過 90 天的 `audit_log.ip_hash`。每次執行寫一列 `retention.purged`，包含沒處理到東西的那些。
 - **它不會建立 schema。** schema 只由 `migrations/` 建立；這個模組先讀 `sqlite_master`，表不在就跳過。理由寫在模組頂端：**能建立資料庫的清除程式，就是能讓資料庫復活的清除程式。**
 - **社團自助刪除**：`deleteOverride()`，走[既有的擁有權鏈](../adr/0020-self-service-deletion-reuses-the-existing-ownership-chain.md)（登入 → 已驗證的認領），不發放任何持有即授權的編輯連結。刪除後 `overrides_doc` 同步重建並遞增 revision，`audit_log` 留下 `override.deleted`——是哪個帳號做的，不留內容。
-- **帳號自助刪除與 audit 塗銷**：handler 先刪除該帳號曾認領過的每個社團在 R2 的整個代管圖片目錄（見[已知問題](#已知問題)），再由 `deleteAccount()` 以同一個 D1 batch 刪除帳號關聯資料、釋放認領、移除仍由它擁有的補充資料、更新公開文件，並將 audit 個資去識別化。`account.deleted` 本身以已塗銷列記錄。
+- **帳號自助刪除與 audit 塗銷**：handler 先刪除該帳號曾認領過、且目前沒有其他帳號持有的社團在 R2 的代管圖片目錄，再由 `deleteAccount()` 以同一個 D1 batch 刪除帳號關聯資料、釋放認領、移除仍由它擁有的補充資料、更新公開文件，並將 audit 個資去識別化。`account.deleted` 本身以已塗銷列記錄。
 - **管理者停用帳號**：`disableAccount()` 寫入 `disabled_at` 並撤銷 live sessions；讀取端既有檢查阻止再次登入。
 
 ## 尚未納入政策正文
@@ -290,6 +290,5 @@ preview mail sink 只接受保留的 `.test` 地址，人工 preview 信則經 M
 
 以下是程式目前的實際行為，與資料刪除或個資邊界不符，修正前在此記錄：
 
-- **帳號刪除會刪到別人的代管圖片。** 刪除帳號時，程式列出這個帳號曾經認領過的所有社團（包括已婉拒、已撤銷、已撤回的認領），刪除各社團在公開 `THUMBNAILS` bucket 的整個圖片目錄。若該社團現在由另一個帳號擁有，現任擁有者的代表圖與品書會被刪除，D1 中的補充資料留下失效的圖片網址。只送出過認領、從未通過的帳號也能觸發。（`server/auth.ts` 的帳號刪除、`db/identity-repository.ts` 的 `listClaimScopesForAccount`）
 - **成員邀請的收件人 digest 不隨收件人刪除而塗銷。** 邀請稽核由邀請人寫入、主體是候選活動，收件人刪除帳號時兩條塗銷條件都選不到它，keyed email digest 會留下。
 - **送審 snapshot 保留試算表檔名與工作表名。** 上傳者刪除帳號時只清空匯入來源列的副本，snapshot 內的副本不變。

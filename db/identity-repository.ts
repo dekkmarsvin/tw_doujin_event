@@ -721,12 +721,19 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return result.results;
   }
 
-  /** All historical scopes matter when deleting an account: staged R2 objects
-   * are keyed by event/circle even when they were never published to D1. */
+  /** The circles whose hosted pictures go with this account when it is deleted.
+   * Historical claims count, since staged R2 objects are keyed by event/circle
+   * even when never published — but not a circle another account now owns:
+   * its prefix holds that owner's pictures, and a claim that was rejected,
+   * revoked or withdrawn grants nothing over them. */
   async function listClaimScopesForAccount(accountId: string) {
     await ensureTables();
     const result = await database.prepare(
-      `SELECT DISTINCT event_id, circle_id FROM circle_claims WHERE account_id = ?1 ORDER BY event_id, circle_id`,
+      `SELECT DISTINCT c.event_id, c.circle_id FROM circle_claims c
+       WHERE c.account_id = ?1
+         AND NOT EXISTS (SELECT 1 FROM circle_claims o WHERE o.event_id = c.event_id AND o.circle_id = c.circle_id
+           AND o.status = 'verified' AND o.account_id <> ?1)
+       ORDER BY c.event_id, c.circle_id`,
     ).bind(accountId).all<{ event_id: string; circle_id: string }>();
     return result.results;
   }
