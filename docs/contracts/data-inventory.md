@@ -172,8 +172,8 @@
 | `organizer_publication_lease` | 全域同時只允許一個發布工作前進的租約 |
 
 **目的**：讓受邀或申請獲准的活動整理者在不接觸 repository 的前提下準備一場可送審的活動。**原始試算表 bytes 不在本站**——它只在瀏覽器裡解析與雜湊，API 只接受正規化後的資料列。
-**保存期**：候選活動與其 workspace state 不設期限；workspace preference 保存至帳號刪除。 **到期處置**：帳號刪除時先撤銷再刪除該帳號的成員 grant，刪除 workspace preference，清空 onboarding 完成者；邀請列保留，比對到的身分塗銷；其他 actor 與 email 依既有塗銷規則去識別化。匯入的攤位資料是主辦提供的活動資料，不隨個別帳號刪除；匯入來源列的檔名與工作表名會清空，但送審 snapshot 內的副本保留（見[已知問題](#已知問題)）。
-`audit_log` 記的 `organizer_event.*` 只留版本、列數與原始檔 SHA-256，**不留 workbook 檔名或工作表名**——它們是主辦自己的資料，會比所描述的匯入列活得更久。建立活動的稽核記暫定名稱；成員邀請的稽核記收件人 email 的 keyed digest。
+**保存期**：候選活動與其 workspace state 不設期限；workspace preference 保存至帳號刪除。 **到期處置**：帳號刪除時先撤銷再刪除該帳號的成員 grant，刪除 workspace preference，清空 onboarding 完成者；邀請列保留，比對到的身分塗銷；其他 actor 與 email 依既有塗銷規則去識別化。匯入的攤位資料是主辦提供的活動資料，不隨個別帳號刪除；匯入來源列的檔名與工作表名會清空；送審 snapshot 內的副本是核准記錄的一部分，保留不改寫（內容雜湊就是 approval hash，改寫會讓之後的核准、重試與修正無法核對）。
+`audit_log` 記的 `organizer_event.*` 只留版本、列數與原始檔 SHA-256，**不留 workbook 檔名或工作表名**——它們是主辦自己的資料，會比所描述的匯入列活得更久。建立活動的稽核記暫定名稱；成員邀請的稽核記收件人 email 的 keyed digest，作為邀請紀錄的證據保留，收件人刪除帳號時不塗銷。
 可重用 reference 目錄不設期限；帳號刪除時將 `created_by` 去識別化，保留主辦提供的名稱／官方來源。`organizer_reference.created` audit 記候選 id 與記錄種類；獨立管理入口改記 shared 範圍、記錄種類與必要場地 id，不複製分類內容。
 活動申請與決策不設 TTL，僅本人與管理者可讀。帳號刪除時移除 pending 申請；已審核申請清空 `data_json`、`reason`，`account_id` 去識別化，保留決策／時間及候選連結。審核者刪除帳號時 `reviewed_by` 去識別化且理由清空。已進入候選的官方活動資料沿用候選保存規則。
 
@@ -223,7 +223,7 @@
 
 發布的 `published`／`failed` 結果目前在 `organizer_publication_jobs`，不是額外的 audit action；重試會清空該 job 的錯誤與 failure code，不能把它當作每次失敗的永久歷史。一般 handler 的事後 `writeAudit` 不保證與業務寫入同一交易，部分 repository 路徑才使用同一 batch。
 
-**保存期**：action 與時間不設期限，**永不刪列**；`ip_hash` 只保留 90 天。 **到期處置**：帳號刪除時，該帳號做的動作清空 actor、IP 與自由內容；以該帳號為主體的列改為固定值；兩者都寫入 `shredded_at`。仍保留「何時發生哪個動作」。別人所做、只在 detail 提到該帳號的列不一定塗銷（見[已知問題](#已知問題)）。
+**保存期**：action 與時間不設期限，**永不刪列**；`ip_hash` 只保留 90 天。 **到期處置**：帳號刪除時，該帳號做的動作清空 actor、IP 與自由內容；以該帳號為主體的列改為固定值；兩者都寫入 `shredded_at`。仍保留「何時發生哪個動作」。別人所做、只在 detail 以 keyed digest 提到該帳號的列（例如成員邀請）保留。
 
 ### 通知待寄表
 
@@ -291,5 +291,3 @@ preview mail sink 只接受保留的 `.test` 地址，人工 preview 信則經 M
 以下是程式目前的實際行為，與資料刪除或個資邊界不符，修正前在此記錄：
 
 - **被撤銷的前擁有者，其未儲存的草稿圖片不隨帳號刪除。** 撤銷後該社團目錄保留給被保留的內容使用，帳號刪除不再清理它；撤銷前上傳但從未儲存的草稿因此留在 R2。
-- **成員邀請的收件人 digest 不隨收件人刪除而塗銷。** 邀請稽核由邀請人寫入、主體是候選活動，收件人刪除帳號時兩條塗銷條件都選不到它，keyed email digest 會留下。
-- **送審 snapshot 保留試算表檔名與工作表名。** 上傳者刪除帳號時只清空匯入來源列的副本，snapshot 內的副本不變。
