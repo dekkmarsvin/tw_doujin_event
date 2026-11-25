@@ -291,7 +291,7 @@ AMEND 沿用驗證、Reader 預覽、Owner／Admin 送審及 Admin 核准。送�
 核心實作：[`server/organizer-publication.ts`](../../server/organizer-publication.ts)、[`app/event-data-publisher.ts`](../../app/event-data-publisher.ts)、[`app/publication-artifacts.ts`](../../app/publication-artifacts.ts)。部署設定與回滾見[部署 runbook](../runbooks/deployment.md#核准即發布)。
 
 - 依 ADR-0057，UI 動作為「核准並發布」。發布啟用（`ORGANIZER_PUBLICATION_MODE=r2` 且[網站營運設定](./admin.md#網站營運設定)的發布開關開啟）時，核准請求先確認管理者仍有效、送審版本未變，把候選標為 `approved`；再寫入活動資料：產生公開檔、更新社團配號表、公開活動圖片、寫入新版本，最後以 ETag 條件改寫 `index.json`；成功後同一 D1 交易記錄核准、將候選改為 published 並寄出結果通知。未啟用或發布開關暫停時核准回 503，候選保留送審狀態。
-- **寫入失敗不切換 `index.json`**，讀者看到的內容不變。可重試的失敗（儲存暫時無法寫入、另一筆發布剛完成造成的 ETag 衝突）回 503，候選停在 `approved`，再按一次核准即重試；內容本身無法發布（例如首次發布的活動代號已公開、修正基準已變更）回 409，候選回到 submitted，活動圖片不公開，由管理者退回修改。
+- **寫入失敗不切換 `index.json`**，讀者看到的內容不變。可重試的失敗（儲存暫時無法寫入、另一筆發布剛完成造成的 ETag 衝突）回 503，候選停在 `approved`，再按一次核准即重試；內容本身無法發布（例如首次發布的活動代號已公開、修正基準已變更、送審的活動圖片已遺失）回 409，候選回到 submitted，活動圖片不公開，由管理者退回修改。
 - 送審 snapshot 必須是這個候選這一版的內容：雜湊、候選 ID、版本、活動代號與 CREATE／AMEND 任一不符都拒絕核准。
 - 同一版本再次核准不重複發布：`index.json` 已指向這次核准時直接完成 D1 紀錄，候選已 published 時直接回成功。這也涵蓋寫入成功但 D1 交易失敗、或回應遺失的情況。
 - 沒有發布工作、背景接手或輪詢；核准回應就是發布結果。
@@ -312,7 +312,7 @@ AMEND snapshot/4 額外保存不可變 `amendment.baselineJson`／`baselineSha25
 - 手動補正過的列仍要通過與其他列相同的檢查：未宣告的活動日、場地或展區照樣被匯入 API 拒絕，介面上的修正不是繞過那道檢查的路。
 - `ORGANIZER_PUBLICATION_MODE` 未設定時，核准 API 回 503，候選保留 `submitted`。
 - 發布寫入失敗時 `index.json` 不變；可重試的失敗停在 `approved` 且不能要求修改，內容被拒時回到 `submitted`。再次核准成功後才記錄核准與 published，只留一筆核准紀錄。
-- 核准途中被要求修改或管理者資格被移除時，核准在寫入活動資料前就停止。
+- 核准途中被要求修改或管理者資格被移除時，核准在寫入活動資料前就停止；只有自己這次的核准會因內容被拒而撤回。核准者帳號在寫入期間刪除時，不寫回其帳號與說明，候選停在 `approved` 由其他管理者再核准。
 - 公開 bundle 不含 organizer 介面與寫入 route，由 `tests/public-artifact.test.mjs` 把關。
 - 新候選活動預設進入引導；跨登入可恢復每位協作者自己的位置；完成 onboarding、切換區段或執行驗證都不會產生候選內容 revision。
 - workspace preference 與完成 onboarding 的最終 SQL 寫入會再次檢查 active grant；權限在請求途中被撤銷時不會留下流程狀態變更，對外仍回 404。

@@ -115,9 +115,22 @@ test("only an active admin approving the submitted snapshot can claim it, and a 
   assert.equal((await repository.getOrganizerCandidate(id)).status, "submitted");
   assert.equal(await claim(), true);
   assert.equal((await repository.reviewOrganizerCandidate({ candidateId: id, expectedVersion: 1, actorAccountId: adminId, now: NOW + 5 })).ok, false);
-  await repository.releaseOrganizerApproval({ candidateId: id, expectedVersion: 1, now: NOW + 6 });
+  // A request refused earlier must not release a claim made after it.
+  await repository.releaseOrganizerApproval({ candidateId: id, expectedVersion: 1, actorAccountId: adminId, claimedAt: NOW + 3, now: NOW + 6 });
+  assert.equal((await repository.getOrganizerCandidate(id)).status, "approved");
+  await repository.releaseOrganizerApproval({ candidateId: id, expectedVersion: 1, actorAccountId: adminId, claimedAt: NOW + 4, now: NOW + 6 });
   assert.equal((await repository.reviewOrganizerCandidate({ candidateId: id, expectedVersion: 1, actorAccountId: adminId, now: NOW + 7 })).ok, true,
     "a refused publication returns to review");
+});
+
+test("an approving admin's account deleted mid-publication is not written back", async () => {
+  const { id, claim, publish } = await correctedDateFixture();
+  assert.equal(await claim(), true);
+  await database.prepare("UPDATE accounts SET deletion_started_at = ?2 WHERE id = ?1").bind(adminId, NOW + 5).run();
+  assert.equal((await publish()).ok, false);
+  const candidate = await repository.getOrganizerCandidate(id);
+  assert.deepEqual([candidate.status, candidate.published_version], ["approved", null], "another admin approving again finishes it");
+  assert.equal((await database.prepare("SELECT count(*) AS count FROM organizer_event_reviews WHERE candidate_id = ?1 AND to_status = 'approved'").bind(id).first()).count, 0);
 });
 
 test("an admin creates an empty event entry and its invited owner gains only that event", async () => {

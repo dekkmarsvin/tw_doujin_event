@@ -152,6 +152,16 @@ test("a publication that fails before the index is written changes nothing reade
   await bucket.put("index.json", indexBefore);
   assert.equal(await status(), "submitted");
   assert.equal(await api.thumbnails.head(`event-images/${state.image.sha256}.png`), null, "a refused approval publishes no picture");
+
+  // A submitted picture that has gone missing will not come back by retrying:
+  // the version returns to review, where it can be sent back for a new upload.
+  const staged = `organizer-event-images/${state.candidateId}/${state.image.sha256}.png`;
+  const picture = await (await api.env.MAP_CONTRIBUTIONS.get(staged)).arrayBuffer();
+  await api.env.MAP_CONTRIBUTIONS.delete(staged);
+  assert.equal((await ok(await approve(), 409)).code, "event_image_unavailable");
+  await api.env.MAP_CONTRIBUTIONS.put(staged, picture, { httpMetadata: { contentType: "image/png" } });
+  assert.equal(await status(), "submitted");
+  assert.equal(await (await bucket.get("index.json")).text(), indexBefore);
   // First an event file fails, then, with every file written, the history copy
   // right before the index. Neither may move the pointer; approving again is the retry.
   for (const prefix of [`events/${EVENT_ID}/`, "history/"]) {

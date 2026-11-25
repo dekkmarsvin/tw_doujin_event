@@ -2280,22 +2280,28 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return result.meta.changes === 1;
   }
 
-  /** A publication refused for its content returns the version to review, where it can be sent back for changes. */
-  async function releaseOrganizerApproval(input: { candidateId: string; expectedVersion: number; now: number }) {
+  /**
+   * A publication refused for its content returns the version to review,
+   * where it can be sent back for changes. Only the claim this request made
+   * is released: another admin's later claim of the same version stands.
+   */
+  async function releaseOrganizerApproval(input: { candidateId: string; expectedVersion: number; actorAccountId: string; claimedAt: number; now: number }) {
     await ensureTables();
     await database.prepare(
       `UPDATE organizer_event_candidates SET status = 'submitted', updated_at = ?1, approved_by = NULL, approved_at = NULL
-       WHERE id = ?2 AND current_version = ?3 AND status = 'approved'`,
-    ).bind(input.now, input.candidateId, input.expectedVersion).run();
+       WHERE id = ?2 AND current_version = ?3 AND status = 'approved' AND approved_by = ?4 AND approved_at = ?5`,
+    ).bind(input.now, input.candidateId, input.expectedVersion, input.actorAccountId, input.claimedAt).run();
   }
 
   /**
    * Records an approval whose files the event data bucket already serves
    * (#569): the review, the candidate published at this version, its owners'
    * notices and, from the published end date, recounted retention deadlines,
-   * in one batch. The admin was checked when the approval was claimed. Calling
-   * it again for the version already published is a no-op, so an approval
-   * repeated after a lost response settles cleanly.
+   * in one batch. The admin was checked when the approval was claimed; an
+   * account deleted since cannot be written back, and the version waits in
+   * `approved` for another admin. Calling it again for the version already
+   * published is a no-op, so an approval repeated after a lost response
+   * settles cleanly.
    */
   async function publishOrganizerCandidate(input: {
     candidateId: string; expectedVersion: number; actorAccountId: string; note?: string;
@@ -2317,6 +2323,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
         `INSERT INTO organizer_event_reviews (id, candidate_id, version, from_status, to_status, actor_account_id, note, at)
          SELECT ?1, id, current_version, 'submitted', 'approved', ?3, ?4, ?5 FROM organizer_event_candidates
          WHERE id = ?6 AND current_version = ?7 AND status = 'approved'
+           AND EXISTS (SELECT 1 FROM accounts a WHERE a.id = ?3 AND a.deletion_started_at IS NULL)
            AND EXISTS (SELECT 1 FROM organizer_submission_snapshots s
              WHERE s.id = ?8 AND s.candidate_id = ?6 AND s.candidate_version = ?7 AND s.sha256 = ?9)`,
       ).bind(transitionToken, null, input.actorAccountId, input.note ?? null, input.now, input.candidateId, input.expectedVersion,

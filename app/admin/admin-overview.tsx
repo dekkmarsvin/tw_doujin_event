@@ -47,7 +47,7 @@ function AdminDashboard({ queueState, mode }: { queueState?: ReturnType<typeof u
   const counts = queue?.claimCounts ?? [];
   const { data } = operations;
   const knownEvents = eventsByProximity(PUBLISHED_EVENTS, today);
-  const submitted = candidates?.filter(item => item.status === "submitted").sort((a, b) => (a.createdAt ?? a.updatedAt) - (b.createdAt ?? b.updatedAt));
+  const submitted = candidates?.filter(item => item.status === "submitted" || item.status === "approved").sort((a, b) => (a.createdAt ?? a.updatedAt) - (b.createdAt ?? b.updatedAt));
   return <>
     {/* Under 活動管理 the selected tab already names this view; only the overview titles itself. */}
     {overview && <div className={ui.title}><h2 id="overview-heading">管理總覽</h2></div>}
@@ -68,8 +68,8 @@ function AdminDashboard({ queueState, mode }: { queueState?: ReturnType<typeof u
             {queueState.updatedAt && <p className={ui.status}>待審摘要更新於 {adminDate(queueState.updatedAt)}</p>}</>}
           <ul className={ui.rows}>
             {overview && queue && queue.organizer.applications > 0 && <li><div><strong>活動申請</strong><small>{queue.organizer.applications} 件待審</small></div><a href="/organizer?application">前往審核</a></li>}
-            {submitted?.map(item => <li key={item.id}><div><strong>{item.tentativeName}</strong><small>活動內容待審{item.edition ? ` · 第 ${item.edition} 版` : ""}</small></div>
-              <a href={candidateHref(item.id, true)}>前往審核</a></li>)}
+            {submitted?.map(item => <li key={item.id}><div><strong>{item.tentativeName}</strong><small>{item.status === "approved" ? "發布未完成" : "活動內容待審"}{item.edition ? ` · 第 ${item.edition} 版` : ""}</small></div>
+              <a href={candidateHref(item.id, true)}>{item.status === "approved" ? "前往發布" : "前往審核"}</a></li>)}
             {overview && counts.filter(item => item.pending > 0).map(item => <li key={`claim:${item.eventId}`}><div><strong>{getPublishedEvent(item.eventId)?.name ?? item.eventId}</strong><small>社團認領 {item.pending} 件</small></div>
               <a href={adminHref("circles", { view: "claims", event: item.eventId })}>審核認領</a></li>)}
           </ul>

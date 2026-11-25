@@ -252,8 +252,9 @@ export function createOrganizerPublication(dependencies: PortalDependencies, aut
       // Claimed before anything is public: a version sent back or an admin
       // removed meanwhile stops here, and nobody can send this one back while
       // it is being written (#569).
+      const claimedAt = config.now();
       if (!await repository.claimOrganizerApproval({ candidateId, expectedVersion: expectedVersion as number, actorAccountId: gate.session.accountId,
-        snapshotId: snapshot.id, approvalHash: snapshot.sha256, now: config.now() })) {
+        snapshotId: snapshot.id, approvalHash: snapshot.sha256, now: claimedAt })) {
         return json({ error: "版本或狀態已變更。" }, 409);
       }
       const approvedDraft = approvedEventDraft(JSON.parse(snapshot.snapshot_json) as Parameters<typeof approvedEventDraft>[0]);
@@ -265,7 +266,7 @@ export function createOrganizerPublication(dependencies: PortalDependencies, aut
         await publishApprovedEvent({ snapshotJson: snapshot.snapshot_json, approvalHash: snapshot.sha256, candidateId, candidateVersion: expectedVersion as number },
           async () => {
             if (approvedDraft?.event.image && !await publishEventImage(candidateId, approvedDraft.event.image)) {
-              throw new PublicationFailure("event_image_unavailable", "活動圖片暫時無法公開，請稍後再核准一次。", true);
+              throw new PublicationFailure("event_image_unavailable", "找不到送審的活動圖片，這一版已回到待審；請要求修改，讓主辦重新上傳圖片。", false);
             }
           });
       } catch (error) {
@@ -275,7 +276,8 @@ export function createOrganizerPublication(dependencies: PortalDependencies, aut
         if (failure !== error) console.error(JSON.stringify({ event: "publication.write_failed", candidateId, message: error instanceof Error ? error.message : String(error) }));
         // Content that cannot be published goes back to review; a retryable
         // failure stays approved so only approving again can move it.
-        if (!failure.retryable) await repository.releaseOrganizerApproval({ candidateId, expectedVersion: expectedVersion as number, now: config.now() });
+        if (!failure.retryable) await repository.releaseOrganizerApproval({ candidateId, expectedVersion: expectedVersion as number,
+          actorAccountId: gate.session.accountId, claimedAt, now: config.now() });
         return json({ error: failure.message, code: failure.code, retryable: failure.retryable }, failure.retryable ? 503 : 409);
       }
       const eventEndsAt = approvedDraft ? eventDateFields(approvedDraft.event.days.map((day) => day.date).sort()).eventEndsAt : undefined;
