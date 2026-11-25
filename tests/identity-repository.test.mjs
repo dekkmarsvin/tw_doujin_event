@@ -327,7 +327,7 @@ test("account deletion releases claims, removes owned overlays and shreds person
 
   const shredded = await database.prepare(`SELECT * FROM audit_log WHERE action = 'claim.created' AND shredded_at IS NOT NULL`).first();
   assert.equal(shredded.actor_account_id, null);
-  assert.equal(shredded.subject_id, "[shredded]");
+  assert.equal(shredded.subject_id, emailAuditDigest, "the keyed digest stays as evidence (#573)");
   assert.equal(shredded.detail_json, null);
   assert.equal(shredded.ip_hash, null);
   assert.equal((await database.prepare(`SELECT COUNT(*) AS total FROM audit_log WHERE action = 'account.deleted' AND shredded_at IS NOT NULL`).first()).total, 1);

@@ -5,7 +5,8 @@ import { notificationParameters } from "../app/notification-navigation";
 import { loginLinkLetter } from "../app/mail-letter";
 import type { PortalMail } from "../app/portal-mail";
 import { hmacSign, hmacVerify, isEmailShaped, normalizeEmail, peppered, randomToken, sha256Hex } from "../app/portal-crypto";
-import { deleteObjectKeys, type HostedThumbnailStore } from "../app/hosted-thumbnails";
+import { catalogKeysOf, circleObjectPrefix, deleteObjectKeys, type HostedThumbnailStore } from "../app/hosted-thumbnails";
+import type { CircleOverrideFields } from "../app/circle-overrides";
 import type { IdentityRepository } from "../db/identity-repository";
 import { json, readCookie, readJson } from "./http";
 
@@ -257,17 +258,27 @@ export function createAuth({
     }
     const now = config.now();
     let claimScopes = await repository.listClaimScopesForAccount(current.accountId);
-    if (!thumbnailStore && claimScopes.length > 0) return json({ error: "暫時無法使用圖片功能，請稍後再試。", code: errorCode("image_service_unavailable") }, 503);
+    let revokedScopes = await repository.listRevokedUnownedScopesForAccount(current.accountId);
+    if (!thumbnailStore && (claimScopes.length > 0 || revokedScopes.length > 0)) return json({ error: "暫時無法使用圖片功能，請稍後再試。", code: errorCode("image_service_unavailable") }, 503);
     if (!await repository.beginAccountDeletion({ accountId: current.accountId, email: current.email, now, retrySessionId: current.sessionId })) {
       return json({ error: "找不到可刪除的帳號。", code: errorCode("account_not_found") }, 404);
     }
     // Re-read after the atomic tombstone. An upload that already put R2 bytes
     // can no longer bind metadata and will roll its object back.
     claimScopes = await repository.listClaimScopesForAccount(current.accountId);
+    revokedScopes = await repository.listRevokedUnownedScopesForAccount(current.accountId);
     if (thumbnailStore) {
       const allKeys = (await Promise.all(claimScopes.map((claim) => thumbnailStore.list(
         `events/${encodeURIComponent(claim.event_id)}/circles/${encodeURIComponent(claim.circle_id)}/`,
       )))).flat();
+      // A revoked owner's never-saved drafts go with it (#573); the pictures
+      // its kept content points at stay for the circle's next owner.
+      for (const scope of revokedScopes) {
+        const kept = await repository.getOverride(scope.event_id, scope.circle_id);
+        const referenced = new Set([kept?.hosted_thumbnail_key,
+          ...catalogKeysOf(thumbnailStore, kept ? JSON.parse(kept.fields_json) as CircleOverrideFields : null, scope.event_id, scope.circle_id)]);
+        allKeys.push(...(await thumbnailStore.list(circleObjectPrefix(scope.event_id, scope.circle_id))).filter((key) => !referenced.has(key)));
+      }
       await deleteObjectKeys(thumbnailStore, [...new Set(allKeys)]);
     }
     const deleted = await repository.deleteAccount({

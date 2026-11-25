@@ -132,7 +132,9 @@ test("deleting the account takes its circle's content and pictures down and free
 test("deleting an account leaves the pictures of a circle someone else owns", async () => {
   const email = "third@example.test";
   const third = await api.signIn(email);
-  const refused = await claim(third, SOUTH);
+  const thirdClaim = await api.call("POST", "/api/claims", { cookie: third, body: { circleId: SOUTH, evidenceNote: "我是南星工房的成員" } });
+  assert.equal(thirdClaim.status, 201, await thirdClaim.clone().text());
+  const refused = (await thirdClaim.json()).id;
   await approve(strangerSouthClaim);
   const decided = await api.call("POST", "/api/admin/claims", { cookie: admin, body: { claimId: refused, decision: "reject" } });
   assert.equal(decided.status, 200, await decided.clone().text());
@@ -143,6 +145,11 @@ test("deleting an account leaves the pictures of a circle someone else owns", as
   assert.equal((await api.call("DELETE", "/api/account", { cookie: third, body: { confirm: email } })).status, 200);
   assert.ok(await api.thumbnails.head(picture.uploadKey), "a refused claim grants nothing over the owner's pictures");
   assert.equal((await published(SOUTH)).thumbnail.url, picture.thumbnail.url);
+  // The decision stays on record without the claimant or its evidence (#573).
+  const kept = await api.database.prepare("SELECT status, account_id, evidence_note FROM circle_claims WHERE id = ?").bind(refused).first();
+  assert.equal(kept.status, "rejected");
+  assert.match(kept.account_id, /^\[shredded\]:/);
+  assert.equal(kept.evidence_note, null);
 });
 
 test("content its circle chose to hide after the event leaves readers when the event ends", async () => {
@@ -174,6 +181,11 @@ test("deleting an account leaves the kept pictures of an owner whose claim was r
   const saved = await api.call("PUT", at(`/api/circle/${OTHER_EVENT_CIRCLE}/overrides`), { cookie: owner,
     body: { fields: { saleInfo: "撤銷前的內容", thumbnail: picture.thumbnail }, hostedThumbnailKey: picture.uploadKey } });
   assert.equal(saved.status, 200, await saved.clone().text());
+  const draftForm = new FormData();
+  draftForm.set("file", new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 2, 0])], "b.png", { type: "image/png" }));
+  const draft = await api.call("POST", at(`/api/circle/${OTHER_EVENT_CIRCLE}/thumbnail`), { cookie: owner, body: draftForm });
+  assert.equal(draft.status, 200, await draft.clone().text());
+  const draftKey = (await draft.json()).uploadKey;
   // Revoking keeps the content and its pictures for the circle's rightful owner.
   await decide(ownerClaim, "revoke");
 
@@ -184,4 +196,10 @@ test("deleting an account leaves the kept pictures of an owner whose claim was r
   await decide((await refused.json()).id, "reject");
   assert.equal((await api.call("DELETE", "/api/account", { cookie: second, body: { confirm: email } })).status, 200);
   assert.ok(await api.thumbnails.head(picture.uploadKey), "a rejected claimant deletes none of the kept pictures");
+  assert.ok(await api.thumbnails.head(draftKey));
+
+  // The revoked owner's own account deletion takes its never-saved draft (#573).
+  assert.equal((await api.call("DELETE", "/api/account", { cookie: owner, body: { confirm: "owner@example.test" } })).status, 200);
+  assert.equal(await api.thumbnails.head(draftKey), null, "a draft nobody saved goes with its uploader");
+  assert.ok(await api.thumbnails.head(picture.uploadKey), "the kept content's picture stays for the next owner");
 });

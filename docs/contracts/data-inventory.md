@@ -63,7 +63,7 @@
 | `deletion_started_at` | 自助刪除開始時間 | 先原子封鎖新寫入並撤銷其他 sessions，再刪除 R2 代管圖片；發起刪除的 session 只可重試刪除 route |
 
 **目的**：讓社團以 email 一次性連結登入並維護自己的公開資料。
-**保存期**：不設期限。 **到期處置**：登入中的非管理者可輸入完整 email 自助刪除（[ADR-0027](../adr/0027-personal-data-lifecycle-and-account-deletion.md)）。帳號、tokens、sessions 與 claims 一併刪除；仍由該帳號擁有的補充資料從資料列與公開文件移除，擁有者名額釋放。管理者須先由另一位管理者移出名單；身為某候選活動唯一有效成員時回 `409 account_sole_owner`，須先加入另一位成員。
+**保存期**：不設期限。 **到期處置**：登入中的非管理者可輸入完整 email 自助刪除（[ADR-0027](../adr/0027-personal-data-lifecycle-and-account-deletion.md)）。依 [#573](https://github.com/dekkmarsvin/tw_doujin_event/issues/573) 的原則，移除身分、憑證與以本人名義呈現的內容，保留去識別化的稽核與決策紀錄：帳號、tokens、sessions 與審核中、已撤回或目前通過的 claims 一併刪除；仍由該帳號擁有的補充資料從資料列與公開文件移除，擁有者名額釋放。管理者須先由另一位管理者移出名單；身為某候選活動唯一有效成員時回 `409 account_sole_owner`，須先加入另一位成員。
 
 ### `admins` — 管理者名單
 
@@ -116,7 +116,7 @@
 | `challenge_token_hash`、`challenge_expires_at`、`challenge_attempts` | 驗證碼狀態，24 小時 |
 | `status`、`verified_at`、`reviewed_by`、`reviewed_at` | 審核結果；`reviewed_by` 是審核者（網站管理者或活動成員）的**明文 email**，該帳號刪除時塗銷 |
 
-**目的**：證明某帳號是某社團本人。 **保存期**：不設期限。 **到期處置**：隨帳號刪除；partial unique index 的擁有者名額同步釋放。已轉移給別人的社團，現任內容與其代管圖片都不會因前任刪帳號而移除。
+**目的**：證明某帳號是某社團本人。 **保存期**：不設期限。 **到期處置**：審核中、已撤回與目前通過的認領隨帳號刪除，partial unique index 的擁有者名額同步釋放；已婉拒或已撤銷的認領保留結果與審核者，`account_id` 改為每列不同的 `[shredded]:<id>`，佐證網址、說明與驗證碼清空。已轉移給別人的社團，現任內容與其代管圖片都不會因前任刪帳號而移除。
 
 ### `circle_overrides` — 社團自填的補充資料
 
@@ -172,7 +172,7 @@
 | `organizer_publication_lease` | 全域同時只允許一個發布工作前進的租約 |
 
 **目的**：讓受邀或申請獲准的活動整理者在不接觸 repository 的前提下準備一場可送審的活動。**原始試算表 bytes 不在本站**——它只在瀏覽器裡解析與雜湊，API 只接受正規化後的資料列。
-**保存期**：候選活動與其 workspace state 不設期限；workspace preference 保存至帳號刪除。 **到期處置**：帳號刪除時先撤銷再刪除該帳號的成員 grant，刪除 workspace preference，清空 onboarding 完成者；邀請列保留，比對到的身分塗銷；其他 actor 與 email 依既有塗銷規則去識別化。匯入的攤位資料是主辦提供的活動資料，不隨個別帳號刪除；匯入來源列的檔名與工作表名會清空；送審 snapshot 內的副本是核准記錄的一部分，保留不改寫（內容雜湊就是 approval hash，改寫會讓之後的核准、重試與修正無法核對）。
+**保存期**：候選活動與其 workspace state 不設期限；workspace preference 保存至帳號刪除。 **到期處置**：帳號刪除時先撤銷再刪除該帳號的成員 grant，刪除 workspace preference，清空 onboarding 完成者；邀請列保留，比對到的身分塗銷；其他 actor 與 email 依既有塗銷規則去識別化。匯入的攤位資料是主辦提供的活動資料，不隨個別帳號刪除；匯入來源的檔名與工作表名描述的是活動資料，保留不清空，只把上傳者去識別化；送審 snapshot 也保留同樣內容，它是核准記錄，不改寫（內容雜湊就是 approval hash，改寫會讓之後的核准、重試與修正無法核對）。
 `audit_log` 記的 `organizer_event.*` 只留版本、列數與原始檔 SHA-256，**不留 workbook 檔名或工作表名**——它們是主辦自己的資料，會比所描述的匯入列活得更久。建立活動的稽核記暫定名稱；成員邀請的稽核記收件人 email 的 keyed digest，作為邀請紀錄的證據保留，收件人刪除帳號時不塗銷。
 可重用 reference 目錄不設期限；帳號刪除時將 `created_by` 去識別化，保留主辦提供的名稱／官方來源。`organizer_reference.created` audit 記候選 id 與記錄種類；獨立管理入口改記 shared 範圍、記錄種類與必要場地 id，不複製分類內容。
 活動申請與決策不設 TTL，僅本人與管理者可讀。帳號刪除時移除 pending 申請；已審核申請清空 `data_json`、`reason`，`account_id` 去識別化，保留決策／時間及候選連結。審核者刪除帳號時 `reviewed_by` 去識別化且理由清空。已進入候選的官方活動資料沿用候選保存規則。
@@ -223,7 +223,7 @@
 
 發布的 `published`／`failed` 結果目前在 `organizer_publication_jobs`，不是額外的 audit action；重試會清空該 job 的錯誤與 failure code，不能把它當作每次失敗的永久歷史。一般 handler 的事後 `writeAudit` 不保證與業務寫入同一交易，部分 repository 路徑才使用同一 batch。
 
-**保存期**：action 與時間不設期限，**永不刪列**；`ip_hash` 只保留 90 天。 **到期處置**：帳號刪除時，該帳號做的動作清空 actor、IP 與自由內容；以該帳號為主體的列改為固定值；兩者都寫入 `shredded_at`。仍保留「何時發生哪個動作」。別人所做、只在 detail 以 keyed digest 提到該帳號的列（例如成員邀請）保留。
+**保存期**：action 與時間不設期限，**永不刪列**；`ip_hash` 只保留 90 天。 **到期處置**：帳號刪除時，該帳號做的動作清空 actor、IP 與自由內容；以該帳號為主體的列改為固定值；以 keyed email digest 為主體的列（例如 `auth.link_requested`）保留 digest，清空 detail 與 IP；三者都寫入 `shredded_at`。仍保留「何時發生哪個動作」。別人所做、只在 detail 以 keyed digest 提到該帳號的列（例如成員邀請）保留。
 
 ### 通知待寄表
 
@@ -277,7 +277,7 @@ pepper 是固定值，不輪替。`login_tokens` 的值在建立滿 24 小時後
 - **排程清除**：[`db/retention-purge.ts`](../../db/retention-purge.ts) 的 `purgeExpiredRecords()`，由 [`workers/retention-purge/`](../../workers/retention-purge) 每天 03:17 UTC 觸發，刪除過期的 `login_tokens`、`sessions`、`preview_mail_sink`、`planning_shares`、到期社團自述、久未活動的主辦地圖草稿與已完成 30 天的通知，並清除超過 90 天的 `audit_log.ip_hash`。每次執行寫一列 `retention.purged`，包含沒處理到東西的那些。
 - **它不會建立 schema。** schema 只由 `migrations/` 建立；這個模組先讀 `sqlite_master`，表不在就跳過。理由寫在模組頂端：**能建立資料庫的清除程式，就是能讓資料庫復活的清除程式。**
 - **社團自助刪除**：`deleteOverride()`，走[既有的擁有權鏈](../adr/0020-self-service-deletion-reuses-the-existing-ownership-chain.md)（登入 → 已驗證的認領），不發放任何持有即授權的編輯連結。刪除後 `overrides_doc` 同步重建並遞增 revision，`audit_log` 留下 `override.deleted`——是哪個帳號做的，不留內容。
-- **帳號自助刪除與 audit 塗銷**：handler 先刪除該帳號目前擁有的社團在 R2 的代管圖片目錄（與 D1 刪除的補充資料同一組社團；未通過或已撤銷的認領不涉及任何圖片），再由 `deleteAccount()` 以同一個 D1 batch 刪除帳號關聯資料、釋放認領、移除仍由它擁有的補充資料、更新公開文件，並將 audit 個資去識別化。`account.deleted` 本身以已塗銷列記錄。
+- **帳號自助刪除與 audit 塗銷**：handler 先刪除該帳號目前擁有的社團在 R2 的代管圖片目錄（與 D1 刪除的補充資料同一組社團），以及曾擁有、撤銷後目前無人擁有的社團中、保留內容沒有引用的草稿圖片；未通過的認領不涉及任何圖片，再由 `deleteAccount()` 以同一個 D1 batch 刪除帳號關聯資料、釋放認領、移除仍由它擁有的補充資料、更新公開文件，並將 audit 個資去識別化。`account.deleted` 本身以已塗銷列記錄。
 - **管理者停用帳號**：`disableAccount()` 寫入 `disabled_at` 並撤銷 live sessions；讀取端既有檢查阻止再次登入。
 
 ## 尚未納入政策正文
@@ -285,9 +285,3 @@ pepper 是固定值，不輪替。`login_tokens` 的值在建立滿 24 小時後
 preview mail sink 只接受保留的 `.test` 地址，人工 preview 信則經 Mailgun 由 `verify.kotoban.top` 寄出；政策正文仍只描述正式服務。兩者的隔離與 7 天清除由部署契約與測試把關，不把測試環境細節重複成一般使用者告知。
 
 已定案而**不再**列於此的：既有資料類別的保存期與到期處置（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)、[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)）、清除機制（[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)）、每一類的 owner（ADR-0021：專案維運者）、政策文件的位置與變更通知方式（[ADR-0023](../adr/0023-the-privacy-notice-ships-without-professional-review.md)，告知第七節）。
-
-## 已知問題
-
-以下是程式目前的實際行為，與資料刪除或個資邊界不符，修正前在此記錄：
-
-- **被撤銷的前擁有者，其未儲存的草稿圖片不隨帳號刪除。** 撤銷後該社團目錄保留給被保留的內容使用，帳號刪除不再清理它；撤銷前上傳但從未儲存的草稿因此留在 R2。

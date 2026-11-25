@@ -1329,7 +1329,7 @@ test("a booth list larger than one bound parameter still imports atomically", as
   assert.equal(replaced.source.sha256, "c".repeat(64));
 });
 
-test("account deletion shreds the private workbook name alongside its uploader", async () => {
+test("account deletion removes the uploader and keeps the workbook names the approval record holds", async () => {
   await repository.createOrganizerCandidate({
     id: "candidate-shred", tentativeName: "活動", ownerEmail: "owner@example.test",
     createdByAccountId: adminId, draftJson: JSON.stringify(initialDraft), now: NOW,
@@ -1365,8 +1365,10 @@ test("account deletion shreds the private workbook name alongside its uploader",
     "SELECT created_by, file_name, worksheet, sha256 FROM organizer_import_sources WHERE candidate_id = 'candidate-shred'",
   ).first();
   assert.equal(source.created_by, "[shredded]");
-  assert.equal(source.file_name, "[shredded]");
-  assert.equal(source.worksheet, null);
+  // The organizer's file and sheet names describe the event's data, as the
+  // approved snapshot does (#573).
+  assert.equal(source.file_name, "PF45 內部攤位表 最終版.xlsx");
+  assert.equal(source.worksheet, "不要外流");
   // The provenance hash is not personal data and outlives the account.
   assert.equal(source.sha256, "d".repeat(64));
 });

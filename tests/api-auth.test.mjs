@@ -81,6 +81,14 @@ test("deleting an account needs the email typed back, then removes it and its se
   assert.equal((await api.call("GET", "/api/auth/session", { cookie })).status, 401);
   const account = await api.database.prepare("SELECT id FROM accounts WHERE email = ?").bind(email).first();
   assert.equal(account, null);
+
+  // What was requested stays on record by a digest only the site can match (#573).
+  const { emailAuditSubjectId } = await api.load("/server/auth.ts");
+  const requested = await api.database.prepare("SELECT ip_hash, shredded_at FROM audit_log WHERE action = 'auth.link_requested' AND subject_id = ?")
+    .bind(await emailAuditSubjectId(api.env.HASH_PEPPER, email)).first();
+  assert.ok(requested, "the sign-in request stays on record");
+  assert.equal(requested.ip_hash, null);
+  assert.ok(requested.shredded_at);
 });
 
 test("writes need this site's origin and a JSON body", async () => {
