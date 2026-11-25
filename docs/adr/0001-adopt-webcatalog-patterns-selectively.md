@@ -16,21 +16,21 @@ Comike WebCatalog 是同類產品中最成熟、使用者最熟悉的實作。�
 
 | 模式 | 現行位置 |
 |---|---|
-| 同一份社團資料，三種資訊密度（列表／詳情／地圖側欄） | [社團目錄契約](../contracts/circle-catalog.md#呈現契約) |
-| 日期、區域、選取與關鍵字保存在 URL，可分享可恢復 | [URL 檢視狀態契約](../contracts/url-state.md) |
-| 收藏是複合記錄（分類 + 備註 + 生命週期），不是布林值 | [收藏與走訪規劃契約](../contracts/planning.md) |
-| 外部內容標示提供者、內容類型與原始連結 | [社團目錄契約](../contracts/circle-catalog.md#權威順序) |
-| 探索搜尋與地圖定位搜尋分成兩條路徑 | [搜尋契約](../contracts/search.md) |
-| 顯示密度與媒體數由使用者選擇，不由產品固定 | [搜尋契約](../contracts/search.md#四顯示設定) |
-| 匯入必須先匹配本地 ID 並預覽，不靜默寫入 | [資料匯入契約](../contracts/data-import.md) |
-| 缺欄位直接省略，不用空白卡片補位 | [社團目錄契約](../contracts/circle-catalog.md#呈現契約) |
+| 同一份社團資料，三種資訊密度（列表／詳情／地圖側欄） | [社團目錄契約](../contracts/reader.md#呈現契約) |
+| 日期、區域、選取與關鍵字保存在 URL，可分享可恢復 | [URL 檢視狀態契約](../contracts/reader.md#url-檢視狀態) |
+| 收藏是複合記錄（分類 + 備註 + 生命週期），不是布林值 | [收藏與走訪規劃契約](../contracts/reader.md#收藏與走訪規劃) |
+| 外部內容標示提供者、內容類型與原始連結 | [社團目錄契約](../contracts/reader.md#權威順序) |
+| 探索搜尋與地圖定位搜尋分成兩條路徑 | [搜尋契約](../contracts/reader.md#搜尋篩選與顯示設定) |
+| 顯示密度與媒體數由使用者選擇，不由產品固定 | [搜尋契約](../contracts/reader.md#四顯示設定) |
+| 匯入必須先匹配本地 ID 並預覽，不靜默寫入 | [資料匯入契約](../contracts/reader.md#資料匯入範圍) |
+| 缺欄位直接省略，不用空白卡片補位 | [社團目錄契約](../contracts/reader.md#呈現契約) |
 
 **明確不採納**：
 
 - **免費會員 3 分鐘瀏覽、5 分鐘等待的時限機制。** 實測可見計時器從 02:50 遞減至 02:31。
 - **付費牆與 Bronze／Gold 分級**阻擋核心地圖與收藏。
 - **9／18 個只有顏色、沒有名稱的收藏分類。** 本專案的收藏群組必須有可讀名稱，顏色只作輔助。
-- **Leaflet 圖磚與圖片式攤位底圖。** 維持 SVG slot 直接互動，見 [ADR-0008](./0008-static-public-reading-path.md) 與[活動地圖契約](../contracts/event-map.md)。
+- **Leaflet 圖磚與圖片式攤位底圖。** 維持 SVG slot 直接互動，見 [ADR-0008](./0008-static-public-reading-path.md) 與[活動地圖契約](../contracts/reader.md#活動地圖)。
 - **移除收藏時無法預先理解 Memo 也會被刪除。** 本專案改為七秒 Undo，可完整復原。
 - **對社團公開收藏數與收藏者廣播。** 需要把收藏搬到伺服器，與 [ADR-0002](./0002-planning-data-stays-on-device.md) 衝突。
 

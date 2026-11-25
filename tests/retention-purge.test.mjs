@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test, { after, beforeEach } from "node:test";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer, isRunnableDevEnvironment } from "vite";
+import { applyMigrations } from "./support/d1-migrations.mjs";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const environment = vite.environments.ssr;
@@ -18,6 +19,7 @@ const miniflare = new Miniflare(convertV4MiniflareOptions({
   d1Databases: { DB: "retention-test", UNTOUCHED: "retention-untouched" },
 }));
 const database = await miniflare.getD1Database("DB");
+await applyMigrations(database);
 const untouched = await miniflare.getD1Database("UNTOUCHED");
 const repository = createIdentityRepository(database);
 after(async () => { await miniflare.dispose(); await vite.close(); });
@@ -129,9 +131,6 @@ test("records every run in the audit log, including the empty ones", async () =>
   assert.equal(entry.at, NOW);
   assert.deepEqual(JSON.parse(entry.detail_json).deleted, {
     account_notification_items: 0,
-    account_notification_batches: 0,
-    review_notification_items: 0,
-    review_notification_batches: 0,
     login_tokens: 0,
     sessions: 0,
     planning_shares: 0,
@@ -139,7 +138,6 @@ test("records every run in the audit log, including the empty ones", async () =>
     circle_overrides: 0,
     map_drafts: 0,
     map_draft_revisions: 0,
-    map_raw_objects: 0,
   });
 });
 
@@ -267,9 +265,6 @@ test("never creates a table it does not find", async () => {
 
   assert.deepEqual(summary.deleted, {
     account_notification_items: 0,
-    account_notification_batches: 0,
-    review_notification_items: 0,
-    review_notification_batches: 0,
     login_tokens: 0,
     sessions: 0,
     planning_shares: 0,
@@ -277,23 +272,17 @@ test("never creates a table it does not find", async () => {
     circle_overrides: 0,
     map_drafts: 0,
     map_draft_revisions: 0,
-    map_raw_objects: 0,
   });
   assert.deepEqual(summary.skipped.sort(), [
-    "account_notification_batches",
     "account_notification_items",
     "audit_log",
     "circle_overrides",
     "login_tokens",
-    "map_draft_files",
-    "map_draft_reviews",
     "map_draft_revisions",
     "map_drafts",
     "overrides_doc",
     "planning_shares",
     "preview_mail_sink",
-    "review_notification_batches",
-    "review_notification_items",
     "sessions",
   ]);
   const tables = await untouched.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'").all();

@@ -157,7 +157,7 @@ pictSQUARE 是虛擬會場（單場最多 100 社團、頭像走動、可分區�
 | # | 功能 | 來源 | 衝突 |
 |---|---|---|---|
 | B1 | **多人清單合併（共同購入）** | カタログマネージャー | 匯入整體是 P2（[ADR-0005](../adr/0005-import-stays-p2-export-only.md)）。可相容做法是「匯出 CSV → 他人匯入合併」，不需要伺服器，因此不牴觸 [ADR-0002](../adr/0002-planning-data-stays-on-device.md)；但要先界定「規劃資料合併」是否算 ADR-0005 所推遲的匯入 |
-| B2 | **從社群追蹤名單反查參展** | Circlesearch、CircleFinder | 需要 X／pixiv 授權與伺服器端比對，同時牴觸 [ADR-0008](../adr/0008-static-public-reading-path.md) 的純靜態閱讀路徑與[資料匯入契約](../contracts/data-import.md)的 P2 分期。代價高，但這是唯一能解「記得帳號、不記得社團名」的路徑 |
+| B2 | **從社群追蹤名單反查參展** | Circlesearch、CircleFinder | 需要 X／pixiv 授權與伺服器端比對，同時牴觸 [ADR-0008](../adr/0008-static-public-reading-path.md) 的純靜態閱讀路徑與[資料匯入契約](../contracts/reader.md#資料匯入範圍)的 P2 分期。代價高，但這是唯一能解「記得帳號、不記得社團名」的路徑 |
 | B3 | **追蹤社團的更新通知** | Web カタログ 通知 | 需要伺服器保存訂閱關係，牴觸 ADR-0002 與 ADR-0008。「讓伺服器知道誰收藏了誰」正是 ADR-0001 已拒絕的那類代價 |
 
 ### C 類：明確不吸納
@@ -176,4 +176,4 @@ pictSQUARE 是虛擬會場（單場最多 100 社團、頭像走動、可分區�
 1. **Spotgram 的正確身分**——需要網址或截圖。在此之前本文不對它下任何判斷。
 2. 本文所有條目都**未經操作驗證**。要升級成實地紀錄，需在可連外的環境重跑，並依既有慣例另開文件、註明日期，不修改本文。
 3. CircleMap 的清單匯入格式（是否即 Web カタログ 的 CSV）未確認——這關係到 B1 是否已有事實標準可沿用。
-4. Web カタログ CSV 的實際欄位未取得，無法與[資料匯入契約](../contracts/data-import.md)的 CSV v1 對照。
+4. Web カタログ CSV 的實際欄位未取得，無法與[資料匯入契約](../contracts/reader.md#資料匯入範圍)的 CSV v1 對照。

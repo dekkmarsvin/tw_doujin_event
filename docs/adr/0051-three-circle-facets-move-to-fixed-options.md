@@ -5,7 +5,7 @@
 - **2026-09-22 補充決策（#193）**：新增 R15；保留分級複選與逐項顯示，不推導最高分級。特殊題材仍自由填寫，既有資料不遷移、不收緊共用 validator。維護者要求在本 ADR 更新受影響決策與未決項。
 - **延續**：[ADR-0030](./0030-organizer-category-catalog-circle-selected-value.md) 把 `circleCategory` 收斂到主辦分類目錄的作法
 - **不變更**：[ADR-0025](./0025-open-with-an-official-only-thin-catalog.md) 的薄目錄——這三個欄位的值仍然只由社團自己填寫，主辦 base 不提供
-- **相關文件**：[社團自助控制面契約](../contracts/circle-portal.md)、[搜尋、篩選與顯示設定契約](../contracts/search.md)、[URL 檢視狀態契約](../contracts/url-state.md)
+- **相關文件**：[社團自助控制面契約](../contracts/circle-portal.md)、[搜尋、篩選與顯示設定契約](../contracts/reader.md#搜尋篩選與顯示設定)、[URL 檢視狀態契約](../contracts/reader.md#url-檢視狀態)
 
 ## 背景
 

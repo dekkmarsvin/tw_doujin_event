@@ -6,13 +6,11 @@ import {
   type OrganizerVenueCatalog,
   type OrganizerVenueSpaceAreaMode,
 } from "../app/organizer-venue-catalog";
-import { createIdentityInitializer, seedOrganizerVenueCatalog, referenceInsertStatement as prepareReferenceInsert } from "./identity-runtime-initializer";
+import { seedOrganizerVenueCatalog, referenceInsertStatement as prepareReferenceInsert } from "./organizer-venue-seed";
 import { createVenueReference, createVenueSpaceReference, type OrganizerReferenceRecord } from "../app/organizer-reference-catalog";
 import { createOrganizerAmendmentRepository } from "./organizer-amendment-repository";
-import { createOrganizerRecoveryRepository } from "./organizer-recovery-repository";
 import { createOrganizerApplicationRepository } from "./organizer-application-repository";
-import { createReviewNotificationRepository, seedNotificationPreferences, enqueueReviewNotification, deleteNotificationRecipient, cancelNotificationRecipient } from "./review-notification-repository";
-import { createAccountNotificationRepository, createAccountNotificationWriter, deleteAccountNotifications, claimNotificationSource, circleNotificationSource, ownerNotificationSource, memberNotificationSource, organizerCandidateEdition } from "./account-notification-repository";
+import { createAccountNotificationRepository, createAccountNotificationWriter, deleteAccountNotifications, enqueueReviewNotification, claimNotificationSource, circleNotificationSource, ownerNotificationSource, memberNotificationSource, organizerCandidateEdition } from "./account-notification-repository";
 import { createSiteSettingsRepository, seedSiteSettings } from "./site-settings-repository";
 
 /**
@@ -23,18 +21,19 @@ import { createSiteSettingsRepository, seedSiteSettings } from "./site-settings-
  * tokens, one verified owner per circle), and those read far more clearly as
  * SQL.
  *
- * Runtime schema authority lives in `db/identity-runtime-schema.ts`. Pages has
- * no migration step, so the repository consumes its generated SQL on first use.
+ * The schema comes from `migrations/`, applied with `wrangler d1 migrations
+ * apply` (#546 5d); nothing here creates or alters a table.
  */
 
 export type OverridesPhase = "during" | "after";
 /** `withdrawn` is the claimant's own doing; reviewers reject, only admins revoke. */
 type ClaimStatus = "pending" | "verified" | "rejected" | "revoked" | "withdrawn";
 export type ClaimMethod = "email_domain" | "link_token" | "admin" | "organizer";
-/** `ownerOnly` limits the organizer side to Owner grants: revoking an approved claim is an Owner decision. */
-type OrganizerClaimAuthority = { candidateId: string; accountId: string; ownerOnly?: boolean };
+type OrganizerClaimAuthority = { candidateId: string; accountId: string };
 export type MapDraftStatus = "draft" | "submitted" | "changes_requested" | "approved" | "rejected" | "exported" | "withdrawn";
-export type OrganizerRole = "owner" | "editor";
+/** An event member (#546). Stored as `owner`: every member has the full role,
+ * and the editor role that existed before is gone. */
+export type OrganizerRole = "owner";
 export type OrganizerCandidateStatus = "draft" | "changes_requested" | "submitted" | "approved" | "publishing" | "published" | "failed" | "abandoned";
 
 type IdentityAuditEntry = {
@@ -103,15 +102,13 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   const notify = createAccountNotificationWriter(database);
   let tablesReady: Promise<void> | null = null;
 
-  const ensureRuntimeReady = createIdentityInitializer(database);
-
   /** Control-plane initialization is separate from the public read path.
    * Admin recovery and notification defaults depend on current configuration
    * and recipients, so they must not be skipped by a durable schema version.
    */
   async function ensureTables() {
     if (!tablesReady) {
-      tablesReady = ensureRuntimeReady()
+      tablesReady = seedOrganizerVenueCatalog(database)
         .then(() => seedAdmins())
         .then(async () => {
           if (options.initializeSiteSettings !== false) await seedSiteSettings(database, {
@@ -120,7 +117,6 @@ export function createIdentityRepository(database: D1Database, options: { bootst
             contactUrl: "", claimReviewNotice: "", updatedAt: Date.now(), updatedBy: "migration",
           });
         })
-        .then(async () => { await seedNotificationPreferences(database, Date.now()); })
         .catch((error: unknown) => {
           tablesReady = null;
           throw error;
@@ -173,7 +169,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9 FROM organizer_event_candidates c
         WHERE c.id = ?10 AND c.current_version = ?11 AND c.status IN ('draft', 'changes_requested')
           AND (?12 = 1 OR EXISTS (SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = c.id
-            AND g.account_id = ?9 AND g.revoked_at IS NULL AND g.role IN ('owner', 'editor')))
+            AND g.account_id = ?9 AND g.revoked_at IS NULL AND g.role = 'owner'))
           AND (?4 IS NULL OR EXISTS (SELECT 1 FROM organizer_reference_records r WHERE r.kind = 'organizer' AND r.reference_id = ?4))
           AND (?2 NOT IN ('venue', 'venue-space') OR EXISTS (
             SELECT 1 FROM json_each(c.current_draft_json, '$.venue.assignments') a
@@ -214,7 +210,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
           AND EXISTS (SELECT 1 FROM organizer_event_candidates c
             WHERE c.id = ?5 AND c.current_version = ?6 AND c.status IN ('draft', 'changes_requested')
               AND (?7 = 1 OR EXISTS (SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = c.id
-                AND g.account_id = ?8 AND g.revoked_at IS NULL AND g.role IN ('owner', 'editor')))
+                AND g.account_id = ?8 AND g.revoked_at IS NULL AND g.role = 'owner'))
               AND EXISTS (SELECT 1 FROM json_each(c.current_draft_json, '$.venue.assignments') a
                 WHERE json_extract(a.value, '$.venueId') = ?2))`)
         .bind(input.record.path, input.record.id, input.record.publicReferenceJson, input.previous.publicReferenceJson,
@@ -245,8 +241,6 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     await ensureTables();
     const results = await database.batch([
       database.prepare("INSERT OR IGNORE INTO admins (email, added_by, added_at) VALUES (?1, ?2, ?3)").bind(email, addedBy, now),
-      database.prepare(`INSERT OR IGNORE INTO admin_notification_preferences (recipient, enabled_since, next_digest_at)
-        SELECT email, ?2, (CAST(?2 / 300000 AS INTEGER) + 1) * 300000 FROM admins WHERE email = ?1`).bind(email, now),
     ]);
     return results[0].meta.changes === 1;
   }
@@ -258,7 +252,6 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     if ((total?.total ?? 0) <= 1) return "last" as const;
     const results = await database.batch([
       database.prepare("DELETE FROM admins WHERE email = ?1").bind(email),
-      ...deleteNotificationRecipient(database, email),
     ]);
     return results[0].meta.changes === 1 ? "removed" as const : "missing" as const;
   }
@@ -381,13 +374,12 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     await ensureTables();
     return database.prepare(
       `SELECT a.id, a.email, a.created_at, a.disabled_at, a.deletion_started_at,
-              EXISTS (SELECT 1 FROM admins WHERE email = a.email) AS is_admin,
-              m.granted_at AS map_granted_at, m.revoked_at AS map_revoked_at, m.suspended_at AS map_suspended_at
-       FROM accounts a LEFT JOIN map_contributor_grants m ON m.account_id = a.id
+              EXISTS (SELECT 1 FROM admins WHERE email = a.email) AS is_admin
+       FROM accounts a
        WHERE a.email = ?1`,
     ).bind(email).first<{
       id: string; email: string; created_at: number; disabled_at: number | null; deletion_started_at: number | null;
-      is_admin: number; map_granted_at: number | null; map_revoked_at: number | null; map_suspended_at: number | null;
+      is_admin: number;
     }>();
   }
 
@@ -433,10 +425,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
            SELECT id FROM accounts WHERE email = ?2 AND disabled_at = ?1 AND deletion_started_at IS NULL
          ) AND revoked_at IS NULL`,
       ).bind(now, email),
-      ...cancelNotificationRecipient(database, email, now),
-      ...["account_notification_items", "account_notification_batches"].map(table => database.prepare(
-        `UPDATE ${table} SET state = 'cancelled', completed_at = ?2 WHERE account_id = (SELECT id FROM accounts WHERE email = ?1)
-          AND state = 'pending'`).bind(email, now)),
+      database.prepare(`UPDATE account_notification_items SET state = 'cancelled', completed_at = ?2
+        WHERE account_id = (SELECT id FROM accounts WHERE email = ?1) AND state = 'pending'`).bind(email, now),
     ]);
     if (results[0].meta.changes === 1) {
       return "disabled" as const;
@@ -489,23 +479,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     }
 
     statements.push(
-      ...deleteNotificationRecipient(database, input.email),
       ...deleteAccountNotifications(database, input.accountId),
-      database.prepare(`DELETE FROM map_draft_exports WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft' AND candidate_id IS NULL)`).bind(input.accountId),
-      database.prepare(`DELETE FROM map_draft_files WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft' AND candidate_id IS NULL)`).bind(input.accountId),
-      database.prepare(`DELETE FROM map_draft_comments WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft' AND candidate_id IS NULL)`).bind(input.accountId),
-      database.prepare(`DELETE FROM map_draft_revisions WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft' AND candidate_id IS NULL)`).bind(input.accountId),
-      database.prepare(`DELETE FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft' AND candidate_id IS NULL`).bind(input.accountId),
       database.prepare(`UPDATE map_drafts SET owner_account_id = '[shredded]' WHERE owner_account_id = ?1`).bind(input.accountId),
       database.prepare(`UPDATE map_draft_revisions SET created_by = NULL WHERE created_by = ?1`).bind(input.accountId),
-      database.prepare(`UPDATE map_draft_reviews SET actor_account_id = NULL WHERE actor_account_id = ?1`).bind(input.accountId),
-      database.prepare(`UPDATE map_draft_comments SET author_account_id = NULL WHERE author_account_id = ?1`).bind(input.accountId),
-      database.prepare(`UPDATE map_draft_files SET uploaded_by = NULL WHERE uploaded_by = ?1`).bind(input.accountId),
-      database.prepare(`UPDATE map_draft_exports SET created_by = NULL WHERE created_by = ?1`).bind(input.accountId),
-      database.prepare(`UPDATE map_contributor_grants SET granted_by = '[shredded]' WHERE granted_by = ?1`).bind(input.email),
-      database.prepare(`UPDATE map_contributor_grants SET revoked_by = '[shredded]' WHERE revoked_by = ?1`).bind(input.email),
-      database.prepare(`UPDATE map_contributor_grants SET suspended_by = '[shredded]' WHERE suspended_by = ?1`).bind(input.email),
-      database.prepare(`DELETE FROM map_contributor_grants WHERE account_id = ?1`).bind(input.accountId),
       database.prepare(`UPDATE organizer_venues SET created_by = '[shredded]' WHERE created_by = ?1`).bind(input.accountId),
       database.prepare(`UPDATE event_notices SET updated_by = '[shredded]' WHERE updated_by = ?1`).bind(input.accountId),
       // Pending requests have no decision to preserve. Reviewed applications
@@ -588,13 +564,6 @@ export function createIdentityRepository(database: D1Database, options: { bootst
              SELECT 1 FROM accounts WHERE id = ?2 AND disabled_at IS NULL AND deletion_started_at IS NOT NULL
            )`,
       ).bind(input.now, input.accountId, input.retrySessionId ?? null),
-      // Removing this in the same transaction makes every in-flight map file
-      // bind fail after its R2 put; the handler then removes that object.
-      database.prepare(
-        `DELETE FROM map_contributor_grants WHERE account_id = ?1 AND EXISTS (
-           SELECT 1 FROM accounts WHERE id = ?1 AND disabled_at IS NULL AND deletion_started_at IS NOT NULL
-         )`,
-      ).bind(input.accountId),
       database.prepare(
         `UPDATE organizer_event_grants SET revoked_by = '[account-deletion]', revoked_at = ?2
          WHERE account_id = ?1 AND revoked_at IS NULL AND EXISTS (
@@ -640,17 +609,6 @@ export function createIdentityRepository(database: D1Database, options: { bootst
        WHERE c.account_id = ?1 AND c.status = 'verified' AND o.hosted_thumbnail_key IS NOT NULL`,
     ).bind(accountId).all<{ object_key: string }>();
     return result.results.map((row) => row.object_key);
-  }
-
-  /** Private map evidence must be deleted before an unsubmitted draft row is removed. */
-  async function listUnsubmittedMapDraftObjectKeysForAccount(accountId: string) {
-    await ensureTables();
-    const result = await database.prepare(
-      `SELECT f.object_key FROM map_draft_files f
-       JOIN map_drafts d ON d.id = f.draft_id
-       WHERE d.owner_account_id = ?1 AND d.status = 'draft' AND d.candidate_id IS NULL AND f.object_key IS NOT NULL`,
-    ).bind(accountId).all<{ object_key: string }>();
-    return result.results.map(({ object_key }) => object_key);
   }
 
   async function listHostedThumbnailKeys() {
@@ -822,7 +780,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       .bind(eventId).first<{ id: string }>();
   }
 
-  function organizerClaimAuthoritySql(candidateParam: number, accountParam: number, eventColumn = "circle_claims.event_id", ownerOnly = false) {
+  function organizerClaimAuthoritySql(candidateParam: number, accountParam: number, eventColumn = "circle_claims.event_id") {
     return `EXISTS (SELECT 1 FROM organizer_event_candidates candidate
       JOIN accounts actor ON actor.id = ?${accountParam}
       WHERE candidate.id = ?${candidateParam} AND candidate.event_id = ${eventColumn}
@@ -830,21 +788,17 @@ export function createIdentityRepository(database: D1Database, options: { bootst
         AND actor.disabled_at IS NULL AND actor.deletion_started_at IS NULL
         AND (EXISTS (SELECT 1 FROM admins WHERE email = actor.email)
           OR EXISTS (SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = candidate.id
-            AND g.account_id = actor.id AND g.role IN (${ownerOnly ? "'owner'" : "'owner', 'editor'"}) AND g.revoked_at IS NULL)))`;
+            AND g.account_id = actor.id AND g.role = 'owner' AND g.revoked_at IS NULL)))`;
   }
 
   /** Counts discover every event with work, without a bounded list hiding it. */
   async function listAdminReviewSummary() {
     await ensureTables();
-    const [claimCounts, mapDrafts, organizer] = await Promise.all([
+    const [claimCounts, organizer] = await Promise.all([
       database.prepare(
         `SELECT event_id, COUNT(*) AS pending FROM circle_claims
          WHERE status = 'pending' GROUP BY event_id`,
       ).all<{ event_id: string; pending: number }>(),
-      database.prepare(
-        `SELECT event_id, COUNT(*) AS submitted FROM map_drafts
-         WHERE status = 'submitted' AND candidate_id IS NULL AND retention_action IS NULL GROUP BY event_id`,
-      ).all<{ event_id: string; submitted: number }>(),
       database.prepare(
         `SELECT (SELECT COUNT(*) FROM organizer_applications WHERE status = 'pending') AS applications,
                 (SELECT COUNT(*) FROM organizer_event_candidates WHERE status = 'submitted') AS submissions`,
@@ -852,7 +806,6 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     ]);
     return {
       claimCounts: claimCounts.results,
-      mapDrafts: mapDrafts.results,
       applications: organizer?.applications ?? 0,
       submissions: organizer?.submissions ?? 0,
     };
@@ -921,7 +874,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     await ensureTables();
     const [result] = await database.batch([database.prepare(
       `UPDATE circle_claims SET status = ?1, reviewed_by = ?2, reviewed_at = ?3 WHERE id = ?4 AND status <> ?1 AND (?5 IS NULL OR status = ?5)
-        ${authority ? `AND ${organizerClaimAuthoritySql(6, 7, undefined, authority.ownerOnly)}` : ""}`,
+        ${authority ? `AND ${organizerClaimAuthoritySql(6, 7)}` : ""}`,
     ).bind(status, reviewedBy, now, id, from ?? null, ...(authority ? [authority.candidateId, authority.accountId] : [])),
       ...(status === "rejected" || status === "revoked" ? notify({ kind: status === "rejected" ? "claim.rejected" : "claim.revoked", occurrence: crypto.randomUUID(), now },
         `${claimNotificationSource} WHERE c.id = ?1 AND changes() = 1`, [id]) : []),
@@ -1095,7 +1048,6 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   }
 
   async function listLiveOverrides(eventId: string, phase: OverridesPhase) {
-    await ensureRuntimeReady();
     return readLiveOverrides(eventId, phase);
   }
 
@@ -1209,591 +1161,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   }
 
   async function getOverridesDoc(eventId: string) {
-    await ensureRuntimeReady();
     return database.prepare(`SELECT revision, json, updated_at, phase FROM overrides_doc WHERE event_id = ?1`)
       .bind(eventId).first<{ revision: number; json: string; updated_at: number; phase: OverridesPhase }>();
-  }
-
-  async function manageMapContributor(input: {
-    email: string;
-    action: "grant" | "revoke" | "suspend";
-    by: string;
-    now: number;
-  }) {
-    await ensureTables();
-    const account = await database.prepare("SELECT id FROM accounts WHERE email = ?1 AND disabled_at IS NULL AND deletion_started_at IS NULL")
-      .bind(input.email).first<{ id: string }>();
-    if (!account) return "missing" as const;
-    if (input.action === "grant") {
-      const result = await database.prepare(
-        `INSERT INTO map_contributor_grants (account_id, granted_by, granted_at, revoked_by, revoked_at, suspended_by, suspended_at)
-         VALUES (?1, ?2, ?3, NULL, NULL, NULL, NULL)
-         ON CONFLICT(account_id) DO UPDATE SET
-           granted_by = excluded.granted_by, granted_at = excluded.granted_at,
-           revoked_by = NULL, revoked_at = NULL, suspended_by = NULL, suspended_at = NULL
-         WHERE map_contributor_grants.revoked_at IS NOT NULL OR map_contributor_grants.suspended_at IS NOT NULL`,
-      ).bind(account.id, input.by, input.now).run();
-      return result.meta.changes === 1 ? "granted" as const : "unchanged" as const;
-    }
-    const column = input.action === "revoke" ? "revoked" : "suspended";
-    const result = await database.prepare(
-      `UPDATE map_contributor_grants SET ${column}_by = ?1, ${column}_at = ?2
-       WHERE account_id = ?3 AND revoked_at IS NULL AND suspended_at IS NULL`,
-    ).bind(input.by, input.now, account.id).run();
-    return result.meta.changes === 1
-      ? (input.action === "revoke" ? "revoked" as const : "suspended" as const)
-      : "unchanged" as const;
-  }
-
-  async function hasActiveMapContributor(accountId: string) {
-    await ensureTables();
-    const row = await database.prepare(
-      `SELECT account_id FROM map_contributor_grants
-       WHERE account_id = ?1 AND revoked_at IS NULL AND suspended_at IS NULL`,
-    ).bind(accountId).first<{ account_id: string }>();
-    return !!row;
-  }
-
-  async function createMapDraft(input: {
-    id: string;
-    eventId: string;
-    periodKey: string;
-    venueSpaceId: string;
-    ownerAccountId: string;
-    contentJson: string;
-    now: number;
-  }) {
-    await ensureTables();
-    const revisionId = crypto.randomUUID();
-    const results = await database.batch([
-      database.prepare(
-        `INSERT INTO map_drafts (
-           id, event_id, period_key, venue_space_id, owner_account_id, status,
-           current_revision, created_at, updated_at, last_activity_at
-         )
-         SELECT ?1, ?2, ?3, ?4, ?5, 'draft', 1, ?6, ?6, ?6
-         WHERE EXISTS (
-           SELECT 1 FROM map_contributor_grants
-           WHERE account_id = ?5 AND revoked_at IS NULL AND suspended_at IS NULL
-         )`,
-      ).bind(input.id, input.eventId, input.periodKey, input.venueSpaceId, input.ownerAccountId, input.now),
-      database.prepare(
-        `INSERT INTO map_draft_revisions (id, draft_id, revision, content_json, created_by, created_at)
-         SELECT ?1, id, 1, ?2, ?3, ?4 FROM map_drafts WHERE id = ?5 AND owner_account_id = ?3`,
-      ).bind(revisionId, input.contentJson, input.ownerAccountId, input.now, input.id),
-    ]);
-    return results[0].meta.changes === 1 && results[1].meta.changes === 1;
-  }
-
-  /** Organizer candidates borrow this table but carry a candidate_id, and their
-   * event_id is the candidate's own — which can name a published event. Every
-   * contributor-flow statement therefore restates `candidate_id IS NULL`: a
-   * candidate map must never be readable, submittable or approvable through the
-   * public map-contribution pipeline, whatever event id it happens to hold. */
-  async function getMapDraft(draftId: string, eventId?: string) {
-    await ensureTables();
-    return database.prepare(
-      `SELECT d.*, r.content_json FROM map_drafts d
-       JOIN map_draft_revisions r ON r.draft_id = d.id AND r.revision = d.current_revision
-       WHERE d.id = ?1 AND d.candidate_id IS NULL AND (?2 IS NULL OR d.event_id = ?2)`,
-    ).bind(draftId, eventId ?? null).first<{
-      id: string; event_id: string; period_key: string; venue_space_id: string; owner_account_id: string;
-      status: MapDraftStatus; current_revision: number; created_at: number; updated_at: number;
-      last_activity_at: number; decision_at: number | null; content_json: string | null;
-    }>();
-  }
-
-  /** One-time lazy normalization for aliases accepted by the active event.
-   * The active-approval unique index makes conflicting legacy state fail
-   * closed instead of preserving two spellings for one logical scope. */
-  async function normalizeMapDraftPeriodAliases(input: {
-    eventId: string; venueSpaceId: string; periodKey: string; periodAliases: readonly string[];
-  }) {
-    await ensureTables();
-    const aliases = [...new Set(input.periodAliases)]
-      .filter((alias) => alias !== input.periodKey);
-    if (aliases.length > 16 || aliases.some((alias) => !/^[a-z0-9][a-z0-9-]*$/.test(alias))) {
-      throw new Error("Invalid map period aliases.");
-    }
-    if (!aliases.length) return true;
-    try {
-      await database.batch(aliases.map((alias) => database.prepare(
-        `UPDATE map_drafts SET period_key = ?1
-         WHERE event_id = ?2 AND candidate_id IS NULL AND venue_space_id = ?3 AND period_key = ?4`,
-      ).bind(input.periodKey, input.eventId, input.venueSpaceId, alias)));
-      return true;
-    } catch (error) {
-      if (error instanceof Error && /unique/i.test(error.message)) return false;
-      throw error;
-    }
-  }
-
-  async function listMapDraftsForOwner(ownerAccountId: string, eventId: string) {
-    await ensureTables();
-    const result = await database.prepare(
-      `SELECT id, event_id, period_key, venue_space_id, status, current_revision,
-              created_at, updated_at, decision_at
-       FROM map_drafts WHERE owner_account_id = ?1 AND event_id = ?2 AND candidate_id IS NULL
-       ORDER BY updated_at DESC`,
-    ).bind(ownerAccountId, eventId).all<{
-      id: string; event_id: string; period_key: string; venue_space_id: string; status: MapDraftStatus;
-      current_revision: number; created_at: number; updated_at: number; decision_at: number | null;
-    }>();
-    return result.results;
-  }
-
-  async function listMapDraftsForAdmin(eventId: string) {
-    await ensureTables();
-    const result = await database.prepare(
-      `SELECT d.id, d.event_id, d.period_key, d.venue_space_id, d.status, d.current_revision,
-              d.created_at, d.updated_at, d.decision_at, a.email AS owner_email
-       FROM map_drafts d LEFT JOIN accounts a ON a.id = d.owner_account_id
-       WHERE d.event_id = ?1 AND d.candidate_id IS NULL AND d.status <> 'draft'
-       ORDER BY d.updated_at DESC`,
-    ).bind(eventId).all<{
-      id: string; event_id: string; period_key: string; venue_space_id: string; status: MapDraftStatus;
-      current_revision: number; created_at: number; updated_at: number; decision_at: number | null;
-      owner_email: string | null;
-    }>();
-    return result.results;
-  }
-
-  async function listMapDraftFiles(draftId: string, revision?: number) {
-    await ensureTables();
-    const result = await database.prepare(
-      `SELECT id, draft_id, revision, object_key, source_url, document_date, page_number, sha256, mime,
-              size_bytes, width, height, page_count, uploaded_at, review_result, raw_deleted_at
-       FROM map_draft_files WHERE draft_id = ?1 AND (?2 IS NULL OR revision = ?2)
-       ORDER BY uploaded_at ASC`,
-    ).bind(draftId, revision ?? null).all<{
-      id: string; draft_id: string; revision: number; object_key: string | null; source_url: string;
-      document_date: string; page_number: number | null; sha256: string; mime: string; size_bytes: number;
-      width: number | null; height: number | null; page_count: number | null; uploaded_at: number;
-      review_result: string | null; raw_deleted_at: number | null;
-    }>();
-    return result.results;
-  }
-
-  async function listMapDraftReviews(draftId: string) {
-    await ensureTables();
-    const result = await database.prepare(
-      `SELECT revision, from_status, to_status, actor_role, note, at
-       FROM map_draft_reviews WHERE draft_id = ?1 ORDER BY at ASC, rowid ASC`,
-    ).bind(draftId).all<{
-      revision: number; from_status: MapDraftStatus; to_status: MapDraftStatus;
-      actor_role: string; note: string | null; at: number;
-    }>();
-    return result.results;
-  }
-
-  /** Discussion is read without the author account id: participants on a draft
-   * are never identified to one another, only their role is. */
-  async function listMapDraftComments(draftId: string) {
-    await ensureTables();
-    const result = await database.prepare(
-      `SELECT id, revision, author_role, target_kind, target_ref, body, at
-       FROM map_draft_comments WHERE draft_id = ?1 ORDER BY at ASC, rowid ASC`,
-    ).bind(draftId).all<{
-      id: string; revision: number; author_role: string;
-      target_kind: string | null; target_ref: string | null; body: string; at: number;
-    }>();
-    return result.results;
-  }
-
-  /** Writes one comment against the draft's revision as it stands, and returns
-   * null when the draft is gone or already claimed by retention. Discussion is
-   * not a state transition, so it carries no optimistic lock: a comment about
-   * revision 3 stays a comment about revision 3 even after the draft moves on. */
-  async function addMapDraftComment(input: {
-    draftId: string;
-    eventId: string;
-    authorAccountId: string;
-    authorRole: "map_contributor" | "admin";
-    /** Pins the comment to a specific revision. Defaults to the draft's current
-     * one, which is right for a comment written about what is on screen; a
-     * review's change requests pass the revision that was actually reviewed. */
-    revision?: number;
-    targetKind: "slot" | "landmark" | null;
-    targetRef: string | null;
-    body: string;
-    now: number;
-  }) {
-    await ensureTables();
-    const id = crypto.randomUUID();
-    // Discussion is activity. Without the touch, a draft under review could sit
-    // out its inactivity window while it was being talked about and be purged
-    // on the next run. Batched with the insert so the two cannot disagree.
-    //
-    // The contributor branch rechecks ownership and the live grant inside the
-    // write, the way a revision write does: a grant revoked between the
-    // handler's check and this statement must refuse the comment, not race it.
-    // The touch then keys off the inserted row - the statements share one
-    // transaction and run in order - so a refused comment cannot defer
-    // retention on a draft nobody was allowed to write to.
-    const results = await database.batch([
-      database.prepare(
-        `INSERT INTO map_draft_comments (id, draft_id, revision, author_account_id, author_role, target_kind, target_ref, body, at)
-         SELECT ?1, id, COALESCE(?2, current_revision), ?3, ?4, ?5, ?6, ?7, ?8 FROM map_drafts
-         WHERE id = ?9 AND event_id = ?10 AND retention_action IS NULL
-           AND (?4 <> 'map_contributor' OR (owner_account_id = ?3 AND EXISTS (
-             SELECT 1 FROM map_contributor_grants
-             WHERE account_id = ?3 AND revoked_at IS NULL AND suspended_at IS NULL
-           )))`,
-      ).bind(id, input.revision ?? null, input.authorAccountId, input.authorRole, input.targetKind, input.targetRef, input.body, input.now, input.draftId, input.eventId),
-      database.prepare(
-        `UPDATE map_drafts SET last_activity_at = ?1
-         WHERE id = ?2 AND event_id = ?3 AND retention_action IS NULL AND last_activity_at < ?1
-           AND EXISTS (SELECT 1 FROM map_draft_comments WHERE id = ?4)`,
-      ).bind(input.now, input.draftId, input.eventId, id),
-    ]);
-    return (results[0].meta.changes ?? 0) === 1 ? id : null;
-  }
-
-  async function getActiveApprovedMapDraft(eventId: string, periodKey: string, venueSpaceId: string) {
-    await ensureTables();
-    return database.prepare(
-      `SELECT id, current_revision, status FROM map_drafts
-       WHERE event_id = ?1 AND candidate_id IS NULL AND period_key = ?2 AND venue_space_id = ?3
-         AND status IN ('approved', 'exported') LIMIT 1`,
-    ).bind(eventId, periodKey, venueSpaceId).first<{
-      id: string; current_revision: number; status: "approved" | "exported";
-    }>();
-  }
-
-  async function listStaleSubmittedMapDrafts(before: number, eventId?: string) {
-    await ensureTables();
-    const result = await database.prepare(
-      `SELECT id, event_id, period_key, venue_space_id, current_revision, updated_at
-       FROM map_drafts WHERE status = 'submitted' AND updated_at < ?1 AND candidate_id IS NULL
-         AND (?2 IS NULL OR event_id = ?2) ORDER BY updated_at ASC`,
-    ).bind(before, eventId ?? null).all<{
-      id: string; event_id: string; period_key: string; venue_space_id: string;
-      current_revision: number; updated_at: number;
-    }>();
-    return result.results;
-  }
-
-  async function writeMapDraftRevision(input: {
-    draftId: string;
-    eventId: string;
-    ownerAccountId: string;
-    expectedRevision: number;
-    contentJson: string;
-    now: number;
-  }) {
-    await ensureTables();
-    const nextRevision = input.expectedRevision + 1;
-    const results = await database.batch([
-      database.prepare(
-        `UPDATE map_drafts SET current_revision = ?1, updated_at = ?2, last_activity_at = ?2
-         WHERE id = ?3 AND owner_account_id = ?4 AND current_revision = ?5
-           AND event_id = ?6 AND candidate_id IS NULL
-           AND status IN ('draft', 'changes_requested')
-           AND retention_action IS NULL
-           AND EXISTS (
-             SELECT 1 FROM map_contributor_grants
-             WHERE account_id = ?4 AND revoked_at IS NULL AND suspended_at IS NULL
-           )`,
-      ).bind(nextRevision, input.now, input.draftId, input.ownerAccountId, input.expectedRevision, input.eventId),
-      database.prepare(
-        `INSERT INTO map_draft_revisions (id, draft_id, revision, content_json, created_by, created_at)
-         SELECT ?1, id, ?2, ?3, ?4, ?5 FROM map_drafts
-         WHERE id = ?6 AND owner_account_id = ?4 AND current_revision = ?2 AND updated_at = ?5
-           AND NOT EXISTS (SELECT 1 FROM map_draft_revisions WHERE draft_id = ?6 AND revision = ?2)`,
-      ).bind(crypto.randomUUID(), nextRevision, input.contentJson, input.ownerAccountId, input.now, input.draftId),
-    ]);
-    return results[0].meta.changes === 1 && results[1].meta.changes === 1 ? nextRevision : null;
-  }
-
-  async function submitMapDraft(input: { draftId: string; eventId: string; ownerAccountId: string; expectedRevision: number; now: number }) {
-    await ensureTables();
-    const reviewId = crypto.randomUUID();
-    const transitionToken = crypto.randomUUID();
-    const results = await database.batch([
-      database.prepare(
-        `UPDATE map_drafts SET status = 'submitted', updated_at = ?1, last_activity_at = ?1, transition_token = ?2
-         WHERE id = ?3 AND owner_account_id = ?4 AND current_revision = ?5
-           AND event_id = ?6 AND candidate_id IS NULL
-           AND status IN ('draft', 'changes_requested')
-           AND retention_action IS NULL
-           AND EXISTS (
-             SELECT 1 FROM map_contributor_grants
-             WHERE account_id = ?4 AND revoked_at IS NULL AND suspended_at IS NULL
-           )`,
-      ).bind(input.now, transitionToken, input.draftId, input.ownerAccountId, input.expectedRevision, input.eventId),
-      database.prepare(
-        `INSERT INTO map_draft_reviews (id, draft_id, revision, from_status, to_status, actor_account_id, actor_role, at)
-         SELECT ?1, d.id, d.current_revision,
-           CASE WHEN EXISTS (SELECT 1 FROM map_draft_reviews WHERE draft_id = d.id AND to_status = 'changes_requested')
-             THEN 'changes_requested' ELSE 'draft' END,
-           'submitted', ?2, 'map_contributor', ?3
-         FROM map_drafts d WHERE d.id = ?4 AND d.owner_account_id = ?2 AND d.status = 'submitted' AND d.transition_token = ?5`,
-      ).bind(reviewId, input.ownerAccountId, input.now, input.draftId, transitionToken),
-      enqueueReviewNotification(database, "map", transitionToken, input.now),
-    ]);
-    return results[0].meta.changes === 1 && results[1].meta.changes === 1;
-  }
-
-  async function transitionMapDraft(input: {
-    draftId: string;
-    expectedRevision: number;
-    toStatus: "changes_requested" | "rejected";
-    actorAccountId: string | null;
-    actorRole: "admin" | "system";
-    note?: string | null;
-    /** Per-element change requests recorded with the decision. They are written
-     * in the same batch, guarded by the same transition token, so a transition
-     * can never land without its requests or leave a partial set behind that a
-     * retry could not restore - the retry would conflict on the new status. */
-    targets?: readonly { targetKind: "slot" | "landmark"; targetRef: string; body: string }[];
-    now: number;
-  }) {
-    await ensureTables();
-    const fromStatus = "submitted";
-    const decisionAt = input.toStatus === "changes_requested" ? null : input.now;
-    const transitionToken = crypto.randomUUID();
-    const results = await database.batch([
-      database.prepare(
-        `UPDATE map_drafts SET status = ?1, updated_at = ?2, last_activity_at = ?2, decision_at = ?3, transition_token = ?4
-         WHERE id = ?5 AND current_revision = ?6 AND status = ?7 AND retention_action IS NULL
-           AND candidate_id IS NULL`,
-      ).bind(input.toStatus, input.now, decisionAt, transitionToken, input.draftId, input.expectedRevision, fromStatus),
-      database.prepare(
-        `INSERT INTO map_draft_reviews (
-           id, draft_id, revision, from_status, to_status, actor_account_id, actor_role, note, at
-         ) SELECT ?1, id, current_revision, ?2, ?3, ?4, ?5, ?6, ?7
-           FROM map_drafts WHERE id = ?8 AND current_revision = ?9 AND status = ?3 AND transition_token = ?10`,
-      ).bind(
-        crypto.randomUUID(), fromStatus, input.toStatus, input.actorAccountId, input.actorRole,
-        input.note ?? null, input.now, input.draftId, input.expectedRevision, transitionToken,
-      ),
-      database.prepare(
-        `UPDATE map_draft_files SET review_result = ?1
-         WHERE draft_id = ?2 AND revision = ?3
-           AND EXISTS (SELECT 1 FROM map_drafts d WHERE d.id = ?2 AND d.current_revision = ?3
-             AND d.status = ?4 AND d.transition_token = ?5)`,
-      ).bind(input.toStatus, input.draftId, input.expectedRevision, input.toStatus, transitionToken),
-      ...(input.targets ?? []).map((target) => database.prepare(
-        `INSERT INTO map_draft_comments (id, draft_id, revision, author_account_id, author_role, target_kind, target_ref, body, at)
-         SELECT ?1, id, ?2, ?3, 'admin', ?4, ?5, ?6, ?7 FROM map_drafts
-         WHERE id = ?8 AND current_revision = ?2 AND status = ?9 AND transition_token = ?10`,
-      ).bind(
-        crypto.randomUUID(), input.expectedRevision, input.actorAccountId, target.targetKind,
-        target.targetRef, target.body, input.now, input.draftId, input.toStatus, transitionToken,
-      )),
-    ]);
-    return results[0].meta.changes === 1 && results[1].meta.changes === 1;
-  }
-
-  /** Explicitly withdraws the current approved/exported draft before approving
-   * its replacement. Every row change and both immutable review records share
-   * one D1 batch, so the unique scope invariant never has an open window. */
-  async function approveMapDraft(input: {
-    draftId: string;
-    expectedRevision: number;
-    replacementDraftId?: string | null;
-    actorAccountId: string;
-    note?: string | null;
-    now: number;
-  }) {
-    await ensureTables();
-    const evidence = await database.prepare(
-      `SELECT id FROM map_draft_files WHERE draft_id = ?1 AND revision = ?2 LIMIT 1`,
-    ).bind(input.draftId, input.expectedRevision).first<{ id: string }>();
-    if (!evidence) return { ok: false as const, reason: "missing_evidence" as const };
-    const active = await database.prepare(
-      `SELECT current.id, current.status FROM map_drafts target
-       JOIN map_drafts current
-         ON current.event_id = target.event_id
-        AND current.period_key = target.period_key
-        AND current.venue_space_id = target.venue_space_id
-        AND current.candidate_id IS NULL
-       WHERE target.id = ?1 AND target.current_revision = ?2 AND target.status = 'submitted'
-         AND target.candidate_id IS NULL
-         AND current.status IN ('approved', 'exported') LIMIT 1`,
-    ).bind(input.draftId, input.expectedRevision).first<{ id: string; status: "approved" | "exported" }>();
-    if (active && active.id !== input.replacementDraftId) return { ok: false as const, reason: "replacement_required" as const, activeDraftId: active.id };
-    if (!active && input.replacementDraftId) return { ok: false as const, reason: "replacement_mismatch" as const };
-    if (!active) {
-      const approvedToken = crypto.randomUUID();
-      const results = await database.batch([
-        database.prepare(
-          `UPDATE map_drafts SET status = 'approved', updated_at = ?1, last_activity_at = ?1,
-               decision_at = ?1, transition_token = ?2
-           WHERE id = ?3 AND current_revision = ?4 AND status = 'submitted' AND retention_action IS NULL
-             AND candidate_id IS NULL
-             AND EXISTS (SELECT 1 FROM map_draft_files WHERE draft_id = ?3 AND revision = ?4)`,
-        ).bind(input.now, approvedToken, input.draftId, input.expectedRevision),
-        database.prepare(
-          `INSERT INTO map_draft_reviews (
-             id, draft_id, revision, from_status, to_status, actor_account_id, actor_role, note, at
-           ) SELECT ?1, id, current_revision, 'submitted', 'approved', ?2, 'admin', ?3, ?4
-             FROM map_drafts WHERE id = ?5 AND current_revision = ?6 AND status = 'approved' AND transition_token = ?7`,
-        ).bind(crypto.randomUUID(), input.actorAccountId, input.note ?? null, input.now, input.draftId, input.expectedRevision, approvedToken),
-        database.prepare(
-          `UPDATE map_draft_files SET review_result = 'approved_official_source'
-           WHERE draft_id = ?1 AND revision = ?2
-             AND EXISTS (SELECT 1 FROM map_drafts d WHERE d.id = ?1 AND d.current_revision = ?2
-               AND d.status = 'approved' AND d.transition_token = ?3)`,
-        ).bind(input.draftId, input.expectedRevision, approvedToken),
-      ]);
-      const ok = results.every((result) => result.meta.changes >= 1);
-      return ok ? { ok: true as const, replacedDraftId: null } : { ok: false as const, reason: "conflict" as const };
-    }
-
-    const withdrawnToken = crypto.randomUUID();
-    const approvedToken = crypto.randomUUID();
-    const results = await database.batch([
-      database.prepare(
-        `UPDATE map_drafts SET status = 'withdrawn', updated_at = ?1, last_activity_at = ?1,
-             decision_at = ?1, transition_token = ?2
-         WHERE id = ?3 AND status IN ('approved', 'exported') AND candidate_id IS NULL
-           AND EXISTS (SELECT 1 FROM map_drafts target
-             WHERE target.id = ?4 AND target.current_revision = ?5 AND target.status = 'submitted'
-               AND target.candidate_id IS NULL
-               AND EXISTS (SELECT 1 FROM map_draft_files evidence
-                 WHERE evidence.draft_id = target.id AND evidence.revision = target.current_revision)
-               AND target.event_id = map_drafts.event_id AND target.period_key = map_drafts.period_key
-               AND target.venue_space_id = map_drafts.venue_space_id)`,
-      ).bind(input.now, withdrawnToken, active.id, input.draftId, input.expectedRevision),
-      database.prepare(
-        `INSERT INTO map_draft_reviews (
-           id, draft_id, revision, from_status, to_status, actor_account_id, actor_role, note, at
-         ) SELECT ?1, id, current_revision, ?2, 'withdrawn', ?3, 'admin', ?4, ?5
-           FROM map_drafts WHERE id = ?6 AND status = 'withdrawn' AND transition_token = ?7`,
-      ).bind(crypto.randomUUID(), active.status, input.actorAccountId, input.note ?? null, input.now, active.id, withdrawnToken),
-      database.prepare(
-        `UPDATE map_drafts SET status = 'approved', updated_at = ?1, last_activity_at = ?1,
-             decision_at = ?1, transition_token = ?2
-         WHERE id = ?3 AND current_revision = ?4 AND status = 'submitted' AND candidate_id IS NULL
-           AND EXISTS (SELECT 1 FROM map_draft_files WHERE draft_id = ?3 AND revision = ?4)
-           AND NOT EXISTS (SELECT 1 FROM map_drafts current
-             WHERE current.event_id = map_drafts.event_id AND current.period_key = map_drafts.period_key
-               AND current.venue_space_id = map_drafts.venue_space_id
-               AND current.candidate_id IS NULL
-               AND current.status IN ('approved', 'exported'))`,
-      ).bind(input.now, approvedToken, input.draftId, input.expectedRevision),
-      database.prepare(
-        `INSERT INTO map_draft_reviews (
-           id, draft_id, revision, from_status, to_status, actor_account_id, actor_role, note, at
-         ) SELECT ?1, id, current_revision, 'submitted', 'approved', ?2, 'admin', ?3, ?4
-           FROM map_drafts WHERE id = ?5 AND current_revision = ?6 AND status = 'approved' AND transition_token = ?7`,
-      ).bind(crypto.randomUUID(), input.actorAccountId, input.note ?? null, input.now, input.draftId, input.expectedRevision, approvedToken),
-      database.prepare(
-        `UPDATE map_draft_files SET review_result = 'approved_official_source'
-         WHERE draft_id = ?1 AND revision = ?2
-           AND EXISTS (SELECT 1 FROM map_drafts d WHERE d.id = ?1 AND d.current_revision = ?2
-             AND d.status = 'approved' AND d.transition_token = ?3)`,
-      ).bind(input.draftId, input.expectedRevision, approvedToken),
-    ]);
-    const ok = results.slice(0, 4).every((result) => result.meta.changes === 1)
-      && results[4].meta.changes >= 1;
-    return ok ? { ok: true as const, replacedDraftId: active.id } : { ok: false as const, reason: "conflict" as const };
-  }
-
-  async function getMapDraftExport(draftId: string, revision: number) {
-    await ensureTables();
-    return database.prepare(
-      `SELECT id, draft_id, revision, target_path, candidate_json, diff_json, candidate_sha256, created_at
-       FROM map_draft_exports WHERE draft_id = ?1 AND revision = ?2`,
-    ).bind(draftId, revision).first<{
-      id: string; draft_id: string; revision: number; target_path: string; candidate_json: string;
-      diff_json: string; candidate_sha256: string; created_at: number;
-    }>();
-  }
-
-  async function exportMapDraft(input: {
-    draftId: string;
-    expectedRevision: number;
-    targetPath: string;
-    candidateJson: string;
-    diffJson: string;
-    candidateSha256: string;
-    actorAccountId: string;
-    now: number;
-  }) {
-    await ensureTables();
-    const existing = await getMapDraftExport(input.draftId, input.expectedRevision);
-    if (existing) return existing;
-    const exportId = crypto.randomUUID();
-    const transitionToken = crypto.randomUUID();
-    const results = await database.batch([
-      database.prepare(
-        `INSERT INTO map_draft_exports (
-           id, draft_id, revision, target_path, candidate_json, diff_json, candidate_sha256, created_by, created_at
-         ) SELECT ?1, id, current_revision, ?2, ?3, ?4, ?5, ?6, ?7
-           FROM map_drafts WHERE id = ?8 AND current_revision = ?9 AND status = 'approved'
-             AND candidate_id IS NULL`,
-      ).bind(exportId, input.targetPath, input.candidateJson, input.diffJson, input.candidateSha256,
-        input.actorAccountId, input.now, input.draftId, input.expectedRevision),
-      database.prepare(
-        `UPDATE map_drafts SET status = 'exported', updated_at = ?1, last_activity_at = ?1,
-             decision_at = ?1, transition_token = ?2
-         WHERE id = ?3 AND current_revision = ?4 AND status = 'approved' AND candidate_id IS NULL
-           AND EXISTS (SELECT 1 FROM map_draft_exports e WHERE e.id = ?5 AND e.draft_id = map_drafts.id)`,
-      ).bind(input.now, transitionToken, input.draftId, input.expectedRevision, exportId),
-      database.prepare(
-        `INSERT INTO map_draft_reviews (
-           id, draft_id, revision, from_status, to_status, actor_account_id, actor_role, note, at
-         ) SELECT ?1, id, current_revision, 'approved', 'exported', ?2, 'admin', ?3, ?4
-           FROM map_drafts WHERE id = ?5 AND current_revision = ?6 AND status = 'exported' AND transition_token = ?7`,
-      ).bind(crypto.randomUUID(), input.actorAccountId, `候選匯出：${input.targetPath}`, input.now,
-        input.draftId, input.expectedRevision, transitionToken),
-    ]);
-    if (!results.every((result) => result.meta.changes === 1)) return null;
-    return getMapDraftExport(input.draftId, input.expectedRevision);
-  }
-
-  async function addMapDraftFile(input: {
-    id: string; draftId: string; eventId: string; revision: number; objectKey: string; sourceUrl: string; documentDate: string;
-    pageNumber: number | null; sha256: string; mime: string; sizeBytes: number; width: number | null;
-    height: number | null; pageCount: number | null; uploadedBy: string; now: number;
-  }) {
-    await ensureTables();
-    const result = await database.prepare(
-      `INSERT INTO map_draft_files (
-         id, draft_id, revision, object_key, source_url, document_date, page_number, sha256, mime,
-         size_bytes, width, height, page_count, uploaded_by, uploaded_at
-       ) SELECT ?1, d.id, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14
-         FROM map_drafts d
-         WHERE d.id = ?15 AND d.owner_account_id = ?13 AND d.current_revision = ?2
-           AND d.event_id = ?16 AND d.candidate_id IS NULL
-           AND d.status IN ('draft', 'changes_requested')
-           AND d.retention_action IS NULL
-           AND EXISTS (
-             SELECT 1 FROM map_contributor_grants
-             WHERE account_id = ?13 AND revoked_at IS NULL AND suspended_at IS NULL
-           )`,
-    ).bind(
-      input.id, input.revision, input.objectKey, input.sourceUrl, input.documentDate, input.pageNumber,
-      input.sha256, input.mime, input.sizeBytes, input.width, input.height, input.pageCount,
-      input.uploadedBy, input.now, input.draftId, input.eventId,
-    ).run();
-    return result.meta.changes === 1;
-  }
-
-  async function getMapDraftFile(fileId: string, eventId?: string) {
-    await ensureTables();
-    return database.prepare(
-      `SELECT f.*, d.owner_account_id, d.event_id, d.status FROM map_draft_files f
-       JOIN map_drafts d ON d.id = f.draft_id
-       WHERE f.id = ?1 AND d.candidate_id IS NULL AND (?2 IS NULL OR d.event_id = ?2)`,
-    ).bind(fileId, eventId ?? null).first<{
-      id: string; draft_id: string; revision: number; object_key: string | null; source_url: string;
-      document_date: string; page_number: number | null; sha256: string; mime: string; size_bytes: number;
-      width: number | null; height: number | null; page_count: number | null; uploaded_by: string | null;
-      uploaded_at: number; review_result: string | null; raw_deleted_at: number | null;
-      owner_account_id: string; event_id: string; status: MapDraftStatus;
-    }>();
-  }
-
-  async function markMapDraftRawDeleted(fileId: string, now: number) {
-    await ensureTables();
-    const result = await database.prepare(
-      `UPDATE map_draft_files SET object_key = NULL, raw_deleted_at = COALESCE(raw_deleted_at, ?1)
-       WHERE id = ?2 AND object_key IS NOT NULL`,
-    ).bind(now, fileId).run();
-    return result.meta.changes === 1;
   }
 
   type OrganizerCandidateRow = {
@@ -1949,7 +1318,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       `SELECT role FROM organizer_event_grants
        WHERE candidate_id = ?1 AND account_id = ?2 AND revoked_at IS NULL`,
     ).bind(candidateId, accountId).first<{ role: string }>();
-    return row?.role === "owner" || row?.role === "editor" ? row.role : null;
+    return row?.role === "owner" ? "owner" : null;
   }
 
   async function hasOrganizerAccess(accountId: string) {
@@ -2056,7 +1425,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
         database.prepare(
           `INSERT INTO organizer_event_grants (
              id, candidate_id, account_id, role, granted_by, granted_at, revoked_by, revoked_at
-           ) SELECT ?1, candidate_id, ?2, role, invited_by, ?3, NULL, NULL
+           ) SELECT ?1, candidate_id, ?2, 'owner', invited_by, ?3, NULL, NULL
              FROM organizer_event_invitations WHERE id = ?4 AND accepted_by = ?2 AND changes() = 1
            ON CONFLICT(candidate_id, account_id) DO UPDATE SET
              role = excluded.role, granted_by = excluded.granted_by, granted_at = excluded.granted_at,
@@ -2069,7 +1438,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
           [invitation.candidate_id, input.accountId]),
       ]);
       if (results.slice(0, 2).every((result) => result.meta.changes === 1)) {
-        accepted.push({ candidateId: invitation.candidate_id, role: invitation.role });
+        accepted.push({ candidateId: invitation.candidate_id, role: "owner" as const });
       }
     }
     return accepted;
@@ -2107,7 +1476,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
        FROM organizer_event_candidates c
        JOIN organizer_event_grants g ON g.candidate_id = c.id
        LEFT JOIN organizer_workspace_state w ON w.candidate_id = c.id
-       WHERE g.account_id = ?1 AND g.revoked_at IS NULL
+       WHERE g.account_id = ?1 AND g.role = 'owner' AND g.revoked_at IS NULL
        ORDER BY c.updated_at DESC, c.id`,
     ).bind(accountId).all<{
       id: string; tentative_name: string; event_id: string | null; status: OrganizerCandidateStatus;
@@ -2292,14 +1661,13 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       `SELECT g.role FROM organizer_event_grants g JOIN accounts a ON a.id = g.account_id
        WHERE g.candidate_id = ?1 AND a.email = ?2 AND g.revoked_at IS NULL`,
     ).bind(candidateId, email).first<{ role: OrganizerRole }>();
-    // Check before pending invitations so an old Editor invitation cannot be
-    // resent to someone who is now an Owner. Editor-to-Owner promotion remains valid.
-    if (role === "editor" && grant?.role === "owner") return "already_owner" as const;
     const pending = await database.prepare(
       `SELECT role FROM organizer_event_invitations
        WHERE candidate_id = ?1 AND email = ?2 AND accepted_at IS NULL AND revoked_at IS NULL`,
     ).bind(candidateId, email).first<{ role: string }>();
-    if (pending) return pending.role === role ? "pending" as const : "other_role" as const;
+    // There is one member role; a pending invitation written as an Editor one
+    // before the roles merged is the same invitation.
+    if (pending) return "pending" as const;
     return grant?.role === role ? "active" as const : "missing" as const;
   }
 
@@ -2317,81 +1685,6 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     )`;
   const ownerOrAdminAllowed = async (actorAccountId: string, candidateId: string) => !!await database
     .prepare(`SELECT 1 AS allowed WHERE ${ownerOrAdmin("?1", "?2")}`).bind(actorAccountId, candidateId).first();
-
-  async function manageOrganizerCollaborator(input: {
-    candidateId: string;
-    actorAccountId: string;
-    email: string;
-    role: OrganizerRole;
-    action: "invite" | "resend" | "revoke";
-    now: number;
-  }) {
-    await ensureTables();
-    if (!await ownerOrAdminAllowed(input.actorAccountId, input.candidateId)) {
-      return { ok: false as const, reason: "forbidden" as const };
-    }
-    if (input.action !== "revoke") {
-      if (input.role !== "editor") return { ok: false as const, reason: "owner_requires_admin" as const };
-      const state = await organizerInvitationState(input.candidateId, input.email, input.role);
-      if (state === "already_owner") return { ok: false as const, reason: state };
-      if (input.action === "resend") {
-        // Resending mints a login link, so authority is read again just before
-        // it, as owner management does.
-        if (!await ownerOrAdminAllowed(input.actorAccountId, input.candidateId)) return { ok: false as const, reason: "forbidden" as const };
-        return state === "pending" ? { ok: true as const, result: "resent" as const }
-          : { ok: false as const, reason: "not_pending" as const };
-      }
-      if (state !== "missing") return { ok: false as const, reason: state };
-    }
-    if (input.action === "invite") {
-      if (input.role !== "editor") return { ok: false as const, reason: "owner_requires_admin" as const };
-      try {
-        const result = await database.prepare(
-          `INSERT INTO organizer_event_invitations (
-             id, candidate_id, email, role, invited_by, created_at
-           ) SELECT ?1, ?2, ?3, 'editor', ?4, ?5
-             WHERE NOT EXISTS (
-               SELECT 1 FROM organizer_event_grants g JOIN accounts a ON a.id = g.account_id
-               WHERE g.candidate_id = ?2 AND a.email = ?3 AND g.role = 'owner' AND g.revoked_at IS NULL
-             ) AND ${ownerOrAdmin("?4", "?2")}`,
-        ).bind(crypto.randomUUID(), input.candidateId, input.email, input.actorAccountId, input.now).run();
-        if (result.meta.changes === 1) return { ok: true as const, result: "invited" as const };
-        return await ownerOrAdminAllowed(input.actorAccountId, input.candidateId)
-          ? { ok: false as const, reason: "already_owner" as const }
-          : { ok: false as const, reason: "forbidden" as const };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (/unique constraint/i.test(message)) return { ok: false as const, reason: "unchanged" as const };
-        throw error;
-      }
-    }
-    // An editor who has not signed in yet exists only as an invitation, so the
-    // revoke has to succeed on either row. Reporting the grant alone would tell
-    // the Owner nothing changed while the pending invitation was in fact
-    // withdrawn — see manageOrganizerOwner, which draws the same distinction.
-    const outcomes = await database.batch([
-      database.prepare(
-        `UPDATE organizer_event_grants SET revoked_by = ?1, revoked_at = ?2
-         WHERE candidate_id = ?3 AND role = 'editor' AND revoked_at IS NULL
-           AND account_id = (SELECT id FROM accounts WHERE email = ?4)
-           AND ${ownerOrAdmin("?1", "?3")}`,
-      ).bind(input.actorAccountId, input.now, input.candidateId, input.email),
-      ...notify({ kind: "member.revoked", occurrence: crypto.randomUUID(), now: input.now },
-        `${memberNotificationSource} WHERE target.candidate_id = ?1 AND target.account_id = (SELECT id FROM accounts WHERE email = ?2) AND changes() = 1`,
-        [input.candidateId, input.email]),
-      database.prepare(
-        `UPDATE organizer_event_invitations SET revoked_by = ?1, revoked_at = ?2
-         WHERE candidate_id = ?3 AND email = ?4 AND role = 'editor'
-           AND accepted_at IS NULL AND revoked_at IS NULL
-           AND ${ownerOrAdmin("?1", "?3")}`,
-      ).bind(input.actorAccountId, input.now, input.candidateId, input.email),
-    ]);
-    const grant = outcomes[0], invitation = outcomes[outcomes.length - 1];
-    if (grant.meta.changes === 1 || invitation.meta.changes === 1) return { ok: true as const, result: "revoked" as const };
-    return await ownerOrAdminAllowed(input.actorAccountId, input.candidateId)
-      ? { ok: false as const, reason: "missing" as const }
-      : { ok: false as const, reason: "forbidden" as const };
-  }
 
   async function manageOrganizerOwner(input: {
     candidateId: string;
@@ -2452,6 +1745,11 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       ).bind(input.actorAccountId, input.candidateId, target.account_id, input.now),
         ...notify({ kind: "member.revoked", occurrence: crypto.randomUUID(), now: input.now },
           `${memberNotificationSource} WHERE target.candidate_id = ?1 AND target.account_id = ?2 AND changes() = 1`, [input.candidateId, target.account_id]),
+        database.prepare(
+          `UPDATE organizer_event_invitations SET revoked_by = ?1, revoked_at = ?4
+           WHERE candidate_id = ?2 AND email = ?3 AND accepted_at IS NULL AND revoked_at IS NULL
+             AND EXISTS (SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = ?2 AND g.account_id = ?5 AND g.revoked_at = ?4)`,
+        ).bind(input.actorAccountId, input.candidateId, input.email, input.now, target.account_id),
       ]);
       if (result.meta.changes === 1) return { ok: true as const, result: "revoked" as const };
       if (!await authorized()) return { ok: false as const, reason: "forbidden" as const };
@@ -2466,7 +1764,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     }
     const invitation = await database.prepare(
       `UPDATE organizer_event_invitations SET revoked_by = ?1, revoked_at = ?4
-       WHERE candidate_id = ?2 AND email = ?3 AND role = 'owner'
+       WHERE candidate_id = ?2 AND email = ?3
          AND accepted_at IS NULL AND revoked_at IS NULL AND ${authority}`,
     ).bind(input.actorAccountId, input.candidateId, input.email, input.now).run();
     if (invitation.meta.changes === 0 && !await authorized()) return { ok: false as const, reason: "forbidden" as const };
@@ -3515,21 +2813,6 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       ORDER BY j.next_attempt_at, j.created_at, j.id LIMIT ?2`).bind(now, Math.max(1, Math.min(10, limit))).all<{ id: string }>()).results;
   }
 
-  /** The wake and delivery completion share one transaction. Duplicate POSTs
-   * can enqueue once; they never execute a publication step in the request. */
-  async function wakeOrganizerPublications(input: { deliveryId: string; stage: 'data' | 'main'; sha: string; now: number }) {
-    await ensureTables();
-    const results = await database.batch([
-      database.prepare(`UPDATE organizer_publication_jobs SET next_attempt_at = 0, pending_attempts = 0
-        WHERE status IN ('queued', 'publishing')
-          AND ((?1 = 'data' AND data_head_sha = ?2) OR (?1 = 'main' AND (main_head_sha = ?2 OR main_merge_sha = ?2)))
-          AND EXISTS (SELECT 1 FROM github_webhook_deliveries WHERE delivery_id = ?3 AND processed_at IS NULL)`)
-        .bind(input.stage, input.sha, input.deliveryId),
-      database.prepare(`UPDATE github_webhook_deliveries SET processed_at = ?1, result = 'processed'
-        WHERE delivery_id = ?2 AND processed_at IS NULL`).bind(input.now, input.deliveryId),
-    ]);
-    return { woken: results[0].meta.changes };
-  }
 
   async function claimOrganizerPublicationLease(input: { jobId: string; now: number; ttlMs: number }) {
     await ensureTables();
@@ -3684,41 +2967,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       .bind(jobId, token).run();
   }
 
-  async function recordGitHubWebhookDelivery(input: {
-    deliveryId: string; event: string; payloadSha256: string; now: number;
-  }) {
-    await ensureTables();
-    try {
-      const result = await database.prepare(
-        `INSERT INTO github_webhook_deliveries (delivery_id, event, payload_sha256, received_at)
-         VALUES (?1, ?2, ?3, ?4)`,
-      ).bind(input.deliveryId, input.event, input.payloadSha256, input.now).run();
-      return result.meta.changes === 1 ? "recorded" as const : "duplicate" as const;
-    } catch (error) {
-      if (error instanceof Error && /unique constraint/i.test(error.message)) {
-        const existing = await database.prepare(
-          "SELECT event, payload_sha256, processed_at, result FROM github_webhook_deliveries WHERE delivery_id = ?1",
-        ).bind(input.deliveryId).first<{ event: string; payload_sha256: string; processed_at: number | null; result: string | null }>();
-        if (!existing || existing.event !== input.event || existing.payload_sha256 !== input.payloadSha256) return "mismatch" as const;
-        return existing.processed_at !== null && existing.result === "processed"
-          ? "duplicate" as const
-          : "recorded" as const;
-      }
-      throw error;
-    }
-  }
 
-  async function completeGitHubWebhookDelivery(input: { deliveryId: string; processed: boolean; result?: string; now: number }) {
-    await ensureTables();
-    const result = await database.prepare(
-      `UPDATE github_webhook_deliveries
-       SET processed_at = CASE WHEN ?1 = 1 THEN ?2 ELSE NULL END, result = ?3
-       WHERE delivery_id = ?4 AND processed_at IS NULL`,
-    ).bind(input.processed ? 1 : 0, input.now,
-      input.processed ? "processed" : `failed:${(input.result ?? "unknown").slice(0, 500)}`,
-      input.deliveryId).run();
-    return result.meta.changes === 1;
-  }
 
   async function storePreviewMail(message: { email: string; subject: string; text: string; now: number }) {
     await ensureTables();
@@ -3738,13 +2987,13 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   async function clearPreviewData() {
     await ensureTables();
     await database.batch([
-      ...["review_notification_items", "review_notification_batches", "account_notification_items", "account_notification_batches", "account_notification_preferences"].map(table => database.prepare(`DELETE FROM ${table}`)),
+      ...["account_notification_items", "account_notification_preferences"].map(table => database.prepare(`DELETE FROM ${table}`)),
     ]);
     await database.batch([
-      "github_webhook_deliveries", "organizer_publication_lease", "organizer_publication_jobs", "organizer_submission_snapshots",
+      "organizer_publication_lease", "organizer_publication_jobs", "organizer_submission_snapshots",
       "organizer_amendment_changes", "organizer_amendments", "organizer_applications", "organizer_category_sequences",
       "organizer_import_rows", "organizer_import_sources", "organizer_event_reviews", "organizer_event_invitations", "organizer_event_grants", "organizer_event_revisions", "organizer_workspace_preferences", "organizer_workspace_state", "organizer_event_candidates", "organizer_venue_spaces", "organizer_venues", "organizer_reference_records",
-      "map_draft_exports", "map_draft_files", "map_draft_reviews", "map_draft_comments", "map_draft_revisions", "map_drafts", "map_contributor_grants",
+      "map_draft_revisions", "map_drafts",
       "planning_shares", "login_tokens", "sessions", "circle_claims", "circle_overrides", "overrides_doc", "event_notices", "audit_log", "preview_mail_sink", "accounts",
     ].map((table) => database.prepare(`DELETE FROM ${table}`)));
     await seedOrganizerVenueCatalog(database);
@@ -3752,29 +3001,20 @@ export function createIdentityRepository(database: D1Database, options: { bootst
 
   return {
     ...createSiteSettingsRepository(database, ensureTables),
-    ...createReviewNotificationRepository(database, ensureTables),
     ...createAccountNotificationRepository(database, ensureTables),
     ...createOrganizerAmendmentRepository(database, ensureTables),
-    ...createOrganizerRecoveryRepository(database, ensureTables),
     ...createOrganizerApplicationRepository(database, ensureTables, organizerCandidateStatements, notify),
     ensureTables, writeAudit, getOrganizerModerationEventId, getOrganizerModerationCandidateForEvent,
     listAdmins, isAdminEmail, addAdmin, removeAdmin,
     countLoginTokensSince, createLoginToken, deleteLoginToken, consumeLoginToken, consumeLoginTokenDetails,
     upsertAccount, getAccountForAdmin, createSession, getSession, revokeSession, disableAccount, beginAccountDeletion, isAccountWritable, deleteAccount,
     listSoleOwnerOrganizerCandidates,
-    listHostedThumbnailKeysForAccount, listHostedThumbnailKeys, listUnsubmittedMapDraftObjectKeysForAccount,
+    listHostedThumbnailKeysForAccount, listHostedThumbnailKeys, 
     createClaim, getClaim, withdrawClaim, listClaimsForAccount, listAccountClaimsForAdmin, searchClaimAccountsForAdmin, listClaimScopesForAccount, listClaimsByStatus, listPendingEventClaims, listAdminReviewSummary, listPendingAdminClaims,
     hasVerifiedClaim, verifiedClaimId, ownsCircle, markClaimVerified, setClaimStatus, recordChallengeAttempt,
     getOverride, listCircleClaimsForAdmin, listCircleModerationHistory,
     putOverride, deleteOverride, takedownOverride, listLiveOverrides, getPublicOverride, setPostEventHidden,
     rebuildOverridesDoc, getOverridesDoc, getEventNotice, writeEventNotice,
-    manageMapContributor, hasActiveMapContributor,
-    createMapDraft, getMapDraft, normalizeMapDraftPeriodAliases,
-    listMapDraftsForOwner, listMapDraftsForAdmin, listMapDraftFiles, listMapDraftReviews,
-    listMapDraftComments, addMapDraftComment,
-    getActiveApprovedMapDraft, listStaleSubmittedMapDrafts, writeMapDraftRevision, submitMapDraft, transitionMapDraft,
-    approveMapDraft, getMapDraftExport, exportMapDraft,
-    addMapDraftFile, getMapDraftFile, markMapDraftRawDeleted,
     ...createAdminReferenceRepository(database, ensureTables),
     listOrganizerVenueCatalog, createOrganizerVenue, createOrganizerVenueSpace,
     listOrganizerReferenceRecords, createOrganizerReferenceRecord, completeOrganizerVenueAddress,
@@ -3782,7 +3022,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     countOrganizerInvitationsSince,
     listOrganizerCandidatesForAccount, listAccountOrganizerGrantsForAdmin, getOrganizerCandidate, listOrganizerCandidateRevisions,
     getOrganizerWorkspace, saveOrganizerWorkspacePreference, completeOrganizerOnboarding, markOrganizerValidated,
-    manageOrganizerCollaborator, manageOrganizerOwner,
+    manageOrganizerOwner,
     listOrganizerMapDrafts, getOrganizerMapDraft, createOrganizerMapDraft, saveOrganizerMapDraft,
     getOrganizerImport, replaceOrganizerImport,
     saveOrganizerCandidate, submitOrganizerCandidate, reviewOrganizerCandidate,
@@ -3791,9 +3031,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     claimFailedOrganizerCandidateReopenLease, reopenFailedOrganizerCandidate,
     markOrganizerPublicationRemoteWriteIntent,
     retryOrganizerPublicationJob, expireStalledOrganizerPublicationJobs, claimOrganizerPublicationLease,
-    listDueOrganizerPublicationJobs, wakeOrganizerPublications,
+    listDueOrganizerPublicationJobs,
     hasOrganizerPublicationLease, releaseOrganizerPublicationLease,
-    updateOrganizerPublicationJob, recordGitHubWebhookDelivery, completeGitHubWebhookDelivery,
+    updateOrganizerPublicationJob,
     storePreviewMail, latestPreviewMail, clearPreviewData,
   };
 }

@@ -12,7 +12,6 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dist = resolve(root, "dist");
 const sourcePath = resolve(root, "app", "service-worker-source.js");
 const outputPath = resolve(dist, "sw.js");
-const stage = JSON.parse(await readFile(resolve(root, ".event-data-stage.json"), "utf8"));
 
 /** Entries worth holding for a full offline session at the venue. */
 /**
@@ -29,7 +28,6 @@ const PRECACHE_PATTERNS = [
   // The chooser's header is styled by a plain stylesheet index.html links,
   // not by a bundled asset, so it is named here or the offline chooser loses it.
   /^\/site-header\.css$/,
-  /^\/data\/events\/.+\.json$/,
   /^\/(?:favicon|app-icon)\.svg$/,
 ];
 
@@ -59,24 +57,9 @@ const precache = [...new Set([
   ...reader,
 ])].sort();
 
-// Every staged event has to survive going offline at the venue: a reader who
-// picked the second event and then lost signal must not find an empty shell.
-const stagedEvents = stage.events ?? [{ eventId: stage.eventId }];
-const requiredEventData = [];
-for (const { eventId } of stagedEvents) {
-  const base = `/data/events/${eventId}`;
-  requiredEventData.push(`${base}/circles.json`);
-  const manifestPath = `${base}/map-manifest.json`;
-  if (files.includes(manifestPath)) {
-    requiredEventData.push(manifestPath);
-    const manifest = JSON.parse(await readFile(resolve(dist, manifestPath.slice(1)), "utf8"));
-    if (!Array.isArray(manifest.maps) || manifest.maps.length === 0) throw new Error(`Invalid offline map manifest for ${eventId}.`);
-    requiredEventData.push(...manifest.maps.map(({ path }) => `${base}/${path}`));
-  } else {
-    requiredEventData.push(`${base}/map.json`);
-  }
-}
-const required = ["/index.html", "/manifest.webmanifest", ...requiredEventData];
+// Published event data is not part of the build: the worker reads the server's
+// event index at install time (#546).
+const required = ["/index.html", "/manifest.webmanifest"];
 const missing = required.filter((path) => !precache.includes(path));
 if (missing.length > 0) throw new Error(`The build is missing offline-critical files: ${missing.join(", ")}`);
 if (!reader.some((path) => path.endsWith(".js"))) throw new Error("index.html references no application script to precache.");
@@ -88,10 +71,10 @@ if (missingAssets.length > 0) throw new Error(`index.html references missing ass
 // push its bundle onto every visitor. A circle introduction page is not the
 // map either: its navigation is network-only, so its own script has no
 // business in the offline shell. Every circle page carries the same tags, so
-// the first one stands for all of them.
-const circlePage = files.find((path) => /^\/events\/[^/]+\/circles\/[^/]+\/index\.html$/.test(path));
-for (const [entry, path] of [["circle", "/circle.html"], ["organizer", "/organizer.html"], ["admin", "/admin.html"], ["circle page", circlePage]]) {
-  const portalHtml = path ? await readFile(resolve(dist, path.slice(1)), "utf8").catch(() => "") : "";
+// the tags every circle page is built with stand for all of them.
+const { circlePageAssets } = JSON.parse(await readFile(resolve(dist, "discovery-assets.json"), "utf8"));
+for (const [entry, path] of [["circle", "/circle.html"], ["organizer", "/organizer.html"], ["admin", "/admin.html"], ["circle page", null]]) {
+  const portalHtml = path ? await readFile(resolve(dist, path.slice(1)), "utf8").catch(() => "") : circlePageAssets;
   const portalOnly = readerAssets(portalHtml).filter((asset) => !reader.includes(asset));
   const leaked = precache.filter((asset) => portalOnly.includes(asset));
   if (leaked.length > 0) throw new Error(`Refusing to precache ${entry} assets: ${leaked.join(", ")}`);

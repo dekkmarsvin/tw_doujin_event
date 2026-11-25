@@ -2,7 +2,7 @@
 
 上傳主辦的配置圖（PNG／JPEG）與攤位清單，產生一份攤位 layout 草稿與 SVG 圖面。這個 **Worker 介面維持獨立原型**，沒有部署設定；純計算核心已由主辦編輯器的「自動建立草稿（實驗）」共用，在瀏覽器中運算，見 [地圖 authoring](../../docs/runbooks/map-authoring.md#自動建立草稿實驗)。既有 FF47 adapter 保持原行為。
 
-輸出是現行的 `EventMapLayout`（`app/event-map.ts`），回應前一律經過 `validateEventMapLayout`；座標為原圖像素，與[活動地圖契約](../../docs/contracts/event-map.md#地圖資料不變量)相同。
+輸出是現行的 `EventMapLayout`（`app/event-map.ts`），回應前一律經過 `validateEventMapLayout`；座標為原圖像素，與[活動地圖契約](../../docs/contracts/reader.md#地圖資料不變量)相同。
 
 ## 執行
 
@@ -32,9 +32,9 @@ curl -F image=@plan.jpg -F boothList="$(cat booths.txt)" [-F crop=x,y,w,h] http:
 ## 成本
 
 - Worker 沒有任何 binding，不寫入、不呼叫外部服務；每次辨識只計一個請求加上解碼與辨識的 CPU 時間，一般配置圖在一秒內。`limits.cpu_ms` 設 5 秒上限，異常圖片不會無上限耗用。
-- 以 [Cloudflare 成本基準](../../docs/runbooks/project-workflow.md#71-訂閱與計費基準查核日-2026-09-19)的 Workers Paid 內含額度（每月 3,000 萬 CPU ms）估算，每場活動幾十次辨識只占內含額度的極小部分；超出內含額度時才依官方 CPU 單價計費。
+- 以 Cloudflare 成本基準的 Workers Paid 內含額度（每月 3,000 萬 CPU ms）估算，每場活動幾十次辨識只占內含額度的極小部分；超出內含額度時才依官方 CPU 單價計費。
 - 所有辨識都是純計算，同一組模組也能直接在瀏覽器分頁內執行（以 canvas 取像素），完全不經過 Worker。
-- 沒有採用 Workers AI 或其他視覺模型：那是新增 Cloudflare 產品（[複雜度預算](../../docs/runbooks/project-workflow.md#74-複雜度預算)），按次計費，而且座標精度不足以直接產生攤位矩形。
+- 沒有採用 Workers AI 或其他視覺模型：那是新增 Cloudflare 產品，按次計費，而且座標精度不足以直接產生攤位矩形。
 
 ## 限制
 
@@ -47,4 +47,4 @@ curl -F image=@plan.jpg -F boothList="$(cat booths.txt)" [-F crop=x,y,w,h] http:
 
 ## 若要正式採用
 
-部署一個新的 Worker 是新增常駐角色，依[擴充門檻](../../docs/runbooks/project-workflow.md#76-擴充門檻)需先由維護者決定；公開的上傳端點也需要存取控制（例如沿用主辦登入）。主辦工作區目前共用 `app/map-auto-recognition/` 的純計算核心，在瀏覽器 Web Worker 內執行，不新增 Cloudflare 資源；本原型的 HTTP 解碼限制與部署邊界不代表主辦編輯器已部署辨識服務。
+部署一個新的 Worker 是新增常駐角色，需先由維護者決定；公開的上傳端點也需要存取控制（例如沿用主辦登入）。主辦工作區目前共用 `app/map-auto-recognition/` 的純計算核心，在瀏覽器 Web Worker 內執行，不新增 Cloudflare 資源；本原型的 HTTP 解碼限制與部署邊界不代表主辦編輯器已部署辨識服務。

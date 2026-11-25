@@ -1,8 +1,9 @@
 import { isCircleCatalogPayload, type CircleCatalogPayload } from "./circle-records";
 import type { PublicationResource } from "./catalog-publication";
+import { eventDataPath } from "./event-catalog";
 
 function endpoint(eventId: string) {
-  return `/data/events/${encodeURIComponent(eventId)}/circles.json`;
+  return eventDataPath(eventId, "circles.json");
 }
 
 export async function loadStaticCircleCatalog(eventId: string): Promise<PublicationResource<CircleCatalogPayload>> {

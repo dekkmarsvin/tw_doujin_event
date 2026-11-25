@@ -3,7 +3,7 @@
 - 狀態：已實施（2026-08-21）；production／preview 的最終邊界見 [ADR-0029](./0029-public-production-gated-preview.md)
 - 部分取代：[ADR-0011：FF47 期間全站不公開](./0011-ff47-is-not-a-public-launch.md) 的「不在本 ADR 範圍」第一條（重新開放的條件）
 - 延續：[ADR-0012](./0012-first-party-sources-only.md)、[ADR-0014](./0014-event-data-lives-outside-the-code-repo.md)
-- 相關契約：[社團自助控制面契約](../contracts/circle-portal.md)、[資料傳輸與離線契約](../contracts/delivery-and-offline.md)
+- 相關契約：[社團自助控制面契約](../contracts/circle-portal.md)、[資料傳輸與離線契約](../contracts/reader.md#資料傳輸與離線)
 - 相關流程：[部署](../runbooks/deployment.md)
 
 ## 脈絡

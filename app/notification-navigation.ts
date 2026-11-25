@@ -2,7 +2,7 @@ import { isEmailShaped, normalizeEmail } from "./portal-crypto";
 
 const ADMIN_SELECTORS = {
   adminSection: "section", adminView: "view", adminEvent: "event", adminClaim: "claim",
-  adminCircle: "circle", adminDraft: "draft", adminSearch: "q", adminEmail: "email",
+  adminCircle: "circle", adminSearch: "q", adminEmail: "email",
 } as const;
 const ADMIN_HASHES = new Set(["overview", "admin", "map-review", "takedown", "accounts", "review-notifications"]);
 const SELECTOR_ID = /^[\p{L}\p{N}_.:-]{1,200}$/u;

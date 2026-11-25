@@ -10,6 +10,8 @@
 
 import { isHtmlRoute, secureHtmlResponse, unconditionalHtmlRequest } from "./_html-security";
 import { applyCircleShareImage } from "./_circle-share-image";
+import { withPublishedEvents } from "./_published-events-html";
+import { afterWrite } from "./_after-write";
 import { API_ERROR_CODES, type ApiErrorCode } from "../app/i18n/api-error-codes";
 
 const SAFE_METHODS = new Set(["GET", "HEAD"]);
@@ -30,17 +32,12 @@ export const onRequest: PagesFunction<PortalEnv> = async (context) => {
 
   if (!SAFE_METHODS.has(request.method)) {
     const origin = request.headers.get("origin");
-    const githubWebhook = request.method === "POST" && url.pathname === "/api/integrations/github/webhook";
-    // This server-to-server route authenticates exact body bytes with HMAC.
-    // Its JSON requirement remains below; every cookie-authenticated write
-    // still requires the same-origin header.
-    if (!githubWebhook && origin !== url.origin) return json({ error: "來源不符，請重新整理後再試。", ...errorCode("origin_mismatch") }, 403);
+    if (origin !== url.origin) return json({ error: "來源不符，請重新整理後再試。", ...errorCode("origin_mismatch") }, 403);
 
     const contentType = (request.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
     const privateFileUpload = contentType === "multipart/form-data" && (
       (request.method === "POST"
-        && (/^\/api\/circle\/[^/]+\/(?:thumbnail|catalog-image)$/.test(url.pathname)
-          || url.pathname === "/api/map-contributions/files"))
+        && /^\/api\/circle\/[^/]+\/(?:thumbnail|catalog-image)$/.test(url.pathname))
       // Replace-in-place, hence PUT: a candidate map has one layout plan, and
       // an event has one picture.
       || (request.method === "PUT"
@@ -56,6 +53,9 @@ export const onRequest: PagesFunction<PortalEnv> = async (context) => {
   // Shares are anonymous snapshots with a bounded private cache. Other APIs
   // carry identity and must never be stored by a cache or the worker.
   if (url.pathname.startsWith("/api/")) {
+    // A write may have queued notices or a service check; send them after the
+    // response, the way the scheduled Worker used to each minute.
+    if (!SAFE_METHODS.has(request.method) && response.status < 400) context.waitUntil?.(afterWrite(context.env, url.origin));
     const headers = new Headers(response.headers);
     if (!(request.method === "GET" && /^\/api\/shares\/[^/]+$/.test(url.pathname))) {
       headers.set("cache-control", "no-store");
@@ -63,5 +63,7 @@ export const onRequest: PagesFunction<PortalEnv> = async (context) => {
     headers.set("x-content-type-options", "nosniff");
     return new Response(response.body, { status: response.status, headers });
   }
-  return html ? secureHtmlResponse(await applyCircleShareImage(context, response), url.pathname) : response;
+  if (!html) return response;
+  const shared = await applyCircleShareImage(context, response);
+  return secureHtmlResponse(request.method === "GET" ? await withPublishedEvents(context.env, url.pathname, shared) : shared, url.pathname);
 };

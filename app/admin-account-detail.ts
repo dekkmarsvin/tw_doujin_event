@@ -3,7 +3,7 @@ export type AdminAccountOrganizerGrant = {
   eventId: string | null;
   name: string;
   edition: number;
-  role: "owner" | "editor";
+  role: "owner";
   membersHref: string;
 };
 
@@ -26,12 +26,6 @@ export type AdminAccountDetail = {
   disabledAt: number | null;
   deletionStartedAt: number | null;
   isAdmin: boolean;
-  mapContributor: {
-    status: "none" | "active" | "revoked" | "suspended";
-    grantedAt: number | null;
-    revokedAt: number | null;
-    suspendedAt: number | null;
-  };
   organizerGrants: AdminAccountOrganizerGrant[];
   claims: AdminAccountClaim[];
 };

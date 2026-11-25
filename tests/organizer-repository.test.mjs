@@ -4,6 +4,7 @@ import { resetSiteSettings } from "./support/site-settings-fixture.mjs";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer, isRunnableDevEnvironment } from "vite";
 import { organizerRepositoryFixtureScript, resetOrganizerRepositoryFixture } from "./support/organizer-repository-fixture.mjs";
+import { applyMigrations } from "./support/d1-migrations.mjs";
 
 const vite = await createServer({
   configFile: false,
@@ -17,20 +18,16 @@ const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { createIdentityRepository } = await environment.runner.import("/db/identity-repository.ts");
 const { createOrganizerPublicationExecutor, PublicationFailure, publicationHasStarted, QUEUED_PUBLICATION_TIMEOUT_MS } = await environment.runner.import("/app/organizer-publication.ts");
-const { createGitHubPublicationAdapter } = await environment.runner.import("/app/github-publication.ts");
 const { publicationFailureMessage } = await environment.runner.import("/app/organizer-publication-presentation.ts");
 const { sha256Hex } = await environment.runner.import("/app/portal-crypto.ts");
 const { circleRetentionExpiresAt } = await environment.runner.import("/app/circle-overrides.ts");
 const { createPublicationDispatcher } = await environment.runner.import("/app/publication-dispatch.ts");
-const { portalHandlers } = await environment.runner.import("/functions/_portal.ts");
+const { organizerFor } = await environment.runner.import("/functions/_portal.ts");
 const { hmacSign } = await environment.runner.import("/app/portal-crypto.ts");
 const { runPublicationTick, createScheduledPublicationDispatcher,
   PUBLICATION_CRON, PUBLICATION_RETRY_MAX_MS, PUBLICATION_TICK_MAX_TRANSITIONS, PUBLICATION_JOB_MAX_TRANSITIONS,
   PUBLICATION_TICK_START_BUDGET_MS } = await environment.runner.import("/app/publication-scheduler.ts");
-const { signGitHubWebhookForTest } = await environment.runner.import("/app/publication-bundle-assembler.ts");
-const { onRequest: middleware } = await environment.runner.import("/functions/_middleware.ts");
-const { onRequestPost: webhook } = await environment.runner.import("/functions/api/integrations/github/webhook.ts");
-const { default: scheduledWorker } = await environment.runner.import("/workers/publication-dispatch/index.ts");
+const { afterWrite } = await environment.runner.import("/functions/_after-write.ts");
 
 const miniflare = new Miniflare(convertV4MiniflareOptions({
   modules: true,
@@ -38,6 +35,7 @@ const miniflare = new Miniflare(convertV4MiniflareOptions({
   d1Databases: { DB: "organizer-repository-test" },
 }));
 const database = await miniflare.getD1Database("DB");
+await applyMigrations(database);
 const repository = createIdentityRepository(database);
 after(async () => { await miniflare.dispose(); await vite.close(); });
 
@@ -307,60 +305,7 @@ test("expiry rechecks the lease after its SELECT and cannot fail a delivery that
   assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "publishing");
 });
 
-async function webhookRequest({ deliveryId = "delivery-246", event = "check_run", body = JSON.stringify({
-  repository: { full_name: "dekkmarsvin/tw_doujin_event-data" }, check_run: { head_sha: "a".repeat(40) },
-}), signature, mode = "github", contentType = "application/json", method = "POST", path = "/api/integrations/github/webhook" } = {}) {
-  const request = new Request(`https://portal.example.test${path}`, { method, headers: {
-    "content-type": contentType, "x-github-delivery": deliveryId, "x-github-event": event,
-    "x-hub-signature-256": signature ?? await signGitHubWebhookForTest("webhook-secret", body),
-  }, ...(method === "GET" ? {} : { body }) });
-  const env = { DB: database, ORGANIZER_PUBLICATION_MODE: mode, GITHUB_WEBHOOK_SECRET: "webhook-secret" };
-  return middleware({ request, next: () => webhook({ request, env }) });
-}
-
-test("only the exact webhook POST passes Origin and still enforces JSON, HMAC and disabled mode", async () => {
-  assert.equal((await webhookRequest({ signature: "" })).status, 401);
-  assert.equal((await webhookRequest({ contentType: "text/plain" })).status, 415);
-  assert.equal((await webhookRequest({ mode: "disabled" })).status, 503);
-  for (const method of ["PATCH", "PUT", "DELETE"]) assert.equal((await webhookRequest({ method })).status, 403);
-  for (const path of ["/api/integrations/github/webhook/", "/api/claims", "/api/integrations/github/webhook-other"]) {
-    assert.equal((await webhookRequest({ path })).status, 403);
-  }
-  assert.equal((await webhookRequest({ method: "GET" })).status, 405);
-  assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM github_webhook_deliveries").first()).n, 0);
-});
-
-test("signed concurrent webhook replay wakes a pinned job once and never advances a step itself", async () => {
-  const { jobId } = await publicationFixture();
-  const dispatch = createScheduledPublicationDispatcher(repository, { eventExists: async () => false,
-    run: async ({ step }) => ({ pending: true, metadata: checkpoint(step) }) }, () => NOW + 10);
-  await dispatch(jobId);
-  const responses = await Promise.all([webhookRequest(), webhookRequest(), webhookRequest()]);
-  for (const response of responses) assert.equal(response.status, 202);
-  const job = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal(job.next_attempt_at, 0);
-  assert.equal(job.pending_attempts, 0);
-  assert.equal(job.step, "preparing_data");
-  // Once a later tick defers again, a replay cannot reset its due time.
-  await dispatch(jobId);
-  const deferred = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal((await webhookRequest()).status, 202);
-  assert.deepEqual(await repository.getOrganizerPublicationJob(jobId), deferred);
-  assert.equal((await webhookRequest({ event: "check_suite" })).status, 409);
-  assert.equal(await repository.completeGitHubWebhookDelivery({ deliveryId: "delivery-246", processed: false, now: NOW + 20 }), false);
-  assert.equal((await webhookRequest()).status, 202);
-  assert.deepEqual(await repository.getOrganizerPublicationJob(jobId), deferred, "a late failed duplicate cannot erase processed delivery");
-  for (const [event, payload] of [
-    ["check_run", { repository: { full_name: "someone/other" }, check_run: { head_sha: "a".repeat(40) } }],
-    ["push", { repository: { full_name: "dekkmarsvin/tw_doujin_event-data" }, check_run: { head_sha: "a".repeat(40) } }],
-    ["check_run", { repository: { full_name: "dekkmarsvin/tw_doujin_event-data" }, check_run: { head_sha: "b".repeat(40) } }],
-  ]) {
-    assert.equal((await webhookRequest({ deliveryId: crypto.randomUUID(), event, body: JSON.stringify(payload) })).status, 202);
-    assert.deepEqual(await repository.getOrganizerPublicationJob(jobId), deferred);
-  }
-});
-
-test("a cron overlapping webhook and another tick has one leased mutation and keeps its checkpoint", async () => {
+test("overlapping cron ticks have one leased mutation and keep the checkpoint", async () => {
   const { jobId } = await publicationFixture();
   await createScheduledPublicationDispatcher(repository, { eventExists: async () => false,
     run: async () => ({ metadata: checkpoint("preparing_data") }) }, () => NOW + 10)(jobId);
@@ -373,7 +318,6 @@ test("a cron overlapping webhook and another tick has one leased mutation and ke
   const driver = { eventExists: async () => false, run: async () => { calls += 1; entered(); await barrier; clock += PUBLICATION_TICK_START_BUDGET_MS; return {}; } };
   const first = runPublicationTick({ repository, driver, now: () => clock });
   await started;
-  assert.equal((await webhookRequest()).status, 202);
   const competing = await runPublicationTick({ repository: createIdentityRepository(database), driver, now: () => NOW + 60_000 });
   assert.deepEqual(competing.results, [{ jobId, result: "skipped", transitions: 1, elapsedMs: 0 }]);
   release();
@@ -385,32 +329,20 @@ test("a cron overlapping webhook and another tick has one leased mutation and ke
   assert.equal(job.pending_attempts, 0);
 });
 
-test("scheduled Worker entry ignores disabled environments and advances only a preview-gated fake", async (t) => {
+// The scheduled Worker is gone (#546 5c); each write request finishes an
+// interrupted publication afterwards instead.
+test("after a write, interrupted publications advance only in r2 or a preview-gated fake", async (t) => {
   const { jobId } = await publicationFixture();
   t.mock.method(Date, "now", () => NOW + 10);
+  t.mock.method(console, "log", () => {});
+  t.mock.method(console, "error", () => {});
   for (const env of [{}, { ORGANIZER_PUBLICATION_MODE: "fake" }]) {
-    await scheduledWorker.scheduled({}, { ...env, DB: database });
+    await afterWrite({ ...env, DB: database }, "https://map.kotoban.top");
     assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "queued");
   }
-  t.mock.method(console, "log", () => {});
-  await scheduledWorker.scheduled({}, { DB: database, ORGANIZER_PUBLICATION_MODE: "fake", PREVIEW_MAIL_SINK: "d1" });
+  await afterWrite({ DB: database, ORGANIZER_PUBLICATION_MODE: "fake", PREVIEW_MAIL_SINK: "d1" }, "https://map.kotoban.top");
   const finalJob = await repository.getOrganizerPublicationJob(jobId);
   assert.equal(finalJob.status, "published", JSON.stringify({ step: finalJob.step, failureCode: finalJob.failure_code, error: finalJob.error }));
-  assert.equal(scheduledWorker.fetch, undefined);
-  // Explicit production rollout does not enable the preview Worker. Read the
-  // configuration with Wrangler's own reader rather than `JSON.parse`: the file
-  // is JSONC, so a comment added to it would otherwise fail this test with a
-  // parse error that says nothing about publication. Reading it the way a deploy
-  // does also resolves inheritance, so the preview assertion below covers the
-  // value the preview Worker would actually run with, not just the literal text.
-  process.env.WRANGLER_LOG ??= "error";
-  const { unstable_readConfig } = await import("wrangler");
-  const configFile = "workers/publication-dispatch/wrangler.jsonc";
-  const config = unstable_readConfig({ config: configFile });
-  const preview = unstable_readConfig({ config: configFile, env: "preview" });
-  assert.deepEqual(config.triggers.crons, [PUBLICATION_CRON]);
-  assert.equal(config.vars.ORGANIZER_PUBLICATION_MODE, "github");
-  assert.equal(preview.vars.ORGANIZER_PUBLICATION_MODE, "disabled");
 });
 
 test("Pages runtime exposes publication by mode and a fake retry finishes through real D1", async (t) => {
@@ -427,9 +359,10 @@ test("Pages runtime exposes publication by mode and a fake retry finishes throug
   const base = { DB: database, EVENT_ID: "sample", SESSION_SECRET: secret, HASH_PEPPER: "pepper",
     ADMIN_EMAILS: "admin@example.test", ASSETS: { fetch: async () => new Response(null, { status: 404 }) } };
   const path = `/api/organizer/events/${id}`;
-  for (const [mode, preview, expected] of [["disabled", true, false], ["fake", false, false], ["fake", true, true], ["github", false, true]]) {
-    const env = { ...base, ORGANIZER_PUBLICATION_MODE: mode, ...(preview ? { PREVIEW_MAIL_SINK: "d1" } : {}) };
-    const runtime = portalHandlers({ request: request(path), env });
+  const eventData = { get: async () => null, put: async () => ({}) };
+  for (const [mode, preview, expected] of [["disabled", true, false], ["fake", false, false], ["fake", true, true], ["r2", false, true]]) {
+    const env = { ...base, EVENT_DATA: eventData, ORGANIZER_PUBLICATION_MODE: mode, ...(preview ? { PREVIEW_MAIL_SINK: "d1" } : {}) };
+    const runtime = organizerFor({ request: request(path), env });
     const detail = await runtime.getOrganizerCandidate(request(path), id);
     assert.equal(detail.status, 200);
     assert.equal((await detail.json()).publicationAvailable, expected, `${mode}/${preview}`);
@@ -439,24 +372,7 @@ test("Pages runtime exposes publication by mode and a fake retry finishes throug
   assert.equal(await repository.updateOrganizerPublicationJob({ jobId, leaseToken: lease.token, expectedStep: step, nextStep: step, status: "failed", retryable: true, failureCode: "dispatch_failed", error: "Test dispatch failure", now: NOW + 9 }), true);
   await repository.releaseOrganizerPublicationLease(jobId, lease.token);
   const retryPath = `/api/organizer/publications/${jobId}/retry`;
-  const failed = await repository.getOrganizerPublicationJob(jobId);
-  const productionRuntime = portalHandlers({ request: request(retryPath, "POST"), env: { ...base, ORGANIZER_PUBLICATION_MODE: "github" } });
-  const enqueued = await productionRuntime.adminRetryOrganizerPublication(request(retryPath, "POST"), jobId);
-  assert.equal(enqueued.status, 200, await enqueued.clone().text());
-  const queued = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal(queued.status, "queued", "Pages never executes the retry with its own runtime or credentials");
-  for (const key of ["id", "snapshot_id", "approval_hash", "candidate_version", "step", "data_merge_sha", "main_merge_sha", "workflow_run_id"]) {
-    assert.equal(queued[key], failed[key], key);
-  }
-  assert.ok((await repository.listDueOrganizerPublicationJobs(NOW + 10)).some((job) => job.id === jobId));
-  // The independent executor owns the next attempt. A fake driver can still
-  // be used only by the explicitly isolated preview runtime below.
-  await createOrganizerPublicationExecutor(repository, {
-    eventExists: async () => false,
-    run: async () => { throw new PublicationFailure("dispatch_failed", "test", true); },
-  }, () => NOW + 10)(jobId);
-  assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "failed");
-  const runtime = portalHandlers({ request: request(retryPath, "POST"), env: { ...base, PREVIEW_MAIL_SINK: "d1", ORGANIZER_PUBLICATION_MODE: "fake" } });
+  const runtime = organizerFor({ request: request(retryPath, "POST"), env: { ...base, PREVIEW_MAIL_SINK: "d1", ORGANIZER_PUBLICATION_MODE: "fake" } });
   const response = await runtime.adminRetryOrganizerPublication(request(retryPath, "POST"), jobId);
   assert.equal(response.status, 200, await response.clone().text());
   assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "published");
@@ -464,15 +380,12 @@ test("Pages runtime exposes publication by mode and a fake retry finishes throug
   assert.equal((await repository.getOrganizerCandidate(id)).status, "published");
 });
 
-test("Pages github dispatch preserves its durable job for the Worker; fake remains preview-only", async () => {
+test("fake dispatch is preview-only and completes in the request", async () => {
   const { jobId } = await publicationFixture();
   const input = { repository, eventExists: async () => false, now: () => NOW + 10 };
   assert.equal(createPublicationDispatcher({ ...input, mode: "disabled", allowFake: true }), undefined);
   assert.equal(createPublicationDispatcher({ ...input, mode: "fake", allowFake: false }), undefined);
-  const queued = await repository.getOrganizerPublicationJob(jobId);
-  await createPublicationDispatcher({ ...input, mode: "github", allowFake: false })(jobId);
-  assert.deepEqual(await repository.getOrganizerPublicationJob(jobId), queued);
-  assert.ok((await repository.listDueOrganizerPublicationJobs(NOW + 10)).some((job) => job.id === jobId));
+  assert.equal(createPublicationDispatcher({ ...input, mode: "github", allowFake: false }), undefined, "the Git pipeline is gone");
   const dispatch = createPublicationDispatcher({ ...input, mode: "fake", allowFake: true });
   await dispatch(jobId);
   const job = await repository.getOrganizerPublicationJob(jobId);
@@ -480,6 +393,22 @@ test("Pages github dispatch preserves its durable job for the Worker; fake remai
   assert.equal(job.remote_write_intent_at, null, "fake makes no remote publication claim");
   await dispatch(jobId);
   assert.deepEqual(await repository.getOrganizerPublicationJob(jobId), job);
+});
+
+test("r2 dispatch runs within the request and fails closed without touching the published index", async () => {
+  const { jobId } = await publicationFixture("-r2");
+  const index = JSON.stringify({ schema: "event-index/1", registry: "r0", events: [] });
+  const writes = [];
+  const eventData = { get: async (key) => key === "index.json" ? { text: async () => index, etag: "e1" } : null,
+    put: async (key) => { writes.push(key); return {}; } };
+  assert.equal(createPublicationDispatcher({ repository, eventExists: async () => false, mode: "r2", allowFake: false }), undefined, "r2 needs the event data bucket");
+  await createPublicationDispatcher({ repository, eventExists: async () => false, mode: "r2", allowFake: false, eventData, now: () => NOW + 10 })(jobId);
+  const job = await repository.getOrganizerPublicationJob(jobId);
+  // This fixture's snapshot cannot become reader files; publication stops there.
+  assert.equal(job.status, "failed");
+  assert.equal(job.step, "preparing_data");
+  assert.equal(job.retryable, 0);
+  assert.deepEqual(writes, []);
 });
 
 test("expired publication lease records a retryable failure without losing its step", async () => {
@@ -593,26 +522,6 @@ test("publication resumes main and smoke failures without recreating successful 
     assert.equal(calls.filter((value) => value === step).length, step === "preparing_main" ? 2 : 1);
   }
   assert.equal((await repository.getLatestOrganizerPublicationJob(id)).id, jobId);
-});
-
-test("GitHub publication failures persist only safe executor error text", async () => {
-  const { jobId } = await publicationFixture();
-  const adapter = createGitHubPublicationAdapter({
-    owner: "dekkmarsvin",
-    installationToken: "INSTALLATION_TOKEN_SENTINEL",
-    fetch: async () => { throw new Error("PRIVATE_KEY_SENTINEL"); },
-  });
-  const execute = createOrganizerPublicationExecutor(repository, {
-    eventExists: async () => false,
-    run: async () => { await adapter.readRepositoryMetadata("tw_doujin_event-data"); return {}; },
-  }, () => NOW + 10);
-
-  await execute(jobId);
-  const job = await repository.getOrganizerPublicationJob(jobId);
-  assert.equal(job.status, "failed");
-  assert.equal(job.failure_code, "github_api_request");
-  assert.equal(job.error, "GitHub API request failed.");
-  assert.doesNotMatch(job.error, /PRIVATE_KEY_SENTINEL|INSTALLATION_TOKEN_SENTINEL/u);
 });
 
 test("a job nobody dispatched times out into the existing retry path", async () => {
@@ -860,82 +769,6 @@ test("an admin named as their own event's owner is granted it in the creating tr
   }), [{ candidateId: "candidate-invited", role: "owner" }]);
 });
 
-test("editor invitations cannot downgrade an active owner, including legacy invitations", async () => {
-  const candidateId = "owner-downgrade";
-  await repository.createOrganizerCandidate({ id: candidateId, tentativeName: "活動", ownerEmail: "owner@example.test",
-    createdByAccountId: adminId, draftJson: JSON.stringify(initialDraft), now: NOW });
-  await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 1 });
-  const grant = () => database.prepare("SELECT * FROM organizer_event_grants WHERE candidate_id = ?1 AND account_id = ?2")
-    .bind(candidateId, ownerId).first();
-  const original = await grant();
-  const invite = action => repository.manageOrganizerCollaborator({ candidateId, actorAccountId: ownerId,
-    email: "owner@example.test", role: "editor", action, now: NOW + 2 });
-  assert.deepEqual(await invite("invite"), { ok: false, reason: "already_owner" });
-  // A pending Editor invitation left by an older release must also be harmless.
-  await database.prepare(`INSERT INTO organizer_event_invitations
-    (id, candidate_id, email, role, invited_by, created_at) VALUES ('legacy-editor', ?1, 'owner@example.test', 'editor', ?2, ?3)`)
-    .bind(candidateId, ownerId, NOW + 3).run();
-  assert.deepEqual(await invite("resend"), { ok: false, reason: "already_owner" });
-  assert.deepEqual(await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 4 }), []);
-  assert.deepEqual(await grant(), original, "the active Owner grant and its provenance remain unchanged");
-  assert.equal((await database.prepare("SELECT accepted_at FROM organizer_event_invitations WHERE id = 'legacy-editor'").first()).accepted_at, NOW + 4);
-  assert.deepEqual(await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 5 }), []);
-  assert.deepEqual(await grant(), original);
-});
-
-test("editor invitation insertion rechecks the recipient's current owner grant", async () => {
-  const candidateId = "owner-promotion-race";
-  await repository.createOrganizerCandidate({ id: candidateId, tentativeName: "活動", ownerEmail: "owner@example.test",
-    createdByAccountId: adminId, draftJson: JSON.stringify(initialDraft), now: NOW });
-  await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 1 });
-  let armed = false;
-  const racing = createIdentityRepository(new Proxy(database, { get(target, key) {
-    if (key === "prepare") return sql => {
-      const statement = target.prepare(sql);
-      if (!armed || !sql.includes("INSERT INTO organizer_event_invitations")) return statement;
-      return { bind: (...args) => {
-        const bound = statement.bind(...args);
-        return { run: async () => {
-          armed = false;
-          await repository.manageOrganizerOwner({ candidateId, actorAccountId: ownerId, email: "editor@example.test", action: "invite", now: NOW + 2 });
-          await repository.acceptOrganizerInvitations({ accountId: editorId, email: "editor@example.test", now: NOW + 3 });
-          return bound.run();
-        } };
-      } };
-    };
-    const value = Reflect.get(target, key); return typeof value === "function" ? value.bind(target) : value;
-  } }));
-  await racing.ensureTables();
-  armed = true;
-  assert.deepEqual(await racing.manageOrganizerCollaborator({ candidateId, actorAccountId: ownerId,
-    email: "editor@example.test", role: "editor", action: "invite", now: NOW + 4 }), { ok: false, reason: "already_owner" });
-  assert.equal(armed, false);
-  assert.equal(await repository.organizerRole(candidateId, editorId), "owner");
-  assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM organizer_event_invitations WHERE candidate_id = ?1 AND role = 'editor'")
-    .bind(candidateId).first()).n, 0);
-});
-
-test("owner downgrade protection still permits Editor promotion and later re-invitation after revocation", async () => {
-  const candidateId = "owner-promotion";
-  await repository.createOrganizerCandidate({ id: candidateId, tentativeName: "活動", ownerEmail: "owner@example.test",
-    createdByAccountId: adminId, draftJson: JSON.stringify(initialDraft), now: NOW });
-  await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 1 });
-  const editorInvite = now => repository.manageOrganizerCollaborator({ candidateId, actorAccountId: ownerId,
-    email: "editor@example.test", role: "editor", action: "invite", now });
-  const ownerAction = (action, now) => repository.manageOrganizerOwner({ candidateId, actorAccountId: ownerId,
-    email: "editor@example.test", action, now });
-  const accept = now => repository.acceptOrganizerInvitations({ accountId: editorId, email: "editor@example.test", now });
-  assert.deepEqual(await editorInvite(NOW + 2), { ok: true, result: "invited" });
-  assert.deepEqual(await accept(NOW + 3), [{ candidateId, role: "editor" }]);
-  assert.deepEqual(await ownerAction("invite", NOW + 4), { ok: true, result: "invited" });
-  assert.deepEqual(await accept(NOW + 5), [{ candidateId, role: "owner" }]);
-  assert.equal(await repository.organizerRole(candidateId, editorId), "owner");
-  assert.deepEqual(await ownerAction("revoke", NOW + 6), { ok: true, result: "revoked" });
-  assert.deepEqual(await editorInvite(NOW + 7), { ok: true, result: "invited" });
-  assert.deepEqual(await accept(NOW + 8), [{ candidateId, role: "editor" }]);
-  assert.equal(await repository.organizerRole(candidateId, ownerId), "owner");
-});
-
 test("workspace progress is per candidate and resume location is per collaborator without candidate revisions", async () => {
   await repository.createOrganizerCandidate({
     id: "candidate-workspace",
@@ -946,9 +779,9 @@ test("workspace progress is per candidate and resume location is per collaborato
     now: NOW,
   });
   await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 1 });
-  await repository.manageOrganizerCollaborator({
+  await repository.manageOrganizerOwner({
     candidateId: "candidate-workspace", actorAccountId: ownerId,
-    email: "editor@example.test", role: "editor", action: "invite", now: NOW + 2,
+    email: "editor@example.test", action: "invite", now: NOW + 2,
   });
   await repository.acceptOrganizerInvitations({ accountId: editorId, email: "editor@example.test", now: NOW + 3 });
 
@@ -999,18 +832,18 @@ test("a revoked collaborator cannot change workspace navigation or complete onbo
     now: NOW,
   });
   await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 1 });
-  await repository.manageOrganizerCollaborator({
+  await repository.manageOrganizerOwner({
     candidateId: "candidate-revoked-workspace", actorAccountId: ownerId,
-    email: "editor@example.test", role: "editor", action: "invite", now: NOW + 2,
+    email: "editor@example.test", action: "invite", now: NOW + 2,
   });
   await repository.acceptOrganizerInvitations({ accountId: editorId, email: "editor@example.test", now: NOW + 3 });
   assert.equal(await repository.saveOrganizerWorkspacePreference({
     candidateId: "candidate-revoked-workspace", accountId: editorId,
     guidedTask: "days", lastSection: "event", now: NOW + 4,
   }), true);
-  await repository.manageOrganizerCollaborator({
+  await repository.manageOrganizerOwner({
     candidateId: "candidate-revoked-workspace", actorAccountId: ownerId,
-    email: "editor@example.test", role: "editor", action: "revoke", now: NOW + 5,
+    email: "editor@example.test", action: "revoke", now: NOW + 5,
   });
 
   assert.equal(await repository.saveOrganizerWorkspacePreference({
@@ -1092,11 +925,10 @@ test("optimistic versions refuse stale edits and editors cannot submit", async (
     now: NOW,
   });
   await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 1 });
-  assert.deepEqual(await repository.manageOrganizerCollaborator({
+  assert.deepEqual(await repository.manageOrganizerOwner({
     candidateId: "candidate-pf",
     actorAccountId: ownerId,
     email: "editor@example.test",
-    role: "editor",
     action: "invite",
     now: NOW + 2,
   }), { ok: true, result: "invited" });
@@ -1126,15 +958,9 @@ test("optimistic versions refuse stale edits and editors cannot submit", async (
     reason: "conflict",
     currentVersion: 2,
     updatedAt: NOW + 4,
-    updatedByRole: "editor",
+    updatedByRole: "owner",
   });
 
-  assert.deepEqual(await repository.submitOrganizerCandidate({
-    candidateId: "candidate-pf",
-    actorAccountId: editorId,
-    expectedVersion: 2,
-    now: NOW + 6,
-  }), { ok: false, reason: "forbidden" });
   assert.deepEqual(await repository.submitOrganizerCandidate({
     candidateId: "candidate-pf",
     actorAccountId: ownerId,
@@ -1157,19 +983,16 @@ test("a site admin without the Owner grant submits and manages collaborators, an
     eventId: "admin-acts", draftJson: JSON.stringify(complete), now: NOW + 1, admin: true,
   });
   assert.equal(await repository.organizerRole("candidate-admin-acts", adminId), null, "the admin holds no grant");
-  assert.deepEqual(await repository.manageOrganizerCollaborator({
-    candidateId: "candidate-admin-acts", actorAccountId: adminId, email: "editor@example.test",
-    role: "editor", action: "invite", now: NOW + 2,
+  assert.deepEqual(await repository.manageOrganizerOwner({
+    candidateId: "candidate-admin-acts", actorAccountId: adminId, email: "editor@example.test", action: "invite", now: NOW + 2,
   }), { ok: true, result: "invited" });
-  assert.deepEqual(await repository.manageOrganizerCollaborator({
-    candidateId: "candidate-admin-acts", actorAccountId: editorId, email: "other@example.test",
-    role: "editor", action: "invite", now: NOW + 2,
+  assert.deepEqual(await repository.manageOrganizerOwner({
+    candidateId: "candidate-admin-acts", actorAccountId: editorId, email: "other@example.test", action: "invite", now: NOW + 2,
   }), { ok: false, reason: "forbidden" }, "an account with neither grant nor roster place still cannot");
 
   await database.prepare("DELETE FROM admins WHERE email = 'admin@example.test'").run();
-  assert.deepEqual(await repository.manageOrganizerCollaborator({
-    candidateId: "candidate-admin-acts", actorAccountId: adminId, email: "editor@example.test",
-    role: "editor", action: "revoke", now: NOW + 3,
+  assert.deepEqual(await repository.manageOrganizerOwner({
+    candidateId: "candidate-admin-acts", actorAccountId: adminId, email: "editor@example.test", action: "revoke", now: NOW + 3,
   }), { ok: false, reason: "forbidden" });
   assert.deepEqual(await repository.submitOrganizerCandidate({
     candidateId: "candidate-admin-acts", actorAccountId: adminId, expectedVersion: 2, now: NOW + 3,
@@ -1286,9 +1109,8 @@ test("map revisions are scoped by candidate, period and venue-space while owner 
     createdByAccountId: adminId, draftJson: JSON.stringify(initialDraft), now: NOW,
   });
   await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 1 });
-  await repository.manageOrganizerCollaborator({
-    candidateId: "candidate-pf", actorAccountId: ownerId, email: "editor@example.test",
-    role: "editor", action: "invite", now: NOW + 2,
+  await repository.manageOrganizerOwner({
+    candidateId: "candidate-pf", actorAccountId: ownerId, email: "editor@example.test", action: "invite", now: NOW + 2,
   });
   await repository.acceptOrganizerInvitations({ accountId: editorId, email: "editor@example.test", now: NOW + 3 });
   const content = JSON.stringify({ schema: "map-contribution-draft/1", layout: {
@@ -1314,7 +1136,7 @@ test("map revisions are scoped by candidate, period and venue-space while owner 
   assert.equal((await repository.getOrganizerMapDraft("candidate-pf", "map-pf-day1")).current_revision, 2);
 });
 
-test("approved snapshots create one leased publication job and webhook deliveries are idempotent", async () => {
+test("approved snapshots create one leased publication job", async () => {
   await repository.createOrganizerCandidate({
     id: "candidate-pf", tentativeName: "PF", ownerEmail: "owner@example.test",
     createdByAccountId: adminId, draftJson: JSON.stringify(initialDraft), now: NOW,
@@ -1372,11 +1194,6 @@ test("approved snapshots create one leased publication job and webhook deliverie
   }), true);
   assert.equal((await repository.getOrganizerCandidate("candidate-pf")).status, "published");
 
-  const delivery = { deliveryId: "delivery-1", event: "check_run", payloadSha256: "b".repeat(64), now: NOW + 14 };
-  assert.equal(await repository.recordGitHubWebhookDelivery(delivery), "recorded");
-  assert.equal(await repository.completeGitHubWebhookDelivery({ deliveryId: delivery.deliveryId, processed: true, now: NOW + 15 }), true);
-  assert.equal(await repository.recordGitHubWebhookDelivery(delivery), "duplicate");
-  assert.equal(await repository.recordGitHubWebhookDelivery({ ...delivery, payloadSha256: "c".repeat(64) }), "mismatch");
 });
 
 /**
@@ -1398,10 +1215,6 @@ test("a candidate map never enters the public map-contribution pipeline", async 
     eventId: "ff47", draftJson: JSON.stringify({ ...initialDraft, event: { ...initialDraft.event, id: "ff47" } }),
     now: NOW + 2,
   }), { ok: true, version: 2 });
-  // The same person is also a map contributor for the published event.
-  assert.equal(await repository.manageMapContributor({
-    email: "owner@example.test", action: "grant", by: adminId, now: NOW + 3,
-  }), "granted");
 
   const content = JSON.stringify({ schema: "map-contribution-draft/1", layout: {
     version: 2, template: "TAIWAN_GENERIC_V1", width: 100, height: 80,
@@ -1414,29 +1227,26 @@ test("a candidate map never enters the public map-contribution pipeline", async 
   const stored = await database.prepare("SELECT event_id, candidate_id FROM map_drafts WHERE id = 'map-crossover'").first();
   assert.deepEqual(stored, { event_id: "ff47", candidate_id: "candidate-crossover" });
 
-  // Invisible to every contributor and admin read scoped by that event id.
-  assert.deepEqual(await repository.listMapDraftsForOwner(ownerId, "ff47"), []);
-  assert.deepEqual(await repository.listMapDraftsForAdmin("ff47"), []);
-  assert.equal(await repository.getMapDraft("map-crossover", "ff47"), null);
-  assert.equal(await repository.getMapDraft("map-crossover"), null);
-  assert.equal(await repository.getActiveApprovedMapDraft("ff47", "1", "hall-a"), null);
-
-  // And unwritable through them: the candidate's own API stays the only door.
-  assert.equal(await repository.writeMapDraftRevision({
-    draftId: "map-crossover", eventId: "ff47", ownerAccountId: ownerId,
-    expectedRevision: 1, contentJson: content, now: NOW + 5,
-  }), null);
-  assert.equal(await repository.submitMapDraft({
-    draftId: "map-crossover", eventId: "ff47", ownerAccountId: ownerId,
-    expectedRevision: 1, now: NOW + 6,
-  }), false);
-  assert.equal(await repository.addMapDraftFile({
-    id: "file-crossover", draftId: "map-crossover", eventId: "ff47", revision: 1,
-    objectKey: "raw/crossover", sourceUrl: "https://example.test/plan.png", documentDate: "2026-08-31",
-    pageNumber: null, sha256: "0".repeat(64), mime: "image/png", sizeBytes: 10,
-    width: 10, height: 10, pageCount: null, uploadedBy: ownerId, now: NOW + 7,
-  }), false);
   assert.equal((await repository.getOrganizerMapDraft("candidate-crossover", "map-crossover")).current_revision, 1);
+});
+
+// #546 5b review: an invitation that raced an acceptance can leave a member
+// with a pending invitation too. Removing them has to withdraw it, or their
+// next sign-in would accept it and restore access.
+test("removing a member also withdraws a pending invitation for them", async () => {
+  await repository.createOrganizerCandidate({
+    id: "candidate-race", tentativeName: "PF", ownerEmail: "owner@example.test",
+    createdByAccountId: adminId, draftJson: JSON.stringify(initialDraft), now: NOW,
+  });
+  await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 1 });
+  await repository.manageOrganizerOwner({ candidateId: "candidate-race", actorAccountId: ownerId, email: "editor@example.test", action: "invite", now: NOW + 2 });
+  await repository.acceptOrganizerInvitations({ accountId: editorId, email: "editor@example.test", now: NOW + 3 });
+  await database.prepare(`INSERT INTO organizer_event_invitations (id, candidate_id, email, role, invited_by, created_at)
+    VALUES ('raced', 'candidate-race', 'editor@example.test', 'owner', ?1, ?2)`).bind(ownerId, NOW + 4).run();
+  assert.deepEqual(await repository.manageOrganizerOwner({ candidateId: "candidate-race", actorAccountId: ownerId, email: "editor@example.test", action: "revoke", now: NOW + 5 }),
+    { ok: true, result: "revoked" });
+  assert.deepEqual(await repository.acceptOrganizerInvitations({ accountId: editorId, email: "editor@example.test", now: NOW + 6 }), []);
+  assert.equal(await repository.organizerRole("candidate-race", editorId), null);
 });
 
 test("revoking an editor who has not signed in yet withdraws the pending invitation", async () => {
@@ -1445,13 +1255,11 @@ test("revoking an editor who has not signed in yet withdraws the pending invitat
     createdByAccountId: adminId, draftJson: JSON.stringify(initialDraft), now: NOW,
   });
   await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 1 });
-  const invite = (now) => repository.manageOrganizerCollaborator({
-    candidateId: "candidate-revoke", actorAccountId: ownerId, email: "editor@example.test",
-    role: "editor", action: "invite", now,
+  const invite = (now) => repository.manageOrganizerOwner({
+    candidateId: "candidate-revoke", actorAccountId: ownerId, email: "editor@example.test", action: "invite", now,
   });
-  const revoke = (now) => repository.manageOrganizerCollaborator({
-    candidateId: "candidate-revoke", actorAccountId: ownerId, email: "editor@example.test",
-    role: "editor", action: "revoke", now,
+  const revoke = (now) => repository.manageOrganizerOwner({
+    candidateId: "candidate-revoke", actorAccountId: ownerId, email: "editor@example.test", action: "revoke", now,
   });
 
   // Never accepted: only an invitation row exists, and revoking it must report
@@ -1468,7 +1276,7 @@ test("revoking an editor who has not signed in yet withdraws the pending invitat
   // An accepted editor still revokes through the grant.
   assert.deepEqual(await invite(NOW + 6), { ok: true, result: "invited" });
   await repository.acceptOrganizerInvitations({ accountId: editorId, email: "editor@example.test", now: NOW + 7 });
-  assert.equal(await repository.organizerRole("candidate-revoke", editorId), "editor");
+  assert.equal(await repository.organizerRole("candidate-revoke", editorId), "owner");
   assert.deepEqual(await revoke(NOW + 8), { ok: true, result: "revoked" });
   assert.equal(await repository.organizerRole("candidate-revoke", editorId), null);
 });
@@ -1602,9 +1410,9 @@ test(`collaborator management rechecks a grantless admin's roster place at ${ope
     createdByAccountId: adminId, draftJson: JSON.stringify(initialDraft), now: NOW });
   await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 1 });
   const editor = { candidateId, actorAccountId: ownerId, role: "editor" };
-  await repository.manageOrganizerCollaborator({ ...editor, email: "editor@example.test", action: "invite", now: NOW + 2 });
+  await repository.manageOrganizerOwner({ ...editor, email: "editor@example.test", action: "invite", now: NOW + 2 });
   await repository.acceptOrganizerInvitations({ accountId: editorId, email: "editor@example.test", now: NOW + 3 });
-  await repository.manageOrganizerCollaborator({ ...editor, email: "pending@example.test", action: "invite", now: NOW + 4 });
+  await repository.manageOrganizerOwner({ ...editor, email: "pending@example.test", action: "invite", now: NOW + 4 });
   assert.equal(await repository.organizerRole(candidateId, adminId), null);
   const email = operation === "revoke-grant" ? "editor@example.test" : operation === "invite" ? "new@example.test" : "pending@example.test";
   let armed = false;
@@ -1621,7 +1429,8 @@ test(`collaborator management rechecks a grantless admin's roster place at ${ope
         const bound = statement.bind(...args);
         const shouldRevoke = armed && (operation === "resend"
           ? sql.includes("SELECT 1 AS allowed") && ++authorityReads === 2
-          : operation === "invite" && sql.includes("INSERT INTO organizer_event_invitations"));
+          : (operation === "invite" && sql.includes("INSERT INTO organizer_event_invitations"))
+            || (operation === "revoke-invitation" && sql.includes("UPDATE organizer_event_invitations")));
         if (!shouldRevoke) return bound;
         const method = operation === "resend" ? "first" : "run";
         return new Proxy(bound, { get(inner, member) {
@@ -1636,10 +1445,10 @@ test(`collaborator management rechecks a grantless admin's roster place at ${ope
   await racing.ensureTables();
   armed = true;
   const action = operation.startsWith("revoke") ? "revoke" : operation;
-  assert.deepEqual(await racing.manageOrganizerCollaborator({ candidateId, actorAccountId: adminId, email, role: "editor", action, now: NOW + 6 }),
+  assert.deepEqual(await racing.manageOrganizerOwner({ candidateId, actorAccountId: adminId, email, action, now: NOW + 6 }),
     { ok: false, reason: "forbidden" });
   assert.equal(armed, false, "the roster change must occur at the operation boundary");
-  assert.equal(await repository.organizerRole(candidateId, editorId), "editor");
+  assert.equal(await repository.organizerRole(candidateId, editorId), "owner");
   assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM organizer_event_invitations WHERE candidate_id = ?1 AND email = 'pending@example.test' AND revoked_at IS NULL")
     .bind(candidateId).first()).n, 1);
   assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM organizer_event_invitations WHERE candidate_id = ?1 AND email = 'new@example.test'")

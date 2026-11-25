@@ -4,8 +4,8 @@
   "pages_build_output_dir": "./dist",
   "compatibility_date": "2026-05-22",
   // HTML adds a per-response CSP nonce through the existing Functions middleware.
-  // public/_routes.json keeps catalog/map JSON, assets and fonts static; there
-  // is still no advanced-mode `main` entry (ADR-0074).
+  // Published event data is served from R2 through Functions (#546); assets and
+  // fonts stay static, and there is still no advanced-mode `main` entry.
   //
   // One binding, named `DB`, because that is what the Functions read. Leaving
   // the binding `wrangler d1 create` generates from the database name would
@@ -32,6 +32,10 @@
     {
       "binding": "MAP_CONTRIBUTIONS",
       "bucket_name": "tw-doujin-event-map-contributions"
+    },
+    {
+      "binding": "EVENT_DATA",
+      "bucket_name": "tw-doujin-event-data"
     }
   ],
   // The Turnstile sitekey the sign-in form renders, handed to the browser by
@@ -44,10 +48,13 @@
   // Top level is production only — `vars` is non-inheritable, which is why the
   // preview environment declares its own dummy pair below.
   "vars": {
-    "ORGANIZER_PUBLICATION_MODE": "github",
+    // Approval publishes straight to the event data bucket (#546).
+    "ORGANIZER_PUBLICATION_MODE": "r2",
     "EVENT_ID": "ff47",
     "TURNSTILE_SITEKEY": "0x4AAAAAAET9rAWIzjOckkSc",
-    "THUMBNAIL_PUBLIC_ORIGIN": "https://media.kotoban.top"
+    "THUMBNAIL_PUBLIC_ORIGIN": "https://media.kotoban.top",
+    // Links in notification mail. Preview omits it and uses the request's origin.
+    "NOTIFICATION_ORIGIN": "https://map.kotoban.top"
   },
   // Preview (every branch that is not the production branch) gets its own
   // database. Without this the top-level binding applies to preview too, so a
@@ -88,6 +95,7 @@
       "vars": {
         "EVENT_ID": "ff47",
         "PREVIEW_MAIL_SINK": "d1",
+        "ORGANIZER_PUBLICATION_MODE": "r2",
         "PREVIEW_TEST_RECIPIENTS": "preview-admin@example.test,preview-circle@example.test",
         "MAILGUN_DOMAIN": "verify.kotoban.top",
         "TURNSTILE_SITEKEY": "1x00000000000000000000AA",
@@ -102,6 +110,10 @@
         {
           "binding": "MAP_CONTRIBUTIONS",
           "bucket_name": "tw-doujin-event-map-contributions-preview"
+        },
+        {
+          "binding": "EVENT_DATA",
+          "bucket_name": "tw-doujin-event-data-preview"
         }
       ],
       "d1_databases": [

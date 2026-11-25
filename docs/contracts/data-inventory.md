@@ -1,17 +1,18 @@
 # 資料 inventory
 
-網站營運設定 `site_settings` 僅供管理者讀寫，保存目前申請模式、邀請 email 名單、通知起點及發布開關，保留至覆寫。操作者只保存 account ID，顯示時讀取目前帳號；不另存歷任管理者 email。單筆 `site_service_check` 只保存最近一次請求／完成時間及安全的來源／原因分類，下次檢查覆寫，沒有信件、憑證、provider 原始內容或診斷歷史；詳見[網站營運設定](./site-settings.md)。
+> **凍結（2026-11-21）**：描述舊後端，後端依 [#546](https://github.com/dekkmarsvin/tw_doujin_event/issues/546) 重寫後隨對應程式刪除。只用來理解現況，不作為新需求的依據。
+
+網站營運設定 `site_settings` 僅供管理者讀寫，保存目前申請模式、邀請 email 名單、通知起點及發布開關，保留至覆寫。操作者只保存 account ID，顯示時讀取目前帳號；不另存歷任管理者 email。單筆 `site_service_check` 只保存最近一次請求／完成時間及安全的來源／原因分類，下次檢查覆寫，沒有信件、憑證、provider 原始內容或診斷歷史；詳見[網站營運設定](./admin.md#網站營運設定)。
 
 本站實際持有哪些資料、寫在哪一欄、由什麼動作寫入、保存多久。**這份文件只記事實**；保存期限、排程與帳號刪除依序由 [ADR-0018](../adr/0018-retention-is-the-circles-choice.md)、[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)、[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)、[ADR-0027](../adr/0027-personal-data-lifecycle-and-account-deletion.md) 、[ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md) 與 [ADR-0054](../adr/0054-the-retention-choice-is-withdrawn-publish-or-delete.md) 決定。
 
-**schema 權威**：[`db/identity-runtime-schema.ts`](../../db/identity-runtime-schema.ts)（runtime tables 由 `identity-runtime-initializer.ts` 於資料庫首次使用或版本落後時建立；既有資料庫用同檔案的 additive column migrations 升級。表名與數量直接以該檔為準，不在本文複製一個會漂移的計數）
+**schema 權威**：[`migrations/`](../../migrations/)（#546 5d 起；下文提到的部分表已由 `0002_drop_retired_tables.sql` 刪除）
 **寫入端**：[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`functions/`](../../functions)
-**行為契約**：[社團自助控制面](./circle-portal.md)、[主辦單位工作區](./organizer-workspace.md)、[地圖貢獻控制面](./map-contributions.md)。權限、可編輯範圍、狀態機與來源邊界只寫在契約，本文不重複。
+**行為契約**：[社團自助控制面](./circle-portal.md)、[主辦單位工作區](./organizer-workspace.md)。權限、可編輯範圍、狀態機與來源邊界只寫在契約，本文不重複。
 **外部對照**：[性質相近的服務如何公開自己的資料收集](../research/data-collection-policies-in-comparable-projects.md)
 
 ## Runtime 初始化狀態
 
-`identity_runtime_state` 只有固定主鍵 `id = 1` 與已成功完成的 `version`，不含使用者、活動或請求資料。Schema、index 與固定場館／reference seed 全部成功後才寫入；正常公開讀取不寫此表。紀錄隨資料庫保留，帳號刪除與 retention purge 不清除此表。版本規則與回復方式見[部署 runbook](../runbooks/deployment.md#identity-runtime-初始化)。
 
 ## 三件要先知道的事
 
@@ -182,13 +183,15 @@
 
 ### `map_contributor_grants` — 地圖貢獻授權
 
+> 地圖貢獻者角色已在 #546 階段 5a 移除，這張表不再寫入，隨 D1 migration 刪除。
+
 `account_id`、授權者／時間，以及撤銷或停權者／時間。有效角色是撤銷與停權時間都為 NULL 的列；管理者可再次授權同一帳號。
 
 **目的**：讓管理者明確控制誰可整理主辦官方配置證據。**保存期**：帳號存在期間不設期限；刪除帳號時刪除資料列。授權、撤銷與停權另寫入 `audit_log`。
 
 ### `map_drafts` 與 `map_draft_revisions` — 私人地圖草稿
 
-`map_drafts` 保存活動、period、場地、owner、狀態、目前 revision、活動／決定時間、內部 transition token、清除 claim 與 `candidate_id`。**`candidate_id` 是兩條管線的分界**：非 NULL 的列屬於主辦單位工作區的候選活動，公開地圖貢獻流程的每一句 SQL 都要求它是 NULL（見[地圖貢獻控制面契約](./map-contributions.md)）。`map_draft_revisions` 保存每版私人 JSON、作者與建立時間。每次修改新增 revision；落後版本不得覆寫。partial unique index 保證同一 `event_id + period_key + venue_space_id` 最多一份仍有效的 `approved`／`exported`；核准替代稿時，同一 D1 batch 會先把明確指定的既有稿轉為 `withdrawn`。
+`map_drafts` 保存活動、period、場地、owner、狀態、目前 revision、活動／決定時間、內部 transition token、清除 claim 與 `candidate_id`。**`candidate_id` 是兩條管線的分界**：非 NULL 的列屬於主辦單位工作區的候選活動，公開地圖貢獻流程的每一句 SQL 都要求它是 NULL（見[地圖貢獻控制面契約](https://github.com/dekkmarsvin/tw_doujin_event/blob/ea03bcd723344296514201cb44c832dbdee3a05d/docs/contracts/map-contributions.md)）。`map_draft_revisions` 保存每版私人 JSON、作者與建立時間。每次修改新增 revision；落後版本不得覆寫。partial unique index 保證同一 `event_id + period_key + venue_space_id` 最多一份仍有效的 `approved`／`exported`；核准替代稿時，同一 D1 batch 會先把明確指定的既有稿轉為 `withdrawn`。
 
 **目的**：允許平行整理與可重現審閱，不直接改寫公開快照。**保存期**：`draft` 180 天無活動後整份刪除；`changes_requested` 180 天無活動後刪除 revisions 並將 owner 去識別化；`submitted` 審閱前不自動刪除。已審內容的後續處置見下兩類。
 
@@ -263,7 +266,7 @@ D1 保存草稿 revision、私人 object key、官方來源 URL、文件日期�
 
 ### 管理者待審通知資料
 
-`admin_notification_preferences` 保存管理者明文 email、收信開關、頻率、設定版本、啟用起點、下一摘要時間與交易 token；只接受本人經授權修改。預設及行為見[個人待審通知](./circle-portal.md#個人待審通知)。管理者移除或帳號刪除時清除。
+`admin_notification_preferences` 保存管理者明文 email、收信開關、頻率、設定版本、啟用起點、下一摘要時間與交易 token；只接受本人經授權修改。預設及行為見[個人待審通知](./admin.md#待審通知)。管理者移除或帳號刪除時清除。
 
 `review_notification_items` 保存收件者 email、待審類型、來源 ID、送審識別、活動代碼、建立時間、所屬摘要及完成狀態。`review_notification_batches` 保存每位收件者的摘要識別、lease、嘗試次數、重試時間、供應商訊息 ID 與去除敏感內容的錯誤分類。兩表不保存申請內文、證據或信件全文；完成／取消 30 天後由既有清除 Worker 刪除，pending 保留至受理或取消。管理者移除／帳號刪除立即清除收件者紀錄，停用則取消 pending。
 
@@ -300,7 +303,7 @@ pepper 是固定值，不輪替。`login_tokens` 的值隨該列在 24 小時內
 
 ## 閱讀端不在本表範圍
 
-一般參觀者不登入、不建立任何伺服器端紀錄。瀏覽器端只有兩個 `localStorage` 鍵：規劃資料（`event-map-planning-v1`，見[收藏與走訪規劃契約](./planning.md#儲存與版本)）與介面字級偏好。本站程式不設 cookie；分析只有上述由 Cloudflare 自動注入的 Web Analytics beacon。代管縮圖由本站圖片網域載入；社團選用外部網址時則由設定的圖片主機直接載入。
+一般參觀者不登入、不建立任何伺服器端紀錄。瀏覽器端只有兩個 `localStorage` 鍵：規劃資料（`event-map-planning-v1`，見[收藏與走訪規劃契約](./reader.md#儲存與版本)）與介面字級偏好。本站程式不設 cookie；分析只有上述由 Cloudflare 自動注入的 Web Analytics beacon。代管縮圖由本站圖片網域載入；社團選用外部網址時則由設定的圖片主機直接載入。
 
 規劃資料只留在使用者裝置，是刻意的隱私姿態，不是本站持有的資料——見 [ADR-0002](../adr/0002-planning-data-stays-on-device.md)。
 

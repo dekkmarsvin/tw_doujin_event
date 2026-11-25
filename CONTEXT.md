@@ -33,9 +33,9 @@
 
 **場館與場地屬於 pinned reference data，不寫死在程式或文件裡。** 活動定義只保存 stable ID assignment；production pipeline 先驗證 reference commit／hash／selection，parser 再驗證 staged records 與 assignments 後投影名稱。
 
-展區名稱由主辦的攤位名單帶入，同一場地內正規化後同名的列跨日共用一個展區；系統自動編配內部代碼，名稱保存於 `areaLabels`。重新匯入沿用既有同名展區的代碼；不同場地的新展區使用不同代碼。沒有分區的場地使用 `ALL`，FF47 自行宣告的 `ALL` 也維持原資料語意。Reader 顯示所選場地的全部攤位，不提供展區篩選；舊網址的 `area`／`hall` 只協助找場地。主辦的名單沒有真正的分區欄時，填進展區欄的往往是攤位代碼的排號字首——那是排，不是展區（見 [`docs/contracts/event-map.md`](docs/contracts/event-map.md)）。
+展區名稱由主辦的攤位名單帶入，同一場地內正規化後同名的列跨日共用一個展區；系統自動編配內部代碼，名稱保存於 `areaLabels`。重新匯入沿用既有同名展區的代碼；不同場地的新展區使用不同代碼。沒有分區的場地使用 `ALL`，FF47 自行宣告的 `ALL` 也維持原資料語意。Reader 顯示所選場地的全部攤位，不提供展區篩選；舊網址的 `area`／`hall` 只協助找場地。主辦的名單沒有真正的分區欄時，填進展區欄的往往是攤位代碼的排號字首——那是排，不是展區（見 [`docs/contracts/reader.md#活動地圖`](docs/contracts/reader.md#活動地圖)）。
 
-`area` 與 `venueSpaceId` 不得互換。FF47 的 `A` 與 `B` 是同一個爭艷館展區內的活動分區，**不是兩個場地**。公開切換與逐場地地圖的行為見[活動地圖契約](docs/contracts/event-map.md)。
+`area` 與 `venueSpaceId` 不得互換。FF47 的 `A` 與 `B` 是同一個爭艷館展區內的活動分區，**不是兩個場地**。公開切換與逐場地地圖的行為見[活動地圖契約](docs/contracts/reader.md#活動地圖)。
 
 **`Booth["hall"]` 的名字說謊**：它存的是展區代碼（`"A" | "B"`），不是場館。名稱是歷史遺留，且已寫進公開快照 schema，改名不是改一個識別字。**文件與新程式碼一律用「展區」／`area`。**
 
@@ -100,7 +100,7 @@
 ## 社團控制面
 
 **控制面**（control plane）
-與閱讀端分離的受驗證管理能力。社團自助與地圖貢獻使用 `/circle`，網站管理（認領審核、管理者名單、地圖審閱與候選匯出）使用 `/admin`，主辦活動建立與發布使用 `/organizer`；各自的角色與發布邊界見[社團契約](docs/contracts/circle-portal.md)、[地圖貢獻契約](docs/contracts/map-contributions.md)及[主辦契約](docs/contracts/organizer-workspace.md)。
+與閱讀端分離的受驗證管理能力。社團自助使用 `/circle`，網站管理（認領審核、管理者名單）使用 `/admin`，主辦活動建立與發布使用 `/organizer`；各自的角色與發布邊界見[社團契約](docs/contracts/circle-portal.md)與[主辦契約](docs/contracts/organizer-workspace.md)。
 
 **認領**（claim）
 社團證明自己是某個 `CircleRecord` 的擁有者的流程。email 只證明控制信箱，認領必須另有證據。
@@ -146,11 +146,8 @@ Organizer 在受驗證的 Web UI 準備活動、場館、攤位及地圖，經�
 **approval snapshot**
 送審當下固定下來的候選內容（草稿、匯入來源 metadata、全部攤位列與每份地圖），以其 SHA-256 作為核准對象。核准的是這個 hash，不是「目前的草稿」；之後的修改只能建立新 revision。
 
-**地圖貢獻者**（`map_contributor`）
-由管理者授權、使用既有 magic-link 帳號整理主辦官方配置證據的人。它不是社團認領附帶的角色，也不新增工作簿或第三方資料來源。
-
-**地圖貢獻草稿**（map draft）
-依活動、period 與場地分域的私人版本化內容。平行草稿可以共存，只有核准狀態互斥；核准後仍須匯出到 event-data repository 並通過其 diff、schema 與 review，才可能進入公開快照。
+**地圖草稿**（map draft）
+主辦工作區裡，候選活動每個活動日 × 場地一份的版本化地圖，隨候選送審。地圖貢獻者角色已依 #546 移除。
 
 ## 工程
 

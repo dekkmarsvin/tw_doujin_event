@@ -1,7 +1,7 @@
 import type { OrganizerApplicationInput } from "../app/organizer-applications";
 import { createEmptyOrganizerEventDraft, ORGANIZER_DEFAULT_SOURCE_LABEL } from "../app/organizer-event";
 import type { OrganizerCandidateInput } from "./identity-repository";
-import { enqueueReviewNotification } from "./review-notification-repository";
+import { enqueueReviewNotification } from "./account-notification-repository";
 import type { createAccountNotificationWriter } from "./account-notification-repository";
 
 type ApplicationRow = {

@@ -19,8 +19,8 @@
 
 ## 代價與邊界
 
-手機底部從兩個入口變為三個，每個仍有 44px 以上的按壓範圍。離開地圖時不保存面板開合；日期、場地與公開條件依 [URL 契約](../contracts/url-state.md)保留。
+手機底部從兩個入口變為三個，每個仍有 44px 以上的按壓範圍。離開地圖時不保存面板開合；日期、場地與公開條件依 [URL 契約](../contracts/reader.md#url-檢視狀態)保留。
 
 ## 契約
 
-[品書瀏覽](../contracts/catalog-browse.md)、[URL 狀態](../contracts/url-state.md)。
+[品書瀏覽](../contracts/reader.md#品書瀏覽)、[URL 狀態](../contracts/reader.md#url-檢視狀態)。

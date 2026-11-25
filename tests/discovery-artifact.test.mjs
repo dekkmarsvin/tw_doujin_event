@@ -1,15 +1,18 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import test from "node:test";
+import test, { after } from "node:test";
 import { parse } from "parse5";
+import { closePublishedSite, readPublished } from "./support/published-site.mjs";
 
-const read = (path) => readFile(new URL(`../dist/${path}`, import.meta.url), "utf8");
+const read = readPublished;
+after(closePublishedSite);
+const built = (path) => readFile(new URL(`../dist/${path}`, import.meta.url), "utf8");
+const stage = JSON.parse(await built("../.event-data-stage.json"));
 const nodes = (node) => [node, ...(node.childNodes ?? []).flatMap(nodes)];
 const attr = (node, name) => node.attrs?.find((attr) => attr.name === name)?.value;
 
 test("built sitemap covers exactly the staged introductions and grouped circles", async () => {
-  const stage = JSON.parse(await readFile(new URL("../.event-data-stage.json", import.meta.url), "utf8"));
   const expected = ["https://map.kotoban.top/"];
   for (const { eventId } of stage.events) {
     expected.push(`https://map.kotoban.top/events/${eventId}/`);
@@ -71,7 +74,6 @@ test("every built page shares the chosen 1200×630 brand card, kept out of the o
 
 // #364: each day's section lists exactly the circles the catalog places that day.
 test("multi-day event pages have one section per day matching the published catalog", async () => {
-  const stage = JSON.parse(await readFile(new URL("../.event-data-stage.json", import.meta.url), "utf8"));
   for (const { eventId } of stage.events) {
     const event = JSON.parse(await read(`data/events/${eventId}/event.json`));
     const catalog = JSON.parse(await read(`data/events/${eventId}/circles.json`));

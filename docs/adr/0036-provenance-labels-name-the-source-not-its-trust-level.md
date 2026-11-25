@@ -3,7 +3,7 @@
 - 狀態：已定案（2026-08-27）
 - 延伸：[ADR-0024](./0024-user-facing-copy-uses-minimum-necessary-disclosure.md)
 - 部分取代：[ADR-0030](./0030-organizer-category-catalog-circle-selected-value.md) 第 5 點關於畫面標示的部分
-- 相關文件：[DESIGN.md](../../DESIGN.md#copy)、[社團目錄契約](../contracts/circle-catalog.md)、[社團自助控制面契約](../contracts/circle-portal.md)、[隱私權與資料使用告知](../policy/privacy-notice.md)
+- 相關文件：[DESIGN.md](../../DESIGN.md#copy)、[社團目錄契約](../contracts/reader.md#社團目錄)、[社團自助控制面契約](../contracts/circle-portal.md)、[隱私權與資料使用告知](../policy/privacy-notice.md)
 
 ## 脈絡
 

@@ -1,27 +1,20 @@
-# 社團自助控制面契約
+# 社團入口契約
 
-**實作**：`app/admin/admin-panels.tsx`
-**實作**：`app/admin/use-admin-review-queue.ts`
-**實作**：`app/admin/admin-app.tsx`、`app/admin/admin-navigation.ts`、`app/admin/admin-overview.tsx`
-**實作**：`app/admin/admin-circle-panel.tsx`、`app/admin-circle-detail.ts`
-**實作**：`app/admin/admin-account-panel.tsx`、`app/admin-account-detail.ts`
 **實作**：[`app/booth-guide/`](../../app/booth-guide)
 **測試**：`tests/booth-guide.test.mjs`、`tests/browser/portal-circle-claim.mjs`
 
 參展社團在獨立入口 `/circle` 維護**自己的**公開資料。它**補充**而非取代人工快照發布：主辦提供的攤位與社團身分仍由版本控制的快照決定，社團填寫的內容是疊加其上、可即時撤下的補充層。
 
 **實作**：[`app/circle-portal/`](../../app/circle-portal)、[`app/public-header.ts`](../../app/public-header.ts)、[`app/workspace-nav.tsx`](../../app/workspace-nav.tsx)、[`app/circle-share.ts`](../../app/circle-share.ts)、[`app/circle-share-image.ts`](../../app/circle-share-image.ts)、[`app/catalog-image-prepare.ts`](../../app/catalog-image-prepare.ts)、[`app/hosted-thumbnails.ts`](../../app/hosted-thumbnails.ts)、[`app/admin/admin-review-queue.tsx`](../../app/admin/admin-review-queue.tsx)、[`app/admin/claim-batch.ts`](../../app/admin/claim-batch.ts)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`app/circle-overrides.ts`](../../app/circle-overrides.ts)、[`app/mail-letter.ts`](../../app/mail-letter.ts)、[`app/portal-crypto.ts`](../../app/portal-crypto.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`functions/`](../../functions)
-**測試**：`tests/organizer-claims.test.mjs`、`tests/circle-portal-route.test.mjs`、`tests/public-artifact.test.mjs`、`tests/admin-claim-batch.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/catalog-images.test.mjs`、`tests/circle-page-share-component.test.mjs`、`tests/circle-share-image.test.mjs`、`tests/identity-repository.test.mjs`、`tests/mail-letter.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs`
+**測試**：`tests/api-circle.test.mjs`、`tests/api-admin.test.mjs`、`tests/public-artifact.test.mjs`、`tests/admin-claim-batch.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/catalog-images.test.mjs`、`tests/circle-page-share-component.test.mjs`、`tests/circle-share-image.test.mjs`、`tests/identity-repository.test.mjs`、`tests/mail-letter.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs`
 **部署與密鑰**：[部署 runbook](../runbooks/deployment.md)
-**實作**：`app/admin/admin-notification-panel.tsx`、`app/review-notifications.ts`、`app/portal-mail.ts`、`app/review-notification-scheduler.ts`、`db/review-notification-repository.ts`、`functions/api/admin/notification-preferences.ts`、`workers/publication-dispatch`
-**測試**：`tests/review-notifications.test.mjs`、`tests/account-notifications.test.mjs`
-**實作**：`app/account-notifications.ts`、`app/account-notification-scheduler.ts`、`app/account-notification-settings.tsx`、`app/notification-navigation.ts`、`db/account-notification-repository.ts`、`functions/api/account/notification-preferences.ts`
+**通知**：`app/notification-delivery.ts`、`app/account-notifications.ts`、`app/review-notifications.ts`、`app/portal-mail.ts`、`app/account-notification-settings.tsx`、`db/account-notification-repository.ts`、`functions/_after-write.ts`；測試 `tests/notification-delivery.test.mjs`
 **實作**：`app/portal-sign-in.tsx`、`app/portal-sign-in.module.css`
-**測試**：[tests/browser/portal-claim-entry.mjs](../../tests/browser/portal-claim-entry.mjs)、[tests/browser/portal-organizer-entry.mjs](../../tests/browser/portal-organizer-entry.mjs)
+**測試**：[tests/browser/portal-circle-claim.mjs](../../tests/browser/portal-circle-claim.mjs)、[tests/browser/portal-organizer-entry.mjs](../../tests/browser/portal-organizer-entry.mjs)
 
 > **活動範圍**：`/circle` 是跨活動共用入口，寫入面與公開讀取面都支援多活動；帳號跨活動、認領逐活動，`env.EVENT_ID` 只是請求沒有指名活動時的預設值（[ADR-0043](../adr/0043-the-circle-portal-is-event-agnostic.md)）。
 
-> 本文的「登入」指本站帳號驗證，不是外部服務授權。資料匯入的不同入口見[資料匯入範圍](./data-import.md)。
+> 本文的「登入」指本站帳號驗證，不是外部服務授權。資料匯入的不同入口見[資料匯入範圍](./reader.md#資料匯入範圍)。
 
 ## 公開入口與 preview 邊界
 
@@ -33,7 +26,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 ## 入口分離
 
-- **社團登入與編輯只存在於 `/circle`，不與閱讀端共用 bundle。** 閱讀端不得出現登入介面、社團資料寫入 route 或 session cookie 名稱，由 `tests/public-artifact.test.mjs` 以建置產物比對把關。匿名行程分享另依[收藏與走訪規劃契約](./planning.md#分享行程)。
+- **社團登入與編輯只存在於 `/circle`，不與閱讀端共用 bundle。** 閱讀端不得出現登入介面、社團資料寫入 route 或 session cookie 名稱，由 `tests/public-artifact.test.mjs` 以建置產物比對把關。匿名行程分享另依[收藏與走訪規劃契約](./reader.md#分享行程)。
 - **入口分離指的是程式邊界，不是把 `/circle` 藏起來。** 公開閱讀端不嵌入登入表單、session 邏輯或資料寫入控制，但頁首固定提供前往控制面的「登入」入口；公開瀏覽、搜尋、收藏與行程仍不要求登入。活動選擇頁、活動介紹與社團公開頁的頁首「登入」分別連到 `/circle`、`/circle?event=<eventId>`、`/circle?event=<eventId>&circle=<circleId>`，值取自該頁的資料，由 `tests/public-artifact.test.mjs` 核對建置產物。控制面因此開在同一場、同一個社團，不落到瀏覽器上次維護或依日期選出的那場；沒有指名社團時不猜測。「使用說明」面板的「你是參展社團嗎？」段落與社團頁的「認領／管理資料」保留，仍是針對眼前活動或社團的入口；面板另有「你是活動主辦嗎？」段落，與前者一起連到 `/portal/` 介紹頁的對應段落。這些連結是純靜態 `href`：不查詢 session、不載入 Turnstile、不呼叫任何寫入 route，因此不牴觸上一條。
 - 一般參觀者公開瀏覽、不需登入。社團登入**不介入**參觀者的收藏與行程。
 - [主辦單位工作區](./organizer-workspace.md)的 `/organizer` 是第三個入口：與 `/circle` 共用帳號、session cookie 與本節的登入機制，各有獨立的工作區 bundle。公開頁不直接連到 `/organizer`，唯一例外是 `/portal/` 介紹頁主辦段落的「前往主辦工作區」；`/circle` 與 `/organizer` 在未登入與已登入時都提供「社團資料」「主辦工作區」導覽。導覽與登入畫面使用共用元件，不 import 任一工作區；登入表單以 audience 保留各自的目的地。未登入時不顯示活動選單或工作區內容，登入後才依既有目標與授權開啟。選擇工作區只是導覽，不是註冊另一種帳號，也不授予權限；同一個有效 session 進入另一邊時不再索取登入信。
@@ -57,10 +50,10 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 - 請求可帶 `audience`（`circle` 或 `organizer`，預設 `circle`）。它只決定信件內容與連結指向哪個入口，不改變驗證、額度或回應；`audience` 記在 `login_tokens` 上。
 - 請求可帶 `locale`（`zh-Hant`／`en`／`ja`），省略為繁中；明確無效值在真人驗證後、信箱檢查前回 `400 invalid_locale`。登入信與 HTML `lang` 使用該語言，連結三語都明確帶 `lang`，由伺服器設定，不採用 destination 的語言選擇值；匿名請求不寫帳號偏好。英日信件標明台灣時間，token／audience 與邀請接受規則不變。
 - **登入信同時寄出 HTML 與純文字兩份內容**，由 `app/mail-letter.ts` 產生。純文字版必須能單獨使用：登入連結自成一行，preview 收信槽只存這一份，E2E 從這裡取連結。有效時間以台灣時間寫出。
-- Pages 登入／邀請及排程摘要共用 `sendPortalMail` 收件路由：啟用 D1 preview 時，測試收信槽優先於人工白名單，其餘地址拒絕且不回退 production。只有此模式的人工白名單路徑可記錄最多 300 字的 Mailgun 拒絕本文；production 不記地址或本文，即使殘留白名單設定也不能開啟。
+- Pages 登入／邀請及通知信共用 `sendPortalMail` 收件路由：啟用 D1 preview 時，測試收信槽優先於人工白名單，其餘地址拒絕且不回退 production。只有此模式的人工白名單路徑可記錄最多 300 字的 Mailgun 拒絕本文；production 不記地址或本文，即使殘留白名單設定也不能開啟。
 - Pages 每次呼叫寄信 adapter 後輸出一筆 `portal.mail` 即時診斷，包含呼叫端指定的 `login_link`／`organizer_invitation` 用途，以及 `accepted`／`preview_sink`／`failed`／`unknown` 結果；只附真實 provider ID（缺失或收信槽為 null）或安全錯誤碼，不附地址、主旨、信件內容、登入連結、權杖或原始錯誤。這不是匿名 API 回傳值，也不是送達證明；不新增 webhook 或 D1 寄送歷史。Pages 串流不保存，追查方法見部署 runbook。
 - **Organizer 邀請是唯一由他人代為鑄造登入連結的路徑**，因此不走本節的 Turnstile，改由三道獨立預算限制，並以 `login_tokens.minted_by` 與本人自助索取分開計數。規則寫在[主辦單位工作區契約](./organizer-workspace.md#管理者建立與邀請)。
-- Turnstile 的 script 只在 `/circle` 與 `/organizer` 的登入表單載入，CSP 也只在這兩個控制面放寬，見[資料傳輸與離線契約](./delivery-and-offline.md#快取標頭)與 `public/_headers`。
+- Turnstile 的 script 只在 `/circle` 與 `/organizer` 的登入表單載入，CSP 也只在這兩個控制面放寬，見[資料傳輸與離線契約](./reader.md#快取標頭)與 `public/_headers`。
 
 ## 從地圖接續認領
 
@@ -85,11 +78,11 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 **驗證碼只存在於第二層。** 人工審核不發驗證碼：管理者看的是 `evidence_url` 與 `evidence_note`，判斷依據是人工核對。介面在人工審核路徑不得索取驗證碼。
 
-人工審核也可由持有所屬候選活動有效 Owner／Editor grant 的主辦人員，在 `/organizer` 活動內「社團管理」面板的社團認領完成。僅開放當前部署已公開活動的待審認領核准／婉拒，範圍與寫入授權重查依[主辦工作區契約](./organizer-workspace.md#活動內社團認領審核)；撤銷已通過的認領限網站管理者與該活動的 Owner，Editor 不可撤銷。主辦裁決與管理者裁決共用狀態與唯一擁有者約束，audit 分別記為 `claim.organizer_approve／reject／revoke` 與 `claim.admin_approve／reject／revoke`。
+人工審核也可由所屬候選活動的有效成員，在 `/organizer` 活動內「社團管理」面板的社團認領完成。僅開放當前部署已公開活動的待審認領核准／婉拒，範圍與寫入授權重查依[主辦工作區契約](./organizer-workspace.md#活動內社團認領審核)；活動成員與網站管理者都可撤銷已通過的認領。主辦裁決與管理者裁決共用狀態與唯一擁有者約束，audit 分別記為 `claim.organizer_approve／reject／revoke` 與 `claim.admin_approve／reject／revoke`。
 
 資料庫層保證**一個社團同時只有一位擁有者**。所有認領與撤下決策寫入稽核記錄。
 
-已公開活動的有效 Owner／Editor 也可撤下所屬活動的社團補充資料；名稱搜尋、選取與確認面板與 `/admin` 共用，寫入／R2 清除及清除失敗重試的活動隔離依[主辦工作區契約](./organizer-workspace.md#活動內撤下社團補充資料)。撤下不撤銷認領，也不修改主辦快照的攤位資料。`GET /api/admin/overrides?q=...&event=...` 為管理者的名稱搜尋，`POST` 沿用管理者撤下入口。
+已公開活動的有效成員也可撤下所屬活動的社團補充資料；名稱搜尋、選取與確認面板與 `/admin` 共用，寫入／R2 清除及清除失敗重試的活動隔離依[主辦工作區契約](./organizer-workspace.md#活動內撤下社團補充資料)。撤下不撤銷認領，也不修改主辦快照的攤位資料。`GET /api/admin/overrides?q=...&event=...` 為管理者的名稱搜尋，`POST` 沿用管理者撤下入口。
 
 **驗證碼遺失或過期由社團自己解決。** 明文驗證碼不保存（只留 hash），所以遺失後沒有可再顯示的東西；恢復路徑是**撤回自己仍在審核中的認領，再重新送出**，重送會發新的驗證碼。這條路不需要管理者介入。
 
@@ -116,7 +109,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 ## 可編輯範圍
 
-**可編輯，儲存後寫入公開 overlay**：販售資訊、本次品書（`catalogImages`，只能經本站上傳，見下方[媒體安全](#媒體安全)）、筆名、連結、縮圖、主辦分類目錄中的一項社團主題（`circleCategory`），以及作品／標籤類欄位（`creatorTypes`、`ageRatings`、`workTypes`、`referencedWorks`、`specialTags`）。已開啟頁面的更新時機與尚未達成的一分鐘可見性要求統一見[資料傳輸契約](./delivery-and-offline.md#更新可見性)。
+**可編輯，儲存後寫入公開 overlay**：販售資訊、本次品書（`catalogImages`，只能經本站上傳，見下方[媒體安全](#媒體安全)）、筆名、連結、縮圖、主辦分類目錄中的一項社團主題（`circleCategory`），以及作品／標籤類欄位（`creatorTypes`、`ageRatings`、`workTypes`、`referencedWorks`、`specialTags`）。已開啟頁面的更新時機與尚未達成的一分鐘可見性要求統一見[資料傳輸契約](./reader.md#更新可見性)。
 
 `creatorTypes` 與 `ageRatings`（可複選）、`workTypes`（選一項）也不是自由文字：選項是 `circle-overrides.ts` 的固定清單，公開端搜尋讀同一份。寫入驗證只檢查長度與筆數，不檢查是否屬於清單——同一個驗證函式也是讀取端守門，收緊會讓既有帶舊值的資料列整列從公開文件消失（[ADR-0051](../adr/0051-three-circle-facets-move-to-fixed-options.md)）。`referencedWorks` 與 `specialTags` 仍是自由填寫。
 
@@ -132,7 +125,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 ### 連結順序有語意
 
-連結清單的順序**就是顯示順序**。地圖側欄只顯示前六個，其餘留在完整詳細資訊（見[社團目錄契約](./circle-catalog.md#呈現契約)），因此編輯器必須讓作者**看得到並改得動**這個順序，並說明第六個之後的界線在哪。
+連結清單的順序**就是顯示順序**。地圖側欄只顯示前六個，其餘留在完整詳細資訊（見[社團目錄契約](./reader.md#呈現契約)），因此編輯器必須讓作者**看得到並改得動**這個順序，並說明第六個之後的界線在哪。
 
 側欄是參觀者決定「要不要去這攤」的地方；把排序交給作者，等於把那個決定的依據交給最清楚的人。
 
@@ -193,12 +186,12 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 ## 分享公開頁
 
-這個社團在這場活動已有儲存的內容時，編輯器在填寫欄底部、儲存動作前提供「分享公開頁」：「查看公開頁」開啟[社團介紹頁](./circle-catalog.md#社團介紹頁)，「複製宣傳文字與連結」複製一段現成的貼文，瀏覽器支援系統分享時另有「分享」。
+這個社團在這場活動已有儲存的內容時，編輯器在填寫欄底部、儲存動作前提供「分享公開頁」：「查看公開頁」開啟[社團介紹頁](./reader.md#社團介紹頁)，「複製宣傳文字與連結」複製一段現成的貼文，瀏覽器支援系統分享時另有「分享」。
 
 - 宣傳文字只由官方資料組成：社團名稱（官方配置目前的名稱，不是認領當時的快照）、活動名稱（有別稱時附第一個別稱）、每個可前往日期的攤位與場館，最後一行是社團頁的網址（以目前網站的網址為前綴）。只有一個場館時在全部日期之後寫一次；跨多個場館時每個日期寫出自己的場館與該場館的攤位。已取消或已移動的攤位不寫入。
 - 帳號、email、登入連結、認領狀態、控制面網址與未儲存的草稿都不是這段文字的輸入，因此不可能出現在裡面。
 - 攤位來自編輯器讀取的官方配置。配置尚未取得時不產生文字，「查看公開頁」「複製」與「分享」都停用並顯示正在準備；讀取失敗時說明無法取得攤位資料並提供「重新取得」，不以缺少日期與攤位的文字代替。
-- 社團介紹頁只為在該活動有配置的社團產生（見[資料傳輸與離線契約](./delivery-and-offline.md#公開搜尋介紹頁)）。已認領但本場沒有任何配置的社團沒有公開頁，不顯示分享區塊。
+- 社團介紹頁只為在該活動有配置的社團產生（見[資料傳輸與離線契約](./reader.md#公開搜尋介紹頁)）。已認領但本場沒有任何配置的社團沒有公開頁，不顯示分享區塊。
 - 文字同時顯示在唯讀文字框。剪貼簿拒絕時選取整段文字並請作者自行複製；關閉系統分享面板不算失敗，不顯示錯誤。
 - 「製作攤位導引圖」在社團管理內開啟製作器，帶入目前社團的有效日期／場地／攤位與已儲存的代表圖；多攤位時可切換。使用對應日期與場地的公開地圖，沒有地圖位置時不產出錯誤的攤位圖。
 - 導引圖預設 4:5，可手動畫路線、調整圖片與樣式，下載 PNG 或循環 GIF。QR Code 連到公開攤位，並避開路線、入口與排名。製作與下載在瀏覽器完成，不儲存導引圖設定、不更動社團草稿或公開分享縮圖；關閉後回到原編輯狀態。公開活動地圖的入口留待導航功能重作。
@@ -218,7 +211,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 `/circle` 服務這次部署的**每一個已發布活動**，不為第二場活動另建控制面，也不要求維護者改設定才能讓社團使用（[ADR-0043](../adr/0043-the-circle-portal-is-event-agnostic.md)）。
 
-**帳號跨活動，授權逐活動。** magic link、session 與帳號刪除都不帶活動；認領、補充資料、代管縮圖與地圖草稿都帶。
+**帳號跨活動，授權逐活動。** magic link、session 與帳號刪除都不帶活動；認領、補充資料與代管縮圖都帶。
 
 同一帳號亦可在 `/organizer` 申請建置活動，資格、送件開關、私人結果與管理審核依[主辦工作區契約](./organizer-workspace.md#活動申請)。Session 的 `canApplyForEvent`／`hasEventApplications` 只決定申請介面可達，不是 Organizer grant；未核准者不能讀寫任何候選。帳號刪除同步清除 pending 申請並去識別化已審核決策，不變更正式活動內容。
 
@@ -228,7 +221,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 - **新活動不需要改 `wrangler.jsonc`，也不需要為控制面另做一次部署**：活動隨自己的資料發布進同一次 build 就能被社團使用。
 - **ownership 一律用請求指名的活動判斷**：甲活動的認領對乙活動的寫入是 `403`；同一帳號可以在不同活動各自持有認領，兩者是不同的資料列，互不改寫。
 - **認領 id 也逐活動判斷**：認領 id 是全域的，請求的授權範圍不是。撤回、驗證與管理者裁決都先確認該筆認領屬於請求指名的活動，否則視為不存在（`404`）。少了這道檢查，甲活動的認領可以透過乙活動的控制面被撤銷，而被重建的是乙活動的公開文件——甲活動那份會留著已撤銷的內容。
-- **管理者裁決逐活動，讀取可跨活動**：`GET /api/admin/claims` 只列請求指名活動的認領；`GET /api/admin/review-queue` 回傳本部署服務活動的待審認領、待審獨立地圖草稿數，以及主辦工作區的待審申請與送審數。`pendingClaimCount` 為 served 活動待審總數，`claimCounts` 按活動提供完整件數，兩者不受列表上限影響；認領列表在相同 served 範圍套用最多 500 筆。指定 `event` 時只載入該活動的認領，範圍在 SQL 的 LIMIT 前套用，不從截斷的跨活動列表篩選；不服務或空值活動回 `404`，不退回預設。`claim` 精確目的地只在同時指定的活動內優先載入該 pending 認領，已審核或不屬該活動者不替換成另一筆。每筆認領帶 `eventId` 及 `circleClaimed`，同名社團不會跨活動混為一談；前端區分待審總數與已載入筆數。核准與婉拒仍逐筆走 `POST /api/admin/claims?event=<該筆認領的活動>`。
+- **管理者裁決逐活動，讀取可跨活動**：`GET /api/admin/claims` 只列請求指名活動的認領；`GET /api/admin/review-queue` 回傳本部署服務活動的待審認領，以及主辦工作區的待審申請與送審數。`pendingClaimCount` 為 served 活動待審總數，`claimCounts` 按活動提供完整件數，兩者不受列表上限影響；認領列表在相同 served 範圍套用最多 500 筆。指定 `event` 時只載入該活動的認領，範圍在 SQL 的 LIMIT 前套用，不從截斷的跨活動列表篩選；不服務或空值活動回 `404`，不退回預設。`claim` 精確目的地只在同時指定的活動內優先載入該 pending 認領，已審核或不屬該活動者不替換成另一筆。每筆認領帶 `eventId` 及 `circleClaimed`，同名社團不會跨活動混為一談；前端區分待審總數與已載入筆數。核准與婉拒仍逐筆走 `POST /api/admin/claims?event=<該筆認領的活動>`。
 - **活動後顯示與保存期限依該筆資料所屬活動計算**：階段與 `retention_expires_at` 都用該活動自己的 `eventEndsAt`。活動每次發布成功（含發布後更正改期），該活動 `purge` 列的 `retention_expires_at` 在同一個 batch 依新的 `eventEndsAt` 重算（[ADR-0068](../adr/0068-published-event-settings-are-declared-amendments.md)）。
 
 控制面前端把選到的活動記在瀏覽器與 URL 上，只是一個指標，不是授權：伺服器一律以請求指名的活動作答。只有一場已發布活動時不出現選擇器，直接進入。網址沒有指名、瀏覽器也沒有記錄時，`/circle` 與 `/admin` 裡需要單一活動的區塊依台北日期開在正在舉辦的活動，其次是最快開始的活動，全部結束時才是最近結束的那場；已發布清單的順序不決定控制面開在哪一場。
@@ -248,12 +241,6 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 **退出的語意是「不再公開」，不是「不再持有」。** `post_event_hidden` 只在活動結束後重建公開文件時把該列濾掉，資料列本身留著。補充資料的保存期限是另一個座標軸，見下一節。
 
-## 公開補充資料的資料庫初始化
-
-公開 overlay 先確認 D1 的 `identity_runtime_state` 已完成目前 runtime 版本。資料庫已準備好時，新 repository 只做版本讀取與文件 SELECT（2 次往返），同 instance 後續只讀文件（1 次）；正常穩態 GET／HEAD 不執行 DDL、管理者或通知 seed。成功回應的 `x-identity-runtime-version` 表示服務端已確認的程式所需版本，供部署 smoke 使用，不改變 ETag 或快取政策。
-
-缺少版本表／紀錄或版本較舊時，沿用單一 schema authority 的首次建表與 additive 升級。所有固定 seed 成功後才記錄完成；失敗可重試，其他 D1 錯誤不能當作未初始化或空資料。管理者 bootstrap、空 roster 復原與通知偏好保留在控制面初始化；公開讀取先到達不會停用後續管理初始化。活動結束後的 phase 重建與資料撤下規則維持原契約。
-
 ## 保存期限與清除
 
 **憑證到期就清掉，紀錄類保留不設期限**（[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)）。
@@ -265,7 +252,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 - **清除跑在獨立的排程 Worker 上**，每天一次，不掛在任何使用者請求的路徑上（[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)）。Cron Trigger 是 Workers 的功能，Pages 沒有；而機會性清除會讓保存期限變成流量的函數。部署方式見[部署 runbook](../runbooks/deployment.md#排程清除-worker)。
 - **`login_tokens` 依 `created_at` 清除，門檻必須大於一小時。** 那張表同時是每小時速率限制的計數來源（每信箱 5 次、每 IP 20 次），依「已使用」清除會把限制打穿。`purgeExpiredRecords` 對過短的視窗直接拋錯，不是靜靜照做。
-- **排程 Worker 不建立 schema。** 建表仍由 repository 首次使用時完成；找不到的表列進 `skipped` 並跳過。這條由測試把關：對一個沒有任何表的資料庫執行清除之後，那個資料庫仍然沒有任何表。
+- **排程 Worker 不建立 schema。** schema 由 `migrations/` 建立；找不到的表列進 `skipped` 並跳過。這條由測試把關：對一個沒有任何表的資料庫執行清除之後，那個資料庫仍然沒有任何表。
 - **每次執行寫一筆 `audit_log` 摘要**（`action = "retention.purged"`），包含什麼都沒刪的那些。這是「清除還在跑嗎」唯一的答案。
 - 刪掉憑證不會立即失去證據：`auth.link_requested` 會把 IP 雜湊與 email 的 keyed HMAC 寫進 `audit_log`；IP 在 90 天後清空，帳號刪除時可連結個資會塗銷。
 
@@ -288,53 +275,9 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 代管縮圖的 R2 位元組會在同一次排程作業中先行刪除；R2 delete 可重複執行，若後續 D1 失敗，下一次仍能安全重試。社團自助刪除、帳號刪除與管理者撤下使用同一個順序。
 
-## 管理者
-
-### 個人待審通知
-
-全站寄送由 [網站營運設定](./site-settings.md) 的 D1 開關控制，保留以下個人偏好與頻率；全站停止寄送不改寫個人設定。帳號通知的全站起點亦由 Admin 儲存時建立，producer 與 scheduler 不快取環境旗標。
-
-`/admin#review-notifications` 提供跨活動的個人收信開關與頻率；不隨活動切換卸載，不修改其他管理者，也不能指定其他收件地址。`GET`／`PUT /api/admin/notification-preferences` 只操作目前有效管理者，PUT 沿用 CSRF 檢查，以 `enabled`、`cadence`、`version` 儲存；過期版本回 409，介面保留輸入並提供重新載入。載入失敗不冒充已保存預設值，重新載入期間不能編輯或儲存。
-
-預設開啟且每 5 分鐘彙整，另可選每小時或每日台北時間 09:00。五分鐘與小時模式採整點時段；每日 09:00 即 UTC 01:00。每位管理者的設定、排程及寄送結果獨立。首次初始化、加入管理者、關閉後重開都不補寄舊件；關閉取消尚未寄出的項目與重試，只變更頻率則保留待寄工作並改排下一時段。已送到 Mailgun 的信件不能撤回。
-
-通知涵蓋活動申請、候選活動（含修訂）送審、人工待審認領及獨立地圖草稿；自動通過的認領與活動工作區內的地圖不另通知。送審與待寄項目寫入同一 D1 batch，按收件者及這次送審識別去重；退回或撤回後再送審是新一次通知，不能只按來源 ID 去重。通知不改變審核、核准快照或發布流程。
-
-摘要只包含類型、活動代碼、筆數及既有審核入口，不附申請內容、證據或登入憑證；由 `app/mail-letter.ts` 產生，同時寄出 HTML 與純文字，並附通知設定連結。寄出前核對同一次送審仍待審、收件者仍為管理者且帳號未停用／刪除。沒有新項目不寄，不重複催辦；排程恢復只寄積欠摘要，不逐時段補信。
-
-寄送由既有 publication-dispatch Worker 的獨立通知 tick 執行，每 tick 最多 10 位管理者。每人只允許一個 pending 摘要，以 120 秒 lease 防併發；新項目不混入正在重試的摘要。失敗由 1 分鐘倍增退避、上限 6 小時，成功記錄為 `accepted`（供應商受理，並非收件匣送達）。外部受理成功、D1 寫回前中斷可能重複寄送；不承諾 exactly-once。寄送總開關與 publication mode 分離，兩項工作互不阻斷。
-
-管理者移除／帳號刪除會清除其通知設定與寄送紀錄；帳號停用取消待寄工作。已完成及取消紀錄由既有 retention Worker 在 30 天後刪除，production 不保存信件全文。Preview 沿用獨立 D1 mail sink／sandbox 白名單，設定錯誤不得回退到 production 寄信。
-
-### 審核與帳號操作
-
-- `/admin` 依 `section` 分為管理總覽、活動管理、社團管理、帳號管理、資料管理與網站設定；只有目前分區的面板掛載。我的通知設定由帳號選單进入。活動管理預設完整活動總表，另有審核與發布、地圖投稿頁籤；社團管理預設認領審核，另一頁籤保留名稱查詢與撤下。帳號管理預設 Email 查詢，網站管理者名單另有唯一頁籤，停用位於已確認目標的帳號明細；資料管理保留場館／主辦／分類。候選活動的內容、Owner、核准並發布與重試仍在 `/organizer`，不重建 Admin 編輯器。
-- **`/admin` 預設跨活動管理總覽，不先選活動。** 四類待審摘要採既有 COUNT 及完整認領分組計數；待審內容復用候選列表的 submitted，單列連指定 candidate 的 review。認領與地圖活動摘要分別進該活動清單；過去活動的待辦保留。近期活動只列已知公開活動，標明「已公開活動」，連往完整活動總表；總表以 eventId 合併公開定義及候選版次，無 eventId 者分開，公開日期與工作日期分列。發布摘要列目前 queued／publishing 及未解決 failed 作業、edition、階段與更新時間，連指定候選 review；不可重試及暫停不代表問題已解決。`/circle` 的管理連結不帶活動。
-- 新路由以 `section`／`view`／`event` 及必要 `claim`／`draft` 精確識別；社團查詢保留 `q`，資料管理保留 `view`。舊 `section=references` 映射資料管理，`#overview`／`#admin`／`#map-review`／`#takedown`／`#accounts`／`#review-notifications` 保留目的地。無分區及錨點的 `/admin?event=X` 永久開該活動認領審核；精確新分區不被 legacy event 規則覆蓋。無效的指定活動或頁籤顯示無法開啟，不改開第一場。
-- 社團查詢先選一場已公開、此部署服務的活動，沿用名稱搜尋與上限；`event`／`q`／`circle` 可還原指定明細，返回列表保留搜尋。`GET /api/admin/circles/:circleId?event=...` 只供管理者讀取指定活動的官方基本資料、認領帳號／結果、目前保存的補充內容及可歸屬該活動／社團的必要處理紀錄；不放寬社團擁有者查詢，也不向公開 Reader 回傳私人認領資料。沒有可用公開頁或可信主辦工作區時不產生連結。
-- 明細的資料狀態與公開狀態分開。公開中沿用 `getPublicOverride` 的 `live`、同活動 `verified` 認領與活動結束後 `post_event_hidden` 判斷；內容仍存在但因無有效認領或活動後隱藏而不公開，不稱已刪除或管理者撤下。圖片處理另列無清除工作、已清除、待清除或無法確認，查核錯誤不冒充已清除；整筆查無、無補充內容與讀取失敗分開。
-- 從明細撤下直接使用已選定的活動／社團，原因與確認顯示對象及既有後果；沿用同一 `POST /api/admin/overrides`、條件寫入、稽核、通知與圖片清除。成功或原有部分圖片失敗後重讀明細及搜尋結果，已撤下但仍待清除可接續原撤下重試。活動／社團切換不沿用原因或非同步結果；Organizer 的 scoped 撤下面板維持原行為。
-- 明細的已通過認領列提供撤銷，確認顯示活動、帳號與後果（該帳號不能再編輯、補充資料立即停止公開、內容保留）；沿用 `POST /api/admin/claims` 的 `revoke`、稽核、通知與公開文件重建，完成後重讀明細與搜尋結果。
-- 帳號查詢使用 `GET /api/admin/accounts?email=...`，僅管理者可讀，Email 沿用既有正規化與驗證；查無回傳空帳號，不建立帳號、寄信或授權。帳號明細與讀取失敗分開，列出可使用／已停用／刪除中、網站管理者名單、地圖貢獻資格、目標帳號自己的有效候選 Owner／Editor grants 與社團認領。候選以 ID 區分，不按同名合併，版次沿用既有 edition；不把管理者自己的全站查阅資格當作被查者的 role。可用的認領明細／審核連結帶精確活動與對象，未服務活動保留紀錄而不產生壞連結，私人關聯不進 Reader。
-- 同一查詢欄可解析為 Email 時讀取該帳號，否則以社團名稱查帳號（正式社團名稱含「@」，例如 `Millet@半米紀行`，不能以「@」判斷）：`GET /api/admin/accounts?circle=...` 僅管理者可讀，將輸入以 `normalizeCircleName` 正規化後，對認領保存的社團名稱鍵做部分比對（`%`、`_` 照字面），跨活動、不分認領狀態，依申請時間新到舊列出最多 20 筆的社團名稱、活動、認領狀態與申請帳號 Email；不回傳佐證，不建立帳號或寄信。結果連到該 Email 的帳號明細，`q` 還原這次搜尋。
-- 帳號分區以 `view=search`／`view=admins` 切換；`email` 還原查詢目標，舊 `#accounts` 仍開管理者名單。帳號讀取、地圖貢獻資格與停用不受其他分區的活動篩選影響。地圖貢獻資格分為未授權、有效、已撤銷、已停權；操作仍使用既有 `grant`／`revoke`／`suspend`，重新授予沿用 grant，不恢復停用帳號。帳號限制依既有 handler，成功後重讀，失敗保留目標與結果。
-- 帳號明細底部停用顯示已確認 Email、既有影響與確認，不重填目標。仍在網站管理者名單內時先提示移出名單及提供該入口，伺服器判斷仍保留；管理者新增／移除集中於同一名單，不能移除自己或最後管理者等限制不變。不新增恢復、合併或任意帳號編輯。
-- 需要單一活動的區塊各自帶活動選單：地圖審閱切換時卸載前一場面板與表單；撤下表單的請求指名表單上選的活動，不跟隨地圖審閱。只有一場已發布活動時不顯示選單。管理者名單及帳號停用仍是帳號層操作。
-- **批次核准與婉拒先確認。** 確認視窗依活動分組列出社團；已有通過認領的社團、以及同一活動同一社團勾選了兩筆以上時，這些認領列為「略過」並留在清單，由管理者逐筆決定。送出時逐筆請求、逐筆回報：清單上方一行總結，未完成的原因標在該列；登入失效或失去管理者資格時停止送出其餘各筆。單筆核准與婉拒不經確認。
-- **核准與婉拒只作用於仍在待審的認領。** 清單可能落後其他管理者或其他分頁數秒；對已處理的認領送出核准或婉拒回 `409`「這筆認領已不在待審中。」，不改寫既有結果，也不重建公開文件。撤下擁有者只能用撤銷；撤銷只作用於仍為通過的認領，其他狀態回 `409`「這筆認領已不是通過狀態。」，不改寫待審、婉拒或已撤回的結果。
-- `/admin` 在登入到期或 API 回 401 時移除管理內容並提供 `/circle` 重新登入連結。未登入與重新登入入口以 `admin=1` 及 `adminSection`／`adminView`／`adminEvent`／`adminClaim`／`adminCircle`／`adminDraft`／`adminSearch`／`adminEmail`／`adminHash`／`adminNotifications` 白名單保留原目的地；與社團的 `event`／`circle` 選擇分開。沿用 circle audience、既有登入表單與 token 消耗，登入後只轉回同源固定 `/admin`，不接受任意 return URL。連結不授權，非管理者仍顯示「需要管理者權限」；逐 endpoint 的管理者、CSRF、活動與 revision 檢查不因入口搬移改變。
-- 待審總覽與認領清單在頁面可見時每 30 秒更新，切回頁面時立即更新，也可手動重新整理。更新失敗顯示錯誤，保留上次成功取得的清單；核准或婉拒送出期間不以背景更新替換清單。
-- **只有首次載入與手動按下才改變「重新整理」按鈕的狀態**；背景更新照常換清單、照常回報失敗，但不把按鈕切成「更新中…」。讀者沒有按過的控制項每 30 秒閃一次，只是動作，不是資訊。
-- 讀取待審認領、核准、婉拒與撤銷都要求同一個有效 session 與當下的管理者資格。到期時整個控制面回到登入畫面，不保留「已登入但管理功能因登入時間被鎖定」的第二種狀態。
-- **管理者名單存在資料庫（`admins` 表）而非設定值**，可在控制面即時增減、不需重新部署。
-- **不得移除自己，也不得移除最後一位管理者**——兩者都是把自己鎖在門外的最短路徑。
-- 名單為空時由 `ADMIN_EMAILS` 設定值重新灌入，作為救援路徑。上面兩道限制讓它不會正常地走到那一步。
-- 管理者位址比對前先做與儲存時相同的正規化。
-- 管理者可撤下任何社團補充資料，D1 公開文件立即移除；已開啟讀者頁面的可見性限制見[資料傳輸契約](./delivery-and-offline.md#更新可見性)，不能把伺服器撤下等同用戶端立即更新。
-
 ## 媒體安全
 
-社團提供的縮圖來源接受**任何 https 位址**：主機允許清單已於 [ADR-0052](../adr/0052-thumbnail-addresses-are-checked-as-images-not-hosts.md) 移除，寫入驗證只檢查協定，編輯器另外以瀏覽器實際載入該位址判斷它是不是圖片，載不出來就擋住送出。CSP `img-src` 因此是 `'self' data: https:`，見[資料傳輸與離線契約](./delivery-and-offline.md#快取標頭)。
+社團提供的縮圖來源接受**任何 https 位址**：主機允許清單已於 [ADR-0052](../adr/0052-thumbnail-addresses-are-checked-as-images-not-hosts.md) 移除，寫入驗證只檢查協定，編輯器另外以瀏覽器實際載入該位址判斷它是不是圖片，載不出來就擋住送出。CSP `img-src` 因此是 `'self' data: https:`，見[資料傳輸與離線契約](./reader.md#快取標頭)。
 
 依 [ADR-0012](../adr/0012-first-party-sources-only.md) 退場工作簿縮圖索引後，**社團自填是縮圖的唯一來源**。
 
@@ -388,18 +331,6 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 ## 帳號通知信
 
-社團認領自動／人工通過、拒絕、撤銷與管理者撤下補充資料，由成功的業務交易同時寫入 `account_notification_items`；個人偏好不能關閉必要服務通知，全站寄送則依 [網站營運設定](./site-settings.md)。寄前核對帳號與逐活動社團關係；本人撤權結果可保留最低必要歷史事實，停用／刪除仍取消。撤銷後不寄舊的通過信或內容摘要，同次撤銷不再寄撤下信。
+認領結果、本人補充資料的實質變更或撤下、活動申請結果、工作區成員異動、審核結果與發布結果，在發生時各寄一封信（#546），無法關閉；全站開關在[網站營運設定](./admin.md#網站營運設定)。相同內容的儲存不寄信。
 
-本人補充資料、品書、保存／公開設定實質變更納入摘要；相同內容儲存不入列，摘要只保存變更項目、不保存完整內容。每日台北 09:00 為新帳號預設，亦可每小時或關閉。關閉取消摘要及重試，重開只收新事件；改頻率保留項目、改排下個時段。
-
-`GET/PUT /api/account/notification-preferences` 僅依本人 session 操作，PUT 有同源 JSON 防護及 version CAS（首次讀取 version 0）；其他帳號及收件地址不可指定。`/circle`、`/organizer` 共用「通知設定」Modal，桌機浮動／手機全螢幕，關閉保留原編輯內容。唯一的頻率選單選定即儲存，不設儲存鍵或關閉確認；儲存失敗時選單回到已儲存的值並說明原因。載入失敗不假裝有預設已儲存；管理者待審設定維持獨立。
-
-GET 回 `{ cadence, version, locale }`，未選語言時 `locale: null`，讀取不建立偏好列。PUT 的 cadence／locale 可省略其一；省略 locale 保留原值，省略 cadence 僅更新語言、version 與 write_token，不改 enabled_since、待寄時間、重試、lease 或取消狀態。首次只改語言插入 daily／enabled_since 0，與無偏好列相同。明確帶 cadence 仍依原規則重排，即使頻率未變；版本衝突回 `409 version_conflict`，不覆寫。
-
-社團介面登入後，僅在通知語言為 null 時以當次介面語言初始化一次；網址帶入語言不覆寫既存偏好。明確切換介面／通知語言立即更新 UI，並以 `{ version, locale }` 儲存。失敗保留目前介面與草稿、顯示未儲存與重試；版本衝突先重新讀取，不自動重送舊選擇。頁首與通知設定共用版本，頻率操作只送 `{ version, cadence }`。主辦／管理者維持原本繁中與頻率設定。
-
-五類社團通知（claim.approved／claim.rejected／claim.revoked／circle.updated／circle.takendown）在寄送時讀取帳號語言，null 沿用繁中；目的地與通知設定連結都明確帶 lang。摘要的固定中文明細詞在呈現時翻譯，保留「、」合併與未知詞，既有佇列不改寫；名稱、活動代碼與人工內容保持原文。主辦／管理通知與邀請維持繁中。
-
-社團可達與共用帳號 API 的錯誤在原 error、HTTP status 與結構化欄位上增補 code／必要 params，依 `app/i18n/api-error.ts` 的 registry；主辦／管理專用錯誤不變。挑戰驗證找不到驗證碼仍回 HTTP 200 與 `verified: false`。
-
-信件只有本站的 event／circle 或通知設定目的地，不帶登入憑證、不授權；重新登入信攜帶白名單選擇參數，GET 不執行業務異動。不存在的活動不回退另一場活動。
+`GET/PUT /api/account/notification-preferences` 只保存通知語言：GET 回 `{ version, locale }`（未選時 `locale: null`），PUT 只接受 `{ version, locale }`，依本人 session、同源 JSON 防護與 version CAS。社團信件以這個語言寄出，其他信件為繁體中文。社團介面登入後，僅在通知語言為 null 時以當次介面語言初始化一次；網址帶入語言不覆寫既存偏好。`/circle`、`/organizer` 的「通知設定」說明通知內容，社團介面另可選通知語言。

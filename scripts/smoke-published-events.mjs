@@ -1,15 +1,8 @@
 import { verifyOverlayReadiness } from "./overlay-readiness.mjs";
-import { readFile } from "node:fs/promises";
-import { MAP_MANIFEST_FILE, eventUsesScopedMaps } from "./event-data-pin-utils.mjs";
+import { MAP_MANIFEST_FILE, eventUsesScopedMaps } from "../app/event-data-pin.mjs";
 
 const baseUrl = process.argv[2];
 if (!baseUrl) throw new Error("Usage: node scripts/smoke-published-events.mjs <base-url>");
-const expectedCommit = process.argv[3];
-const published = JSON.parse(await readFile(new URL("../data/published-events.json", import.meta.url), "utf8"));
-const eventIds = Array.isArray(published) ? published : published.events?.map((entry) => typeof entry === "string" ? entry : entry.eventId ?? entry.id);
-if (!Array.isArray(eventIds) || eventIds.length === 0 || eventIds.some((id) => typeof id !== "string")) {
-  throw new Error("Published event registry is invalid.");
-}
 
 async function read(path, label) {
   const response = await fetch(new URL(path, baseUrl), { redirect: "error", headers: { accept: "application/json" } });
@@ -26,10 +19,12 @@ async function readOptional(path, label) {
   return response;
 }
 
-if (expectedCommit) {
-  if (!/^[0-9a-f]{40}$/.test(expectedCommit)) throw new Error("Invalid expected deployment commit.");
-  const manifest = await (await read("/deployment-manifest.json", "deployment manifest")).json();
-  if (manifest.schema !== "publication-deployment/1" || manifest.commit !== expectedCommit) throw new Error("Pages serves a different deployment commit.");
+// The deployment serves whatever the event data bucket publishes (#546), so
+// the events to check come from the deployment itself.
+const index = await (await read("/data/events/index.json", "event index")).json();
+const eventIds = Array.isArray(index.events) ? index.events.map((entry) => entry.eventId) : [];
+if (index.schema !== "event-index/1" || eventIds.length === 0 || eventIds.some((id) => typeof id !== "string")) {
+  throw new Error("Published event index is invalid.");
 }
 
 for (const eventId of eventIds) {

@@ -6,10 +6,10 @@
 // hook name cannot tell you whether any of that works end to end; this is the
 // only place the whole chain is exercised as a person walks it.
 //
-// What deliberately stays in `tests/circle-portal-route.test.mjs`: enumeration
-// resistance, the order Turnstile and CSRF are checked, rejected writes not
-// reaching the database, claim ownership and uniqueness races, retention and
-// deletion, and every token invariant. A browser cannot prove a negative about
+// What deliberately stays in the API tests (`tests/api-*.test.mjs`): human
+// verification and the origin gate, rejected writes not reaching the database,
+// claim ownership and event scope, takedowns and deletion, and the session
+// invariants. A browser cannot prove a negative about
 // the database, and pretending otherwise would trade real coverage for a
 // slower, flakier version of it.
 //
@@ -492,15 +492,7 @@ try {
   const accountPanel = admin.locator('section[aria-labelledby="account-query-heading"]');
   await accountPanel.getByRole("heading", { name: CIRCLE, exact: true }).waitFor();
   await accountPanel.locator('section[aria-labelledby="account-claims-heading"]').getByText(CIRCLE_NAME, { exact: true }).waitFor();
-  const mapQualification = accountPanel.locator('section[aria-labelledby="account-map-heading"]');
-  await mapQualification.getByText("未授權", { exact: true }).waitFor();
-  const grantResponse = admin.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/admin/map-contributors");
-  await mapQualification.getByRole("button", { name: "授予", exact: true }).click();
-  assert.equal((await grantResponse).status(), 200);
-  await mapQualification.getByText("有效", { exact: true }).waitFor();
   await journey.capture(admin, "admin-account-real-detail");
-  await mapQualification.getByRole("button", { name: "撤銷", exact: true }).click();
-  await mapQualification.getByText("已撤銷", { exact: true }).waitFor();
   await verifyCircleLocales(journey, admin);
   await admin.close();
 

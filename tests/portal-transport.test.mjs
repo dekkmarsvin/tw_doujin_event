@@ -24,9 +24,9 @@ test("Admin precise routes take precedence over legacy event links while old des
   const route = path => readAdminRoute(new URL(path, "https://example.test"));
   assert.equal(route("/admin").section, "overview");
   assert.equal(route("/admin?event=sample").view, "claims");
-  assert.equal(route("/admin?section=events&view=maps&event=sample&draft=chosen").draft, "chosen");
-  assert.equal(route("/admin?section=events&view=maps&event=sample").view, "maps");
-  for (const [hash, section, view] of [["#overview", "overview", ""], ["#admin", "circles", "claims"], ["#map-review", "events", "maps"], ["#takedown", "circles", "search"], ["#accounts", "accounts", "admins"], ["#review-notifications", "notifications", ""]]) {
+  assert.equal(route("/admin?section=events&view=maps&event=sample").unavailable, true, "map submissions were removed");
+  assert.equal(route("/admin?event=sample#map-review").unavailable, true, "an old map review link does not open another queue");
+  for (const [hash, section, view] of [["#overview", "overview", ""], ["#admin", "circles", "claims"], ["#takedown", "circles", "search"], ["#accounts", "accounts", "admins"], ["#review-notifications", "overview", ""]]) {
     const result = route(`/admin?event=sample${hash}`);
     assert.deepEqual([result.section, result.view, result.event], [section, view, "sample"]);
   }
@@ -103,7 +103,6 @@ test("multipart is admitted only for the same-origin private upload routes", asy
   for (const [method, path] of [
     ["POST", "/api/circle/ff47-demo/thumbnail"],
     ["POST", "/api/circle/ff47-demo/catalog-image"],
-    ["POST", "/api/map-contributions/files"],
     ["PUT", "/api/organizer/events/candidate-a/maps/draft-a/background"],
   ]) {
     const accepted = await onRequest(context(request(method, path, {
@@ -176,7 +175,7 @@ beforeEach(() => {
 after(() => { globalThis.fetch = originalFetch; });
 
 test("admin login continuation keeps supported destinations separate from circle selectors", async () => {
-  const source = new URL(`${ORIGIN}/admin?section=circles&view=claims&event=sample-two&claim=claim-one&circle=c-900001&draft=map-one&q=北風&notifications=1#review-notifications`);
+  const source = new URL(`${ORIGIN}/admin?section=circles&view=claims&event=sample-two&claim=claim-one&circle=c-900001&q=北風&notifications=1#review-notifications`);
   const entry = new URL(adminLoginEntry(source), ORIGIN);
   assert.equal(entry.pathname, "/circle");
   assert.equal(entry.searchParams.has("event"), false);
@@ -198,7 +197,7 @@ test("continuation rejects caller URLs and retains legacy admin notifications an
   assert.equal(adminLoginDestination(new URLSearchParams("event=sample&circle=c-900001&returnTo=https://evil.test")), null);
   const selectors = notificationParameters({ admin: "1", adminEvent: "sample", adminClaim: "//evil.test", adminSection: "/other", adminHash: "javascript:alert(1)", returnTo: "https://evil.test", event: "wrong", circle: "wrong", login: "secret" }, "circle");
   assert.equal(adminLoginDestination(selectors), "/admin?event=sample");
-  for (const path of ["/admin?event=sample", "/admin#review-notifications", "/admin?section=events&view=list", "/admin?section=events&view=maps&event=sample&draft=map-one"]) {
+  for (const path of ["/admin?event=sample", "/admin#review-notifications", "/admin?section=events&view=list"]) {
     assert.equal(adminLoginDestination(new URL(adminLoginEntry(path), ORIGIN).searchParams), path);
   }
   assert.equal(notificationParameters({ admin: "1", adminSearch: "x".repeat(101) }, "circle").has("adminSearch"), false);
@@ -283,10 +282,7 @@ test("the client declares json on every mutation, including bodyless ones", asyn
   assert.equal(captured[0].init.headers["content-type"], "application/json");
 
   captured = [];
-  await client.uploadMapContributionEvidence({
-    draftId: "draft-a", revision: 1, file: new File(["x"], "map.png", { type: "image/png" }),
-    sourceUrl: "https://organizer.example/map", documentDate: "2026-08-25",
-  });
+  await client.uploadThumbnail("ff47-a", new File(["x"], "cover.png", { type: "image/png" }), "https://example.com/cover", "self");
   assert.equal(captured[0].init.headers["content-type"], undefined, "the browser must add the multipart boundary");
 });
 
@@ -365,15 +361,11 @@ test("a client that names no event is left alone, which is the single-event depl
   assert.equal(captured[0].path, "/api/claims");
 });
 
-test("admin account lookup and map grant actions remain global when another panel chose an event", async () => {
+test("admin account lookup remains global when another panel chose an event", async () => {
   try {
     client.setPortalEventId("ff48");
     await client.readAdminAccountDetail("target@example.com");
     assert.equal(captured[0].path, "/api/admin/accounts?email=target%40example.com");
-    captured = [];
-    await client.manageMapContributor("target@example.com", "grant");
-    assert.equal(captured[0].path, "/api/admin/map-contributors");
-    assert.deepEqual(JSON.parse(captured[0].init.body), { email: "target@example.com", action: "grant" });
   } finally { client.setPortalEventId(""); }
 });
 
@@ -384,28 +376,6 @@ test("the admin review queue uses its local event filter and never inherits anot
     assert.equal(captured[0].path, "/api/admin/review-queue");
     await client.listReviewQueue("ff48", "claim-later");
     assert.equal(captured[1].path, "/api/admin/review-queue?claim=claim-later&event=ff48");
-  } finally {
-    client.setPortalEventId("");
-  }
-});
-
-test("admin map requests use their explicit event while contributor callers retain the page scope", async () => {
-  try {
-    client.setPortalEventId("ff47");
-    for (const run of [
-      () => client.listAdminMapDrafts("ff48"),
-      () => client.readMapDraft("map-one", true, "ff48"),
-      () => client.postMapDraftComment({ draftId: "map-one", body: "請確認攤位位置。" }, "ff48"),
-      () => client.reviewMapContributionDraft({ draftId: "map-one", expectedRevision: 2, decision: "changes_requested" }, "ff48"),
-      () => client.exportMapContributionCandidate("map-one", 2, "ff48"),
-    ]) {
-      captured = [];
-      await run();
-      assert.equal(new URL(captured[0].path, ORIGIN).searchParams.get("event"), "ff48");
-    }
-    captured = [];
-    await client.readMapDraft("map-own");
-    assert.equal(captured[0].path, "/api/map-contributions/drafts/map-own?event=ff47");
   } finally {
     client.setPortalEventId("");
   }

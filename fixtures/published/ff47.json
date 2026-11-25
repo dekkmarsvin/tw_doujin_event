@@ -1,0 +1,11 @@
+{
+  "origin": "https://tw-catalog.pages.dev",
+  "eventId": "ff47",
+  "version": "20261122010518",
+  "files": {
+    "circles.json": "5f75470ba0fe3bf9d2dafbf95d60d8814a8fb2586975d12a680d2d666e87d0e1",
+    "event.json": "e25267996005ae465ce2008f044887194042cc7eb5b2bbd1df97e8aa5b809875",
+    "map.json": "d5f047a673baf166aba8e78794391523d305f340991eb608f74bc37de53f2a96",
+    "reference-records.json": "782090a6d89ddf5311c16c9e06324750c526abfc15bdfb65d3fd27f891c9ea34"
+  }
+}

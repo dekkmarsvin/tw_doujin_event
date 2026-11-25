@@ -1,26 +1,22 @@
 import { formatTaipeiTime, renderLetter } from "./mail-letter";
 import type { Locale } from "./i18n/locale";
 
-export type AccountNotificationCadence = "off" | "hourly" | "daily";
-export type AccountNotificationPreferences = { cadence: AccountNotificationCadence; version: number; locale: Locale | null };
+/** Only the account's language is kept: every notice is sent on its own (#546). */
+export type AccountNotificationPreferences = { version: number; locale: Locale | null };
 export type AccountNotificationKind = "claim.approved" | "claim.rejected" | "claim.revoked" |
   "circle.updated" | "circle.takendown" | "application.approved" | "application.rejected" |
   "member.granted" | "member.revoked" | "review.approved" | "review.changes_requested" |
-  "publication.published" | "publication.failed";
+  "publication.published" | "publication.failed" | "review.pending";
 export type NotificationItem = {
   id: string; account_id: string; kind: AccountNotificationKind; occurrence: string;
   event_id: string | null; circle_id: string | null; candidate_id: string | null;
-  source_id: string; audience: "claimant" | "circle_owner" | "applicant" | "owner" | "member";
+  source_id: string; audience: "claimant" | "circle_owner" | "applicant" | "owner" | "member" | "admin";
   name: string; version: number | null; detail: string; occurred_at: number;
   /** Workspace edition, read at delivery; version is the save counter for staleness. */
   edition?: number | null;
 };
 
-export function isAccountNotificationCadence(value: unknown): value is AccountNotificationCadence {
-  return value === "off" || value === "hourly" || value === "daily";
-}
-
-const descriptions: Record<AccountNotificationKind, { title: string; text: string; action: string }> = {
+const descriptions: Record<Exclude<AccountNotificationKind, "review.pending">, { title: string; text: string; action: string }> = {
   "claim.approved": { title: "認領通過", text: "你的認領已通過。請登入查看目前狀態及可管理的補充資料。", action: "管理社團資料" },
   "claim.rejected": { title: "認領未通過", text: "這次認領未通過。", action: "查看認領狀態" },
   "claim.revoked": { title: "認領已撤銷", text: "你的認領曾於以下時間被撤銷。撤銷會移除該次認領的管理權限，相關補充資料將停止公開。請登入查看目前認領狀態；如需協助，請聯絡網站管理者。", action: "查看認領狀態" },
@@ -82,6 +78,7 @@ export function accountNotificationLetter(origin: string, items: NotificationIte
   const circle = first.kind.startsWith("claim.") || first.kind.startsWith("circle.");
   const locale = circle ? recipientLocale : "zh-Hant";
   const digest = first.kind === "circle.updated";
+  if (first.kind === "review.pending") throw new Error("Review notices use reviewDigest.");
   const description = locale === "zh-Hant" ? descriptions[first.kind] : circleDescriptions[locale][first.kind as CircleNotificationKind];
   const copy = {
     "zh-Hant": { circle: "社團", event: "活動", eventId: "活動代碼", time: "異動時間", settings: "通知設定", details: "補充資料", category: "審核與權限通知", digestCategory: "內容更新摘要", digestTitle: "社團補充資料更新", preheader: "查看這段時間的社團補充資料更新。", zone: "" },

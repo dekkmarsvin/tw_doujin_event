@@ -11,10 +11,9 @@ import { resolveCandidateAuthoringScope } from "./event-authoring-scope";
 import { eventMapArtifactPath } from "./event-map-manifest";
 import { verifyReferenceFiles, selectEventReferenceRecords, isVenueAddressCompletion } from "./reference-selection.mjs";
 import { parseOfficialBoothData } from "./official-booth-data.mjs";
-import { parseCircleIdentityGrouping, planCircleIdentityRegistryUpdate } from "./circle-identity-registry.mjs";
-import { parseEventDataPin, EVENT_DATA_REPOSITORY } from "./event-data-pin.mjs";
-import { parsePublishedEvents } from "./published-events.mjs";
-import { assemblePublicationStage, type PublicationBundleFile } from "./publication-bundle-assembler";
+import { parseCircleIdentityGrouping } from "./circle-identity-registry.mjs";
+import { parseEventDataPin } from "./event-data-pin.mjs";
+import { assemblePublicationFiles, type PublicationBundleFile } from "./publication-bundle-assembler";
 import { PublicationFailure } from "./organizer-publication";
 import { sha256Hex } from "./portal-crypto";
 import { planOrganizerAmendment } from "./organizer-amendment.mjs";
@@ -31,9 +30,7 @@ type Snapshot = {
   maps: Array<{ id: string; periodKey: string; venueSpaceId: string; mapRevision: number; content: unknown }>;
 };
 const COMMIT = /^[0-9a-f]{40}$/;
-const serialize = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
 function fail(message: string, code = "artifact_invalid"): never { throw new PublicationFailure(code, message, false); }
-function requireCommit(commit: string) { if (!COMMIT.test(commit)) fail("產檔需要完整的固定 commit SHA。"); }
 function semanticJson(text: string): string {
   const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical)
     : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key, child]) => [key, canonical(child)])) : value;
@@ -52,15 +49,6 @@ function referencesMatchBaseline(baseline: OrganizerReferenceSnapshot, current: 
     try { return before.path === file.path && isVenueAddressCompletion(JSON.parse(before.content), JSON.parse(file.content), file.path); }
     catch { return false; }
   });
-}
-
-/** A matching event id alone never authorizes an update. Callers must observe
- * this pin at the fixed main base (and again before the eventual merge). */
-export function assertAmendmentPublishedBaseline(baseline: OrganizerAmendmentBaseline, publishedEventsJson: string, existingPinJson: string | null) {
-  try {
-    if (!parsePublishedEvents(JSON.parse(publishedEventsJson)).includes(baseline.event.id) || existingPinJson === null
-      || !sameJson(parseEventDataPin(JSON.parse(existingPinJson)), baseline.pin)) throw new Error("changed");
-  } catch { fail("已發布活動已變更或原 pin 不符，請從最新公開版本重新開始修正。", "amendment_baseline_changed"); }
 }
 
 /** Key order is part of the approved bytes: an older snapshot must rebuild the
@@ -130,11 +118,13 @@ export async function buildApprovedPublicationArtifacts(source: ApprovedArtifact
       const approved = snapshot.amendment!;
       if (typeof approved.baselineJson !== "string" || await sha256Hex(approved.baselineJson) !== approved.baselineSha256) fail("修正基準的核准 hash 不符。", "snapshot_mismatch");
       const baseline = JSON.parse(approved.baselineJson) as OrganizerAmendmentBaseline;
-      if (!["organizer-amendment-baseline/1", "organizer-amendment-baseline/2"].includes(baseline.schema) || !Array.isArray(approved.changes)
+      // `/3` is pinned to an event data bucket version (#546); older baselines to Git commits and a pin.
+      const gitPinned = baseline.schema !== "organizer-amendment-baseline/3";
+      if (!["organizer-amendment-baseline/1", "organizer-amendment-baseline/2", "organizer-amendment-baseline/3"].includes(baseline.schema) || !Array.isArray(approved.changes)
         || baseline.source.candidateId === snapshot.candidateId || !Number.isSafeInteger(baseline.source.candidateVersion) || baseline.source.candidateVersion < 1
-        || !COMMIT.test(baseline.source.dataCommit) || !COMMIT.test(baseline.source.mainCommit) || !COMMIT.test(baseline.mainCommit)
-        || baseline.event.id !== snapshot.eventId || baseline.pin.eventId !== snapshot.eventId
-        || !sameJson(parseEventDataPin(baseline.pin), baseline.pin)
+        || (gitPinned && (!COMMIT.test(baseline.source.dataCommit) || !COMMIT.test(baseline.source.mainCommit) || !COMMIT.test(baseline.mainCommit ?? "")
+          || baseline.pin?.eventId !== snapshot.eventId || !sameJson(parseEventDataPin(baseline.pin), baseline.pin)))
+        || baseline.event.id !== snapshot.eventId
         || !sameJson(snapshotDraft, baseline.draft) || !referencesMatchBaseline(baseline.references, snapshot.references)) fail("修正 snapshot 與固定基準的活動、reference 或版本不符。", "snapshot_mismatch");
       try { await assertBaselineProvenance(baseline); }
       catch { fail("修正 snapshot 的公開基準來源不符。", "snapshot_mismatch"); }
@@ -215,103 +205,9 @@ export async function buildApprovedPublicationArtifacts(source: ApprovedArtifact
     inputs.push({ path: prefix + "event.json", content: event }, { path: prefix + "official-booths.json", content: official },
       { path: prefix + "circle-identity-groups.json", content: grouping }, { path: prefix + "reference-selection.json", content: snapshot.references.selection },
       { path: prefix + "NOTICE", content: `${organizerSourceLabel(draft.officialSource)}\n${officialUrl}\n` });
-    return { snapshot, operation, amendment, draft, event, official, grouping, files: await assemblePublicationStage("data", snapshot.eventId, inputs) };
+    return { snapshot, operation, amendment, draft, event, official, grouping, files: await assemblePublicationFiles(snapshot.eventId, inputs) };
   } catch (error) {
     if (error instanceof PublicationFailure) throw error;
     return fail(`核准資料無法產檔：${error instanceof Error ? error.message : "資料格式無效"}`);
-  }
-}
-
-/** Null is an observed absence at baseCommit; an omitted path is not evidence. */
-export async function buildPublicationDataStage(source: ApprovedArtifactSource, base: {
-  commit: string; eventDirectoryExists: boolean; references: ReadonlyMap<string, string | null>;
-  /** Complete observed event-directory leaves at commit, required for AMEND. */
-  eventFiles?: ReadonlyMap<string, string>;
-}) {
-  requireCommit(base.commit);
-  const artifacts = await buildApprovedPublicationArtifacts(source);
-  if (artifacts.amendment) {
-    const prefix = `events/${artifacts.snapshot.eventId}/`;
-    const pinned = artifacts.amendment.baseline.pin.files.filter((file: { path: string }) => file.path.startsWith(prefix));
-    const expected = new Set([...pinned.map((file: { path: string }) => file.path), prefix + "NOTICE"]);
-    if (base.eventDirectoryExists !== true || !base.eventFiles || base.eventFiles.size !== expected.size
-      || [...base.eventFiles.keys()].some((path) => !expected.has(path))) fail("尚未完整核對原活動的固定資料基準。", "amendment_baseline_changed");
-    for (const file of pinned) {
-      const text = base.eventFiles.get(file.path);
-      if (typeof text !== "string" || await sha256Hex(text) !== file.sha256) fail(`原活動資料已變更：${file.path}`, "amendment_baseline_changed");
-    }
-    const notice = artifacts.files.find((file) => file.path === prefix + "NOTICE")!;
-    if (base.eventFiles.get(notice.path) !== notice.text) fail("原活動來源說明已變更。", "amendment_baseline_changed");
-    if (artifacts.files.filter((file) => file.path.startsWith(prefix)).some((file) => !expected.has(file.path))) fail("修正不能改變基準活動的檔案範圍。");
-  } else if (base.eventDirectoryExists !== false) fail("活動資料目錄已存在，首次發布不能覆寫。", "event_id_collision");
-  const files: PublicationBundleFile[] = [];
-  const allFiles: PublicationBundleFile[] = [];
-  for (const file of artifacts.files) {
-    if (!file.path.startsWith("references/")) { files.push(file); allFiles.push(file); continue; }
-    if (!base.references.has(file.path)) fail(`尚未核對固定 base 的 reference：${file.path}`);
-    const existing = base.references.get(file.path);
-    if (existing === null) { files.push(file); allFiles.push(file); continue; }
-    let same = false;
-    let completes = false;
-    try {
-      if (typeof existing === "string") {
-        same = semanticJson(existing) === semanticJson(file.text);
-        completes = !same && isVenueAddressCompletion(JSON.parse(existing), JSON.parse(file.text), file.path);
-      }
-    } catch { /* unreadable bytes are a conflict like any other difference */ }
-    // An existing record is kept as it is. The one change it takes is a venue
-    // gaining its address (#395); pins taken before still read the old bytes
-    // at their own commit, so no published event changes until it is corrected.
-    if (completes) { files.push(file); allFiles.push(file); continue; }
-    if (!same) fail(`既有 reference 不同或損壞，拒絕覆寫：${file.path}`, "reference_conflict");
-    allFiles.push({ path: file.path, text: existing!, sha256: await sha256Hex(existing!) });
-  }
-  return { eventId: artifacts.snapshot.eventId, baseCommit: base.commit, files, allFiles };
-}
-
-export async function buildPublicationMainStage(source: ApprovedArtifactSource, input: {
-  dataCommit: string; dataFiles: ReadonlyMap<string, string>; mainCommit: string;
-  publishedEventsJson: string; existingPinJson: string | null; allocationsJson: string; evidenceJson: string;
-}) {
-  try {
-  requireCommit(input.dataCommit); requireCommit(input.mainCommit);
-  const artifacts = await buildApprovedPublicationArtifacts(source);
-  const { snapshot, official, grouping } = artifacts;
-  const published = parsePublishedEvents(JSON.parse(input.publishedEventsJson));
-  if (artifacts.amendment) assertAmendmentPublishedBaseline(artifacts.amendment.baseline, input.publishedEventsJson, input.existingPinJson);
-  else if (published.includes(snapshot.eventId) || input.existingPinJson !== null) fail("活動已存在公開清單或 pin，首次發布不能覆寫。", "event_id_collision");
-  const files = [];
-  for (const expected of artifacts.files) {
-    const actual = input.dataFiles.get(expected.path);
-    if (typeof actual !== "string") fail(`data 合併結果缺少：${expected.path}`);
-    const same = expected.path.startsWith("references/") ? semanticJson(actual!) === semanticJson(expected.text) : actual === expected.text;
-    if (!same) fail(`data 合併內容與核准 snapshot 不符：${expected.path}`, "snapshot_mismatch");
-    if (!expected.path.endsWith("/NOTICE")) files.push({ path: expected.path, sha256: await sha256Hex(actual!) });
-  }
-  const pin = parseEventDataPin({ schema: "event-data-pin/2", eventId: snapshot.eventId, repository: EVENT_DATA_REPOSITORY, commit: input.dataCommit, files });
-  const allocations = JSON.parse(input.allocationsJson), evidence = JSON.parse(input.evidenceJson);
-  const today = () => snapshot.contentUpdatedAt.slice(0, 10);
-  if (artifacts.amendment) {
-    // Other events may allocate ids while this candidate is being edited.
-    // Accept that growth, but never silently rebind the reviewed old circles.
-    const baseline = artifacts.amendment.baseline;
-    const old = planOrganizerAmendment({ ...baseline, changes: [], today });
-    const current = planOrganizerAmendment({ ...baseline, allocations, evidence, changes: [], today });
-    const eventEvidence = (registry: { entries: Array<{ sources: Array<{ eventId: string }>; retiredSources?: Array<{ eventId: string }> }> }) => registry.entries
-      .filter((entry) => [...entry.sources, ...(entry.retiredSources ?? [])].some((source) => source.eventId === snapshot.eventId));
-    if (!sameJson(old.summary.groups, current.summary.groups) || !sameJson(eventEvidence(old.evidence), eventEvidence(current.evidence))) fail("修正來源的公開社團身分或退出歷史已變更。", "amendment_baseline_changed");
-  }
-  const registry = artifacts.amendment
-    ? planOrganizerAmendment({ ...artifacts.amendment.baseline, allocations, evidence, changes: artifacts.amendment.changes, today })
-    : planCircleIdentityRegistryUpdate({ eventId: snapshot.eventId, official, grouping, allocations, evidence, today });
-  return { eventId: snapshot.eventId, baseCommit: input.mainCommit, files: await assemblePublicationStage("main", snapshot.eventId, [
-    { path: "data/published-events.json", content: artifacts.amendment ? input.publishedEventsJson : serialize({ schema: "published-events/1", events: [...published, snapshot.eventId] }) },
-    { path: `data/event-data-pins/${snapshot.eventId}.json`, content: pin },
-    { path: "data/circle-identities/allocations.json", content: registry.allocations },
-    { path: "data/circle-identities/evidence.json", content: registry.evidence },
-  ]) };
-  } catch (error) {
-    if (error instanceof PublicationFailure) throw error;
-    return fail(`合併資料無法產檔：${error instanceof Error ? error.message : "資料格式無效"}`);
   }
 }

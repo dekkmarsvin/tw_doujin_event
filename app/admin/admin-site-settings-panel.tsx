@@ -60,9 +60,9 @@ export function AdminSiteSettingsPanel() {
           onChange={event => patch({ claimReviewNotice: event.target.value })} placeholder="留空則不顯示" /></label>
       </section>
       <section className={`${styles.card} ${settingsStyles.card}`}><h3>通知</h3>
-        <label className={settingsStyles.switch} htmlFor="site-account-mail" aria-label="全站寄送帳號通知"><span><strong>全站寄送帳號通知</strong><small>寄給社團認領人，通知認領結果與補充資料更新或撤下；活動申請人收到申請結果，主辦負責人收到審核、權限與發布結果，協作者收到自己的權限異動。</small></span>
+        <label className={settingsStyles.switch} htmlFor="site-account-mail" aria-label="全站寄送帳號通知"><span><strong>全站寄送帳號通知</strong><small>事件發生時各寄一封信。寄給社團認領人，通知認領結果與補充資料更新或撤下；活動申請人收到申請結果，活動成員收到審核、權限與發布結果。</small></span>
           <input id="site-account-mail" type="checkbox" role="switch" checked={form.accountNotificationsEnabled} onChange={event => patch({ accountNotificationsEnabled: event.target.checked })} /></label>
-        <label className={settingsStyles.switch} htmlFor="site-review-mail" aria-label="全站寄送待審通知"><span><strong>全站寄送待審通知</strong><small>寄給已開啟待審通知的網站管理者，彙整活動申請、活動內容送審、社團認領與地圖貢獻的待審項目。</small></span>
+        <label className={settingsStyles.switch} htmlFor="site-review-mail" aria-label="全站寄送待審通知"><span><strong>全站寄送待審通知</strong><small>每有一筆活動申請、活動內容送審或社團認領等待審核，就寄一封信給每位網站管理者。</small></span>
           <input id="site-review-mail" type="checkbox" role="switch" checked={form.adminReviewNotificationsEnabled} onChange={event => patch({ adminReviewNotificationsEnabled: event.target.checked })} /></label>
         <ServiceStatus label="寄信服務" result={data.services?.mail ?? null} pending={checking} requested={!!data.services} />
       </section>

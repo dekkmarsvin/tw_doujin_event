@@ -114,6 +114,19 @@ test("requirements select only the chosen event day/venue, current DOM assets an
   await assert.rejects(offlineRequirements({ eventId: "sample", day: 2 }), /venue space/);
 });
 
+// Another tab may have cached a newer reader shell after a correction; an
+// offline reload opens that shell, so readiness has to check its version's files.
+test("requirements follow the version of the reader shell an offline reload will open", async (t) => {
+  const block = JSON.stringify([{ definition: { id: "one-day" }, version: "20261123000000" }]);
+  const shell = artifact(`<!doctype html><script type="application/json" id="published-events">${block}</script><div id='root'></div>`, { contentType: "text/html" });
+  const env = install(t, { entries: { "/index.html": shell } });
+  assert.deepEqual((await offlineRequirements({ eventId: "one-day", day: 1 })).slice(-2),
+    ["/data/events/one-day/v/20261123000000/circles.json", "/data/events/one-day/v/20261123000000/map.json"]);
+  const status = await checkOfflineReadiness({ eventId: "one-day", day: 1 });
+  assert.equal(status.state, "missing", "the page's own cached files do not count when the shell reads another version");
+  assert.equal(env.requests.length, 0);
+});
+
 test("a single day/space requires its shared map without probing for a manifest", async (t) => {
   const env = install(t);
   assert.deepEqual(await offlineRequirements({ eventId: "one-day", day: 1 }), ["/index.html", ...assets, "/data/events/one-day/circles.json", "/data/events/one-day/map.json"]);

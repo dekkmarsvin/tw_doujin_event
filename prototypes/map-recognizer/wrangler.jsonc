@@ -1,9 +1,7 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
-  // Prototype only: run with `wrangler dev`. It is deliberately absent from
-  // scripts/worker-delivery.mjs and has no deploy script, because a new
-  // deployed Worker is a new Cloudflare role (docs/runbooks/project-workflow.md
-  // §7.4) and needs a maintainer decision first.
+  // Prototype only: run with `wrangler dev`. It has no deploy script, because a
+  // new deployed Worker is a new Cloudflare role and needs a maintainer decision first.
   "name": "tw-catalog-map-recognizer-prototype",
   "main": "./src/worker.ts",
   "compatibility_date": "2026-05-22",

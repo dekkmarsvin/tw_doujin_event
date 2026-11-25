@@ -51,7 +51,7 @@ export function adoptionMatchesSource(record: OrganizerBaselineAdoption, source:
 
 type BaselineIdentity = {
   schema: string; source: PublishedSourceIdentity; event: { id: string };
-  pin: ReturnType<typeof parseEventDataPin>; grouping: unknown; evidence: unknown;
+  pin?: ReturnType<typeof parseEventDataPin>; version?: string; grouping: unknown; evidence: unknown;
   adoption?: { record: OrganizerBaselineAdoption; sha256: string };
 };
 
@@ -59,6 +59,15 @@ type BaselineIdentity = {
  * Authorization happens in the loader against its deployed allow-list; this
  * frozen proof travels inside the subsequently approved snapshot. */
 export async function assertBaselineProvenance(baseline: BaselineIdentity) {
+  // Read from the event data bucket (#546): the loader checked it against the
+  // served catalog, and the published grouping already carries any adoption.
+  if (baseline.schema === "organizer-amendment-baseline/3") {
+    if (baseline.adoption !== undefined || baseline.pin !== undefined || typeof baseline.version !== "string" || !/^[a-z0-9][a-z0-9-]*$/.test(baseline.version)) {
+      throw new Error("修正基準格式無效。");
+    }
+    return;
+  }
+  if (!baseline.pin) throw new Error("修正基準格式無效。");
   if (baseline.schema === "organizer-amendment-baseline/1") {
     if (baseline.adoption !== undefined || baseline.pin.commit !== baseline.source.dataCommit) throw new Error("修正基準與原發布版本不符。");
     return;

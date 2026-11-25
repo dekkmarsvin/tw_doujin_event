@@ -9,11 +9,10 @@
  */
 import { useState } from "react";
 import { ActionNotice, useActionFeedback } from "./organizer-feedback";
-import { publicationProgress, publicationFailureMessage } from "../organizer-publication-presentation";
+import { publicationFailureMessage } from "../organizer-publication-presentation";
 import { type PortalSession } from "../circle-editor-client";
 import {
   reopenOrganizerEvent, retryOrganizerPublication,
-  abandonOrganizerAmendment,
   reviewOrganizerEvent, submitOrganizerEvent, type OrganizerEventDetail,
 } from "../organizer-client";
 import { STATUS_LABEL, PUBLICATION_STATUS_LABEL } from "./organizer-shared";
@@ -54,14 +53,14 @@ function AdminReviewSection(props: SectionProps) {
   const { detail } = props;
   const { act, notice, pending: busy } = useSectionAction(props);
   const pending = busy || props.blocked === true;
-  return <div className={styles.subpanel}><h4>網站管理者審閱</h4><p>核准後將開始發布這一版送審內容。</p><p className={styles.warning}>若送審內容是你自己提交的，系統會另外記錄自我核准。</p><textarea aria-label="審閱說明" disabled={pending} placeholder="審閱說明" value={note} onChange={(event) => setNote(event.target.value)} /><div className={styles.row}><button type="button" className={styles.ghost} disabled={pending} onClick={() => act(reviewOrganizerEvent(detail.event.id, detail.event.version, "changes_requested", note), "已要求修改。")}>要求修改</button><button type="button" disabled={pending || !detail.publicationAvailable} onClick={() => act(reviewOrganizerEvent(detail.event.id, detail.event.version, "approve", note), "核准已記錄，請查看下方發布進度。")}>核准並發布</button></div><ActionNotice notice={notice} /></div>;
+  return <div className={styles.subpanel}><h4>網站管理者審閱</h4><p>核准後會立即公開這一版送審內容。</p><p className={styles.warning}>若送審內容是你自己提交的，系統會另外記錄自我核准。</p><textarea aria-label="審閱說明" disabled={pending} placeholder="審閱說明" value={note} onChange={(event) => setNote(event.target.value)} /><div className={styles.row}><button type="button" className={styles.ghost} disabled={pending} onClick={() => act(reviewOrganizerEvent(detail.event.id, detail.event.version, "changes_requested", note), "已要求修改。")}>要求修改</button><button type="button" disabled={pending || !detail.publicationAvailable} onClick={() => act(reviewOrganizerEvent(detail.event.id, detail.event.version, "approve", note), (result) => result.status === "published" ? "已核准並發布。" : "已核准，但發布沒有完成，請看下方說明。")}>核准並發布</button></div><ActionNotice notice={notice} /></div>;
 }
 
 function ReopenSection(props: SectionProps & { reopenBlockedByRemoteState: boolean }) {
   const { detail, reopenBlockedByRemoteState } = props;
   const { act, notice, pending } = useSectionAction(props);
   const [reopenReason, setReopenReason] = useState("");
-  return reopenBlockedByRemoteState ? <div className={styles.subpanel}><h4>退回修改</h4><p className={styles.warning}>目前發布進度不允許退回修改，請聯絡網站管理者。</p></div> : <div className={styles.subpanel}><h4>退回修改</h4><p>退回後可繼續編輯，活動代碼保持不變。</p><textarea aria-label="退回理由" required maxLength={1000} placeholder="請填寫退回理由" value={reopenReason} onChange={(event) => setReopenReason(event.target.value)} /><button type="button" disabled={pending || !reopenReason.trim()} onClick={() => act(reopenOrganizerEvent(detail.event.id, detail.event.version, reopenReason), "已退回修改，現在可以繼續編輯活動內容。")}>退回修改</button><ActionNotice notice={notice} /></div>;
+  return reopenBlockedByRemoteState ? <div className={styles.subpanel}><h4>退回修改</h4><p className={styles.warning}>這次發布已經開始寫入，不能退回修改。請聯絡網站管理者。</p></div> : <div className={styles.subpanel}><h4>退回修改</h4><p>退回後可繼續編輯，活動代碼保持不變。</p><textarea aria-label="退回理由" required maxLength={1000} placeholder="請填寫退回理由" value={reopenReason} onChange={(event) => setReopenReason(event.target.value)} /><button type="button" disabled={pending || !reopenReason.trim()} onClick={() => act(reopenOrganizerEvent(detail.event.id, detail.event.version, reopenReason), "已退回修改，現在可以繼續編輯活動內容。")}>退回修改</button><ActionNotice notice={notice} /></div>;
 }
 
 function PublicationSection(props: SectionProps & {
@@ -71,30 +70,12 @@ function PublicationSection(props: SectionProps & {
   const { act, notice, pending } = useSectionAction(props);
   if (!detail.publication) return null;
   return <div className={styles.subpanel} aria-live="polite"><h4>{historicalPublication ? "發布狀態（先前儲存的內容）" : "發布狀態"}</h4>{historicalPublication && <p className={styles.warning}>這是先前儲存內容的發布紀錄；舊工作不會再重試，是否可編輯依目前活動狀態決定。</p>}<p>{PUBLICATION_STATUS_LABEL[detail.publication.status] ?? "正在確認發布狀態"}</p>
-      <ol>{publicationProgress(detail.publication).map((stage) => <li key={stage.label}>{stage.label}：{({ complete: "已完成", current: "處理中", failed: "未完成，發布停止", pending: "尚未開始" })[stage.state]}</li>)}</ol>
-      {detail.event.status === "abandoned" ? <p>這次修正已終止，失敗紀錄保留。原公開內容未變；請在活動清單選擇已發布版本，再開始修正。</p> : <>
-        {detail.publication.status !== "published" && !historicalPublication && <p>公開結果確認成功前，活動尚未完成發布。</p>}
+      {detail.event.status === "abandoned" ? <p>這次修正已終止，公開內容沒有改變。要再修正，請從活動清單的已發布版本開始。</p> : <>
         {detail.publication.status === "failed" && !historicalPublication && <p className={styles.warning}>{publicationFailureMessage(detail.publication, detail.publicationAvailable === true)}</p>}
-        {(session.isAdmin || owner) && !historicalPublication && detail.publication.status === "failed" && detail.publication.retryable && <button type="button" disabled={!detail.publicationAvailable || pending} onClick={() => act(retryOrganizerPublication(detail.publication!.id), "已要求從失敗步驟繼續，請查看發布進度。")}>重試發布</button>}
+        {(session.isAdmin || owner) && !historicalPublication && detail.publication.status === "failed" && detail.publication.retryable && <button type="button" disabled={!detail.publicationAvailable || pending} onClick={() => act(retryOrganizerPublication(detail.publication!.id), (result) => result.status === "published" ? "已發布。" : "發布還沒有完成，請看下方說明。")}>重試發布</button>}
       </>}
-      {session.isAdmin && detail.publication.status === "failed" && <details><summary>技術詳細資訊</summary><p>工作：{detail.publication.id}</p><p>步驟：{detail.publication.step}</p>{detail.publication.failureCode && <p>錯誤代碼：{detail.publication.failureCode}</p>}{detail.publication.error && <p>{detail.publication.error}</p>}</details>}
+      {session.isAdmin && detail.publication.status === "failed" && detail.publication.failureCode && <p>錯誤代碼：{detail.publication.failureCode}</p>}
   <ActionNotice notice={notice} /></div>;
-}
-
-function RecoverySection(props: SectionProps) {
-  const { act, notice, pending } = useSectionAction(props);
-  const [pull, setPull] = useState("");
-  const [reason, setReason] = useState("");
-  const number = Number(pull);
-  return <div className={styles.subpanel}>
-    <h4>終止失敗修正</h4>
-    <p>先合併資料還原 PR、關閉未合併的發布 PR。核對通過後會保留失敗紀錄，解除這次修正的鎖定；新修正需要重新送審。</p>
-    <label>資料還原 PR 編號<input type="number" min="1" step="1" value={pull} disabled={pending} onChange={(event) => setPull(event.target.value)} /></label>
-    <label>終止原因<textarea required maxLength={1000} value={reason} disabled={pending} onChange={(event) => setReason(event.target.value)} /></label>
-    <button type="button" disabled={pending || !Number.isSafeInteger(number) || number < 1 || !reason.trim()}
-      onClick={() => act(abandonOrganizerAmendment(props.detail.event.id, props.detail.event.version, number, reason), "已終止這次修正。請從已發布版本開始新的修正。")}>核對還原並終止</button>
-    <ActionNotice notice={notice} />
-  </div>;
 }
 
 export function ReviewPanel({ session, detail, onChanged, onSection }: {
@@ -120,14 +101,9 @@ export function ReviewPanel({ session, detail, onChanged, onSection }: {
     {needsLogin && <p><a href="/organizer?reauth=1">重新登入並返回這個活動</a></p>}
     <div className={styles.statusBoard}><span>目前狀態</span><strong>{STATUS_LABEL[detail.event.status]}</strong><span>活動代碼</span><strong>{detail.draft.event.id ?? "尚未設定"}</strong></div>
     <CheckSection detail={detail} onChanged={onChanged} onSection={onSection} />
-    {/* Stated once, above the control it governs. #216 was this panel going
-        blank on an admin who never got the owner grant: nothing on the page
-        said what was missing, so the work looked finished and stuck. */}
-    {submittable && !owner && !session.isAdmin && <p className={styles.warning}>送出審閱需要負責人身分，請聯絡這個活動的負責人。</p>}
     {submittable && <SubmitSection {...section} blocked={!owner && !session.isAdmin} />}
     {session.isAdmin && detail.event.status === "submitted" && <AdminReviewSection {...section} />}
-    {session.isAdmin && detail.recoveryAvailable ? <RecoverySection {...section} />
-      : (session.isAdmin || owner) && detail.event.status === "failed" && !historicalPublication && <ReopenSection {...section} reopenBlockedByRemoteState={reopenBlockedByRemoteState} />}
+    {(session.isAdmin || owner) && detail.event.status === "failed" && !historicalPublication && <ReopenSection {...section} reopenBlockedByRemoteState={reopenBlockedByRemoteState} />}
     {!detail.publicationAvailable && detail.event.status !== "published" && <p className={styles.warning}>發布尚未啟用，{detail.event.operation === "AMEND" ? "本次修正" : "活動"}尚未公開。內容會保留，請聯絡網站管理者協助發布。</p>}
     <PublicationSection {...section} session={session} owner={owner} historicalPublication={historicalPublication} />
   </section>;

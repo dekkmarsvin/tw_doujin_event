@@ -37,6 +37,17 @@ interface D1Database {
 interface R2PutOptions {
   httpMetadata?: { contentType?: string; cacheControl?: string };
   customMetadata?: Record<string, string>;
+  /** The put returns null, writing nothing, when the stored ETag differs. */
+  onlyIf?: { etagMatches: string };
+}
+
+interface R2ObjectBody {
+  body: ReadableStream;
+  httpMetadata?: { contentType?: string };
+  /** Quoted ETag, ready for an `ETag` header. */
+  httpEtag: string;
+  etag: string;
+  text(): Promise<string>;
 }
 
 interface R2Bucket {
@@ -45,8 +56,8 @@ interface R2Bucket {
     truncated: boolean;
     cursor?: string;
   }>;
-  put(key: string, value: ArrayBuffer | ArrayBufferView | ReadableStream, options?: R2PutOptions): Promise<unknown>;
-  get(key: string): Promise<{ body: ReadableStream; httpMetadata?: { contentType?: string } } | null>;
+  put(key: string, value: string | ArrayBuffer | ArrayBufferView | ReadableStream, options?: R2PutOptions): Promise<unknown>;
+  get(key: string): Promise<R2ObjectBody | null>;
   delete(keys: string | string[]): Promise<void>;
 }
 
@@ -78,6 +89,8 @@ interface PortalEnv {
   EVENT_ID: string;
   DB: D1Database;
   THUMBNAILS: R2Bucket;
+  /** Published event data (#546): `index.json` names each event's current version; files live under `events/<id>/<version>/`. */
+  EVENT_DATA: R2Bucket;
   /** Private evidence bucket. It has no public domain and is read only through authenticated Functions. */
   MAP_CONTRIBUTIONS?: R2Bucket;
   THUMBNAIL_PUBLIC_ORIGIN?: string;
@@ -101,13 +114,9 @@ interface PortalEnv {
   PREVIEW_E2E_TOKEN?: string;
   /** Only the explicit loopback portal may reset its entire disposable store. */
   LOCAL_PORTAL_DISPOSABLE?: string;
-  /** Defaults disabled. Production enablement follows ADR-0058; fake is accepted
+  /** Defaults disabled. `r2` publishes approvals to EVENT_DATA (#546); fake is accepted
    * only with the isolated preview mail sink. */
-  ORGANIZER_PUBLICATION_MODE?: "disabled" | "fake" | "github";
-  GITHUB_WEBHOOK_SECRET?: string;
-  GITHUB_APP_ID?: string;
-  GITHUB_APP_PRIVATE_KEY?: string;
-  GITHUB_APP_INSTALLATION_ID?: string;
+  ORGANIZER_PUBLICATION_MODE?: "disabled" | "fake" | "r2";
 }
 
 interface EventContext<Env, Params extends string, Data> {

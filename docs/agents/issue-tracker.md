@@ -31,4 +31,4 @@ Record blocking with GitHub's **native issue dependencies** — the canonical, U
 
 ## Writing to GitHub
 
-Creating, commenting on, labelling, assigning and closing issues are all writes. Make them only within what the user has authorized for the task ([project workflow, section 4](../runbooks/project-workflow.md#4-每次只推進一個可驗收工作)); otherwise put the prepared text in the reply.
+Creating, commenting on, labelling, assigning and closing issues are all writes. Make them only within what the user has authorized for the task; otherwise put the prepared text in the reply.

@@ -32,7 +32,7 @@
 
 ### 2. 只有名稱的清單不足以編目
 
-錄取名單唯一的 per-circle 鍵是名稱，而名稱在本專案明文不是身分（[`CONTEXT.md`](../../CONTEXT.md)、[社團目錄契約](../contracts/circle-catalog.md)「同名不是合併依據」、identity grouping「名稱相同本身不符合 linkage」）。
+錄取名單唯一的 per-circle 鍵是名稱，而名稱在本專案明文不是身分（[`CONTEXT.md`](../../CONTEXT.md)、[社團目錄契約](../contracts/reader.md#社團目錄)「同名不是合併依據」、identity grouping「名稱相同本身不符合 linkage」）。
 
 因此**錄取名單不可作為配號輸入**，即使它就是最終參展名單。
 
@@ -40,7 +40,7 @@
 
 先修正一個容易講錯的地方：**配號本身不昂貴，發布才昂貴。**
 
-現行 repository pipeline 把 `allocations.json`／`evidence.json` 與該活動 pin 放在同一張 main PR（[社團資料更新 runbook](../runbooks/catalog-data-update.md) 步驟 2–3）。那是目前的內部發布實作；永久契約的分界是資料是否已對 Reader 公開：
+現行 repository pipeline 把 `allocations.json`／`evidence.json` 與該活動 pin 放在同一張 main PR（[社團資料更新 runbook](https://github.com/dekkmarsvin/tw_doujin_event/blob/08ac8a5268507f3caa938f80a4374c09b9035083/docs/runbooks/catalog-data-update.md) 步驟 2–3）。那是目前的內部發布實作；永久契約的分界是資料是否已對 Reader 公開：
 
 | 時機 | 修正成本 |
 |---|---|
@@ -80,7 +80,7 @@
 | 攤位換手（同 booth、不同社團名） | name drift 檢查拋錯：`Organizer name drift for <day>:<booth>` |
 | 主辦重編號 | 既有 evidence 全數變成 extra 而拋錯 |
 
-後三者都是 fail closed **且沒有記載的復原方式**，而 [runbook](../runbooks/catalog-data-update.md) 另外明寫「不要手動配號或編輯 evidence」。現行測試涵蓋 cross-event、重跑 no-op、部分／衝突群組與覆蓋完整性，**沒有一個涵蓋「已配號的 booth source 從官方清單消失」**。
+後三者都是 fail closed **且沒有記載的復原方式**，而 [runbook](https://github.com/dekkmarsvin/tw_doujin_event/blob/08ac8a5268507f3caa938f80a4374c09b9035083/docs/runbooks/catalog-data-update.md) 另外明寫「不要手動配號或編輯 evidence」。現行測試涵蓋 cross-event、重跑 no-op、部分／衝突群組與覆蓋完整性，**沒有一個涵蓋「已配號的 booth source 從官方清單消失」**。
 
 fail closed 本身是對的：這些情況需要人工判讀，自動處理會讓永久 ID 悄悄改變指向。缺的是**判讀之後該做什麼**。依最新 PRODUCT，修正 Organizer-owned placement 是 P0，不再只是維護者工序；處置記在 [#139](https://github.com/dekkmarsvin/tw_doujin_event/issues/139)，且最終流程不得要求 Organizer 操作 Git、CLI、generator flag 或 evidence 檔案。本 ADR 不預先決定 UI 形狀。
 
@@ -101,7 +101,7 @@ fail closed 本身是對的：這些情況需要人工判讀，自動處理會�
 
 ## 後果
 
-- 每場新活動不必重推一次這個判斷；[社團資料更新 runbook](../runbooks/catalog-data-update.md) 的步驟順序因此有了理由，不只是順序。
+- 每場新活動不必重推一次這個判斷；[社團資料更新 runbook](https://github.com/dekkmarsvin/tw_doujin_event/blob/08ac8a5268507f3caa938f80a4374c09b9035083/docs/runbooks/catalog-data-update.md) 的步驟順序因此有了理由，不只是順序。
 - **接受的代價**：錄取公布到編號公布之間，本站對該活動沒有社團內容。這段可能長達數月，正好是社團與讀者最有動機的期間。這是刻意的取捨，換到的是永久 ID 從第一天就對應可追溯的主辦事實。
 - **需要切換 transport 的訊號**：主辦若不公開攤位表，只由 authenticated Organizer 提供 CSV／XLSX，目前 `boothListUrls` pipeline 就不能工作。本 ADR 原則上接受這是第一方 Organizer input，但 #104 必須先完成身分、來源紀錄、validation、草稿與發布契約；在它落地前，不能只在 runbook 開特例。PF45 x RF14 的公告頁未說明編號公布方式，因此這個訊號現在就要確認。
 - 若某主辦的錄取名單本身就帶穩定申請編號，決策 2 不因此鬆動——申請編號可作為 identity grouping 的 `organizer-stable-key` linkage（既有機制），但配號證據仍是攤位。

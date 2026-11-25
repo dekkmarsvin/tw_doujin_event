@@ -1,4 +1,4 @@
-import { firstParam, guard, portalHandlers } from "../../../_portal";
+import { circleFor, firstParam, guard } from "../../../_portal";
 
 /**
  * The public overlay of circle-authored content.
@@ -9,7 +9,7 @@ import { firstParam, guard, portalHandlers } from "../../../_portal";
  * fetch it.
  */
 export const onRequestGet: PagesFunction<PortalEnv, "eventId"> = (context) =>
-  guard(() => portalHandlers(context).publicOverrides(context.request, firstParam(context.params.eventId)));
+  guard(() => circleFor(context).publicOverrides(context.request, firstParam(context.params.eventId)));
 
 /**
  * Pages routes HEAD separately from GET, so without this a cache or proxy
@@ -18,6 +18,6 @@ export const onRequestGet: PagesFunction<PortalEnv, "eventId"> = (context) =>
  */
 export const onRequestHead: PagesFunction<PortalEnv, "eventId"> = (context) =>
   guard(async () => {
-    const response = await portalHandlers(context).publicOverrides(context.request, firstParam(context.params.eventId));
+    const response = await circleFor(context).publicOverrides(context.request, firstParam(context.params.eventId));
     return new Response(null, { status: response.status, headers: response.headers });
   });

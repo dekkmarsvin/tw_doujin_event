@@ -56,20 +56,19 @@ npm run portal:login-link
 npm run portal:login-link -- --email=local-circle@example.test --audience=circle
 ```
 
-## 驗證真實活動資料
+## 已發布活動的對照資料
 
-只有資料更新、release 或部署前需要這條路徑：
+`pinned` browser journeys 從正式站（`tw-catalog.pages.dev`）複製 FF47 的公開檔案，並以 [fixtures/published/ff47.json](../../fixtures/published/ff47.json) 的 hash 核對。FF47 更正過後核對會失敗；確認變更符合預期，再更新 hash：
 
 ```bash
-npm run data:fetch -- ff47
-npm run data:stage -- ff47
-npm run event-data:check
-npm run build:production
+node scripts/fetch-published-event.mjs ff47 --update
 ```
 
-`data:fetch` 只接受 `data/event-data-pins/ff47.json` 的完整 commit SHA，逐檔核對 SHA-256 後原子替換 `.event-data/ff47/`。`build:production` 會再次執行 fetch、生成 official-only catalog 並建立 production `dist`。
+部署的站台從 R2 讀活動資料，見[部署 runbook](./deployment.md#活動資料r2)。
 
-`.event-data/`、`.event-data-stage.json` 與 `public/data/events/` 都是本機／CI 產物，不進版控。
+`npm run dev:portal` 啟動前會把 staged 的 fixture 寫進本機的活動資料 bucket（`.wrangler/local-portal`），讓 Functions 與正式環境一樣從 R2 讀取。
+
+`.event-data-stage.json` 與 `public/data/events/` 都是本機／CI 產物，不進版控。
 
 ## Authoring 環境
 
@@ -77,7 +76,7 @@ npm run build:production
 
 ## 共同 gate
 
-產品程式、建置輸入、依賴與 CI／測試基礎設施的完整 gate 由 CI 執行以下指令。本機預設只跑本次重現與受影響回歸；需要診斷環境差異、CI 無法提供有效結果或改動跨越多個邊界時，才補跑完整 gate，並記錄理由。未改變的有效結果依 [review-fix loop](../agents/review-loop.md#相稱的驗證)沿用，純文件變更見[下一節](#純文件變更)。
+產品程式、建置輸入、依賴與 CI／測試基礎設施的完整 gate 由 CI 執行以下指令。本機預設只跑受影響的測試；需要診斷環境差異或 CI 無法提供有效結果時，才補跑完整 gate。純文件變更見[下一節](#純文件變更)。
 
 ```bash
 npm ci
@@ -102,9 +101,9 @@ npx tsc --noEmit --incremental false
 node --test tests/contribution-files.test.mjs
 ```
 
-這項測試檢查相對連結與錨點、ADR 索引、`docs/design/` 的檔案範圍，並已執行 `check-doc-map --check` 核對契約清單與[契約索引](../contracts/INDEX.md)，不需再跑一次。改了契約的實作或測試清單時，先跑不帶 `--check` 的 `node scripts/check-doc-map.mjs` 重新產生索引。
+這項測試檢查文件之間的相對連結與錨點，以及 issue 表單的 triage 標籤。
 
-CI 以 [ci-scope.mjs](../../scripts/ci-scope.mjs) 的保守 allowlist 分類：內部文件、證據與已列出的開發工具跑文件檢查；開發工具另查 Claude 設定 JSON、hook shell 語法與非遠端模式。這些變更不部署，也不執行產品 Node／browser／remote preview E2E。未知路徑、混合產品變更、測試／CI 基礎設施、公開文件、依賴或無法核對的比較歷史都走完整 gate；手動 dispatch 同樣完整執行。精確 CI 行為見[部署 runbook](./deployment.md#ci-行為)。
+CI 不依路徑分類，文件變更也跑完整檢查，見[部署 runbook](./deployment.md#ci-行為)。
 
 ### 開發途中只跑相關的測試
 
@@ -135,9 +134,7 @@ node scripts/run-tests.mjs module cli --concurrency=2
 
 ### 瀏覽器驗收
 
-CI 的 `Browser acceptance` 位於獨立 `Browser verification` workflow，只在 PR 與手動 dispatch 執行；main 不重跑全套，也不讓 browser 的完成時間占住正式部署佇列。活動發布 PR 仍須取得同 head SHA 的成功結果才能自動合併。
-
-純發布資料由 `publication-data` profile 驗證：先核對成功 main 部署基準與完整累積差異，再保留 production build、成品完整性、preview E2E 與 deployment smoke。Browser 以 `npm run build:production` 後執行 `node scripts/test-published-reader.mjs`，對所有實際發布 pins 開啟桌面／手機日期與場地組合及 warm reload。此 profile 不重跑未變動程式的完整 suite／lint／type-check／Worker rebuild；未知、混合或無可靠基準仍完整執行。CI 使用 Playwright 官方固定版本容器，本機仍可用既有安裝指令。
+CI 的 `Browser acceptance` job 只在 PR 與手動 dispatch 執行，main 不重跑全套。CI 使用 Playwright 官方固定版本容器，本機仍可用既有安裝指令。
 
 新增或補強 UI 行為驗收時，優先修改既有 journey，不為同一流程新增另一套。核對附近的 JSX／CSS／原始碼斷言：有價值的行為保護，確認另一層已涵蓋或改成適當行為測試後移除；低價值、重複、過時或只鎖定實作的斷言，可直接刪除，不要求一對一補測。PR 用一句話說明新增／刪除的保護與原因即可，不建立測試清冊或新 gate。
 
@@ -156,23 +153,23 @@ CI 的 `Browser acceptance` 位於獨立 `Browser verification` workflow，只�
 
 | 命令 | 跑什麼 |
 |---|---|
-| `npm run test:browser` | 全部 journey；尺寸矩陣使用各流程的代表性案例 |
-| `npm run test:browser:matrix` | 全部 journey；尺寸矩陣使用完整組合，包含地圖 10 尺寸 × 3 字級 |
+| `npm run test:browser` | 全部 journey；`map-viewport` 使用代表性尺寸 |
+| `npm run test:browser:matrix` | 全部 journey；`map-viewport` 使用完整組合（地圖 10 尺寸 × 3 字級） |
 
-`reader-header`、`reader-mobile-tools`、`mobile-circle-sheet`、`reader-narrow-desktop` 的代表性案例保留手機／桌機操作、360×640 回歸尺寸、相關 760／761 與 1050／1051 斷點、最大字級及觸控拖曳。完整模式保留全部原有尺寸／字級組合。名單的重複尺寸檢查保留 1040、1440、2560，詳情高度保留 761、1440；其餘少量版面分支與 resize／history／recovery 操作在兩種模式都執行，不因尺寸減量而略過整條 journey。
+瀏覽器 journey 只留 Reader 主要旅程與各入口一條登入後操作（#546）。Reader 為 `map-viewport`、`catalog-browse`、`circle-page`、`reader-event-chooser`、`reader-shared-itinerary`，以及離線重新載入的 `reader-offline-prep`。真實登入後的操作：`portal-circle-claim` 以寄出的連結登入社團入口與管理入口，認領、由管理者核准後編輯並發布；`portal-organizer-entry` 以連結登入主辦工作區。`portal-admin-entry` 以注入的 session 與攔截的回應檢查管理入口畫面，不經過真實登入。`portal-session-expiry` 確認閒置到 session 到期時畫面回到登入。
 
-共用 `selectMatrix` 只選尺寸組合，不選斷言。`--matrix none` 在上述流程仍執行代表性操作；它只略過 `map-viewport` 額外的尺寸矩陣。上述流程的 `browser-report-*.json` 記錄實際完成的組合、`pagesOpened`、主文件完成載入的 `documentLoads`（含 reload／跨頁，不含同頁路由）與 `durationMs`；runner 另記錄每條 journey 的開始／結束時間。耗時受資料下載、啟動與執行環境影響，以同環境的報告比較，不把縮小矩陣的比例當成整套 CI 加速比例。
+共用 `selectMatrix` 只選尺寸組合，不選斷言，目前只有 `map-viewport` 使用；`--matrix none` 略過它額外的尺寸矩陣，`map-viewport` 另外寫自己的 `browser-report-<matrix>.json`。其他 journey 的 `browser-report-<journey>.json` 記錄 `pagesOpened`、主文件完成載入的 `documentLoads`（含 reload／跨頁，不含同頁路由）與 `durationMs`；runner 另記錄每條 journey 的開始／結束時間。
 
 `npm run test:browser` 自己處理所有前置：staging、啟動 Vite、等待相依預先打包完成、跑完後關閉伺服器。不需要另開 terminal，也不需要自行組 `MAP_TEST_URL`。
 
 聚焦驗證用 `--journey` 指定檔名（可省略 `.mjs`），可重複提供多個名稱；只準備選定旅程需要的資料與伺服器。未指定時仍跑全部旅程。
 
 ```bash
-npm run test:browser -- --journey reader-thumbnails
+npm run test:browser -- --journey reader-offline-prep
 npm run test:browser -- --journey portal-admin-entry --journey portal-organizer-entry
 ```
 
-未知名稱、未知選項及缺少值會失敗，不會默默改跑全套。部分旅程的成功只證明所選範圍；完整 profile 的 `Browser acceptance` 不提供 `--journey`，維持完整代表性驗收；純發布資料使用上述 published Reader 驗證。
+未知名稱、未知選項及缺少值會失敗，不會默默改跑全套。部分旅程的成功只證明所選範圍；完整 profile 的 `Browser acceptance` 不提供 `--journey`，維持完整代表性驗收。
 
 ### journey 與它需要的資料
 
@@ -184,7 +181,7 @@ journey 放在 `tests/browser/*.mjs`，**不需要登記到任何清單**：runn
 
 | 宣告 | 環境 | 用途 |
 |---|---|---|
-| `pinned`（預設，可省略） | Vite + pinned FF47 | 真實 catalog 的尺寸、幾何與互動 |
+| `pinned`（預設，可省略） | Vite + 正式站複製的 FF47 | 真實 catalog 的尺寸、幾何與互動 |
 | `fixture` | Vite + `sample` + `sample-two` | 真實資料不該有的情境：已移動／已取消攤位、有圖與無圖社團、多活動選擇器 |
 | `portal` | `dev:portal` 的隔離環境 | 需要登入的流程：magic-link、認領、審核、編輯與發布 |
 
@@ -198,9 +195,9 @@ journey 放在 `tests/browser/*.mjs`，**不需要登記到任何清單**：runn
 
 因此 `portal` journey 需要 8788 埠。若你自己的 `npm run dev:portal` 正在跑，runner 會直接停下並說明，不會半跑在你的資料上。
 
-`pinned` 每次都重新下載並驗證目前 pin 的 FF47 資料，即使 `.event-data/ff47` 已存在，避免切換分支或更新 pin 後仍驗收舊資料；下載或驗證失敗即停止，不沿用舊資料繼續測試。因此 `pinned` 需要 GitHub 網路，`fixture` 則完全離線。
+`pinned` 每次都重新從正式站複製 FF47 並核對 hash，核對失敗即停止，不沿用舊資料繼續測試。因此 `pinned` 需要網路，`fixture` 則完全離線。
 
-`portal` journey 使用 `config/local-portal.env` 的本機測試值（Cloudflare 官方 always-pass Turnstile 金鑰、保留的 `.test` 收信地址、local D1 收信槽），magic link 由本機收信槽取得，與 `npm run smoke:portal` 同一條路徑。安全性本身的驗證仍留在 `tests/circle-portal-route.test.mjs`：enumeration resistance、Turnstile/CSRF 檢查順序、rejected request 不寫 DB、claim 唯一性與競態、retention/刪除、token 不變式——這些 browser 證明不了，改用 browser 會是拿真實覆蓋換更慢更不穩的版本。
+`portal` journey 使用 `config/local-portal.env` 的本機測試值（Cloudflare 官方 always-pass Turnstile 金鑰、保留的 `.test` 收信地址、local D1 收信槽），magic link 由本機收信槽取得，與 `npm run smoke:portal` 同一條路徑。安全性本身的驗證留在經過 router 的 API 測試（`tests/api-*.test.mjs`）：真人驗證與同源檢查、被拒的請求不寫 DB、社團／活動層級授權、撤下與刪除、session 不變式——這些 browser 證明不了，改用 browser 會是拿真實覆蓋換更慢更不穩的版本。
 
 `fixture` journey 以攔截 `circles.json` 與 `overrides.json` 的方式供應情境資料，不修改 `fixtures/` 內任何檔案；圖片只接受 https，所以 journey 自行應答該來源，藉此區分「沒有圖」與「有圖但讀不到」。共用工具在 `tests/browser/support/`，該子目錄不會被當成 journey 執行。
 
@@ -228,7 +225,7 @@ npm run test:browser:install
 
 | 命令 | 何時執行 |
 |---|---|
-| `npm run build:production` | 更新 pin、release 或部署前；需要 GitHub 網路 |
+| `npm run build:deploy` | 檢查部署用的 build（不含活動資料） |
 | `npm run purge:dev` | 手動觸發 retention purge |
 
 ## 人工瀏覽器實測

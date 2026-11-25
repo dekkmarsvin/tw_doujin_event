@@ -2,8 +2,8 @@
 
 - 狀態：已定案（2026-09-19）
 - 取代：[ADR-0017](./0017-thumbnails-are-self-hosted-with-external-urls-kept.md)、[ADR-0022](./0022-expiry-runs-in-a-separate-cron-worker.md)、[ADR-0031](./0031-quota-exhaustion-is-not-a-release-gate.md) 三份中以 Workers Free 每日額度為前提的成本敘述。三者的決策本身不變。
-- 相關契約：[資料傳輸與離線契約](../contracts/delivery-and-offline.md)、[地圖投稿契約](../contracts/map-contributions.md)
-- 相關流程：[專案工作流程 §7](../runbooks/project-workflow.md)
+- 相關契約：[資料傳輸與離線契約](../contracts/reader.md#資料傳輸與離線)、[地圖投稿契約](https://github.com/dekkmarsvin/tw_doujin_event/blob/ea03bcd723344296514201cb44c832dbdee3a05d/docs/contracts/map-contributions.md)
+- 相關流程：[專案工作流程 §7](https://github.com/dekkmarsvin/tw_doujin_event/blob/77d73a5/docs/runbooks/project-workflow.md)
 - 相關 issue：[#48](https://github.com/dekkmarsvin/tw_doujin_event/issues/48)
 
 ## 問題
@@ -29,7 +29,7 @@ Free 與 Paid 的差距不是邊際修正：
 
 1. **成本推算一律以 Workers Paid 與 R2 Paid 的月度內含額度與超額單價為基準**，不再引用 Free 的每日上限。超出內含額度的後果是計費，不是服務中斷。
 2. **方案層級的唯一權威來源是 Dashboard 的 `/billing/subscriptions`。** `/workers/plans` 不作判定依據。帳號可同時持有多筆獨立付費訂閱，盤點須逐項確認，不以其中一筆推定其餘。
-3. **計費事實集中記錄在[專案工作流程 §7](../runbooks/project-workflow.md)**：訂閱狀態、內含額度、實測用量、既有預算警示，均保留查核日期。官方價格文件才是費率來源；該節的數字是查核日快照，不是持續有效的費率承諾。
+3. **計費事實集中記錄在[專案工作流程 §7](https://github.com/dekkmarsvin/tw_doujin_event/blob/77d73a5/docs/runbooks/project-workflow.md)**：訂閱狀態、內含額度、實測用量、既有預算警示，均保留查核日期。官方價格文件才是費率來源；該節的數字是查核日快照，不是持續有效的費率承諾。
 4. **既有 ADR 的決策不因本 ADR 變更**，只在各自狀態列標註成本前提被取代。ADR 內文不改。
 5. **方案升級不構成放寬既有保守預算的理由。** 自訂的工作量上界（例如清除批次每次呼叫 50 次 D1 呼叫）維持有效，要放寬須依 §7.6 擴充門檻另行說明。
 

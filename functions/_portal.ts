@@ -1,7 +1,13 @@
 import { mailFailure, sendPortalMail, previewMailRouteFor } from "../app/portal-mail";
 import type { ApiErrorCode } from "../app/i18n/api-error";
 export { previewMailRouteFor } from "../app/portal-mail";
-import { createCirclePortalHandlers, type CircleLookup, type CirclePortalHandlers } from "../app/circle-portal-handlers";
+import { type CircleLookup, type PortalDependencies } from "../app/circle-portal-handlers";
+import { createAuth } from "../server/auth";
+import { createCircle } from "../server/circle";
+import { createAdmin } from "../server/admin";
+import { createOrganizer } from "../server/organizer";
+import { createPlanningShareHandlers } from "../server/shares";
+import { createPlanningShareRepository } from "../db/planning-share-repository";
 import { buildCircleCatalog, isCircleCatalogPayload, normalizeCircleName, type CircleCatalogPayload } from "../app/circle-records";
 import { CIRCLE_OVERRIDES_SCHEMA, isCircleOverrideFields } from "../app/circle-overrides";
 import { selectedCircleShareImage } from "../app/circle-share-image";
@@ -9,15 +15,10 @@ import { createIdentityRepository, type IdentityRepository } from "../db/identit
 import { parseEventDefinition, type EventDefinition } from "../app/event-catalog";
 import type { HostedThumbnailStore } from "../app/hosted-thumbnails";
 import type { MapContributionFileStore } from "../app/map-contribution-files";
-import { isPublishedEventMap } from "../app/event-map";
-import { resolveCanonicalMapPeriod } from "../app/map-contribution-draft";
-import { resolvePublishedAuthoringScope } from "../app/event-authoring-scope";
-import { createGitHubInstallationProbe } from "../app/github-installation-probe";
-import { createGitHubRemoteAuditor, GITHUB_PUBLICATION_REPOSITORIES } from "../app/github-remote-auditor";
-import { createGitHubAppTokenProvider } from "../app/github-app-token";
 import { createPublicationDispatcher } from "../app/publication-dispatch";
-import { createPublishedAmendmentBaselineLoader } from "../app/organizer-amendment-baseline";
-import { createPublicationRecoveryAuditor } from "../app/organizer-publication-recovery";
+import { readEntryJson, readEventIndex, readEventJson } from "./_event-data";
+import { createR2AmendmentBaselineLoader } from "../app/event-data-publisher";
+import { readEventIndexObject } from "../app/event-data-store";
 
 /**
  * Wires the framework-agnostic portal handlers to the Pages runtime: D1, the
@@ -32,24 +33,20 @@ import { createPublicationRecoveryAuditor } from "../app/organizer-publication-r
  */
 const catalogCache = new Map<string, Promise<{ payload: CircleCatalogPayload; event: EventDefinition; index: Map<string, CircleLookup> }>>();
 
-async function catalog(env: PortalEnv, request: Request, eventId: string) {
-  const cached = catalogCache.get(eventId);
+async function catalog(env: PortalEnv, _request: Request, eventId: string) {
+  // Keyed by version: a publication changes the version, so the next request
+  // parses the new catalog instead of serving the isolate's old one.
+  const entry = (await readEventIndex(env)).events.find((item) => item.eventId === eventId);
+  if (!entry) throw new Error(`活動 ${eventId} 尚未發布。`);
+  const key = `${eventId}@${entry.version}`;
+  const cached = catalogCache.get(key);
   if (cached) return cached;
 
   const pending = (async () => {
-    const base = `/data/events/${encodeURIComponent(eventId)}`;
-    const [response, eventResponse, referencesResponse] = await Promise.all([
-      env.ASSETS.fetch(new Request(new URL(`${base}/circles.json`, request.url).toString())),
-      env.ASSETS.fetch(new Request(new URL(`${base}/event.json`, request.url).toString())),
-      env.ASSETS.fetch(new Request(new URL(`${base}/reference-records.json`, request.url).toString())),
-    ]);
-    if (!response.ok || !eventResponse.ok || !referencesResponse.ok) {
-      throw new Error(`無法讀取活動資料（catalog=${response.status}, event=${eventResponse.status}, references=${referencesResponse.status}）。`);
-    }
-    const [value, eventValue, referencesValue]: [unknown, unknown, unknown] = await Promise.all([
-      response.json(),
-      eventResponse.json(),
-      referencesResponse.json(),
+    const [value, eventValue, referencesValue] = await Promise.all([
+      readEntryJson(env, entry, "circles.json"),
+      readEntryJson(env, entry, "event.json"),
+      readEntryJson(env, entry, "reference-records.json"),
     ]);
     if (!isCircleCatalogPayload(value) || value.eventId !== eventId) throw new Error(`活動 ${eventId} 的靜態社團資料格式或 identity 無效。`);
     const event = parseEventDefinition(eventValue, referencesValue);
@@ -64,11 +61,12 @@ async function catalog(env: PortalEnv, request: Request, eventId: string) {
     } satisfies CircleLookup]));
     return { payload, event, index };
   })().catch((error: unknown) => {
-    catalogCache.delete(eventId);
+    catalogCache.delete(key);
     throw error;
   });
 
-  catalogCache.set(eventId, pending);
+  for (const stale of catalogCache.keys()) if (stale.startsWith(`${eventId}@`)) catalogCache.delete(stale);
+  catalogCache.set(key, pending);
   return pending;
 }
 
@@ -252,7 +250,60 @@ export function requestedEventId(request: Request, env: PortalEnv) {
   return requested === null ? env.EVENT_ID : requested.trim();
 }
 
-export function portalHandlers(context: { request: Request; env: PortalEnv }): CirclePortalHandlers {
+/** The auth module's routes: sign-in, session, sign-out and the caller's own account. */
+export function authFor(context: { request: Request; env: PortalEnv }) {
+  return createAuth(portalDependencies(context)).routes;
+}
+
+/** The circle module's routes: claims, the circle's own content and the public overlay. */
+export function circleFor(context: { request: Request; env: PortalEnv }) {
+  const dependencies = portalDependencies(context);
+  return createCircle(dependencies, createAuth(dependencies)).routes;
+}
+
+/** The admin module's routes: site administration and moderation. */
+export function adminFor(context: { request: Request; env: PortalEnv }) {
+  const dependencies = portalDependencies(context);
+  return createAdmin(dependencies, createAuth(dependencies)).routes;
+}
+
+/** The organizer module's routes: applications, candidates, their content, publication and an Owner's moderation. */
+export function organizerFor(context: { request: Request; env: PortalEnv }) {
+  const dependencies = portalDependencies(context);
+  const auth = createAuth(dependencies);
+  return createOrganizer(dependencies, auth, createAdmin(dependencies, auth)).routes;
+}
+
+const shareRepositories = new WeakMap<D1Database, ReturnType<typeof createPlanningShareRepository>>();
+
+/** The shares module: planning-list snapshots and the `/s/:shareId` page. Anonymous, so it needs none of the portal wiring. */
+export function sharesFor({ env }: { env: PortalEnv }) {
+  let repository = shareRepositories.get(env.DB);
+  if (!repository) {
+    repository = createPlanningShareRepository(env.DB);
+    shareRepositories.set(env.DB, repository);
+  }
+  return createPlanningShareHandlers({
+    repository,
+    hashPepper: () => {
+      if (!env.HASH_PEPPER) throw new Error("Missing Pages secret HASH_PEPPER.");
+      return env.HASH_PEPPER;
+    },
+    publishedEvent: async (eventId) => {
+      if (!/^[a-z0-9][a-z0-9-]*$/.test(eventId)) return null;
+      const [definition, references] = await Promise.all([
+        readEventJson(env, eventId, "event.json"),
+        readEventJson(env, eventId, "reference-records.json"),
+      ]);
+      if (definition === null || references === null) return null;
+      const event = parseEventDefinition(definition, references);
+      return event.id === eventId ? event : null;
+    },
+  });
+}
+
+/** Bindings, secrets and per-request configuration every backend module is built from. */
+function portalDependencies(context: { request: Request; env: PortalEnv }): PortalDependencies {
   const { request, env } = context;
   const eventId = requestedEventId(request, env);
   const repository = repositoryFor(env);
@@ -264,7 +315,7 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     } catch { return null; }
   };
   const dispatchOrganizerPublication = createPublicationDispatcher({
-    repository, mode: env.ORGANIZER_PUBLICATION_MODE ?? "disabled", allowFake: env.PREVIEW_MAIL_SINK === "d1",
+    repository, mode: env.ORGANIZER_PUBLICATION_MODE ?? "disabled", allowFake: env.PREVIEW_MAIL_SINK === "d1", eventData: env.EVENT_DATA,
     eventExists: async (id) => Boolean(await publishedEvent(id)),
   });
   const thumbnailOrigin = env.THUMBNAIL_PUBLIC_ORIGIN;
@@ -297,54 +348,15 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     delete: (keys) => env.MAP_CONTRIBUTIONS!.delete(keys),
     list: (prefix) => listBucketKeys(env.MAP_CONTRIBUTIONS!, prefix),
   } : undefined;
-  const readPublishedEventMap = async (targetPath: string) => {
-    const response = await env.ASSETS.fetch(new Request(new URL(
-      `/data/events/${encodeURIComponent(eventId)}/${targetPath}`,
-      request.url,
-    ).toString()));
-    if (response.status === 404) return null;
-    if (!response.ok) throw new Error(`Published map read failed (${response.status}).`);
-    const value: unknown = await response.json();
-    return isPublishedEventMap(value) && value.eventId === eventId ? value : null;
+  // A failed job may be reopened only while readers do not see its approval.
+  const publicationAuditor = async (jobId: string) => {
+    const job = await repository.getOrganizerPublicationJob(jobId);
+    if (!job) throw new Error("Publication job not found.");
+    const current = await readEventIndexObject(env.EVENT_DATA);
+    return { clear: !current?.index.events.some((entry) => entry.source?.approvalHash === job.approval_hash) };
   };
-  const githubInstallationProbe = createGitHubInstallationProbe({
-    appId: env.GITHUB_APP_ID ?? "",
-    installationId: env.GITHUB_APP_INSTALLATION_ID ?? "",
-    privateKey: env.GITHUB_APP_PRIVATE_KEY ?? "",
-    webhookSecret: env.GITHUB_WEBHOOK_SECRET ?? "",
-    now: () => Date.now(),
-  });
-  const githubRemoteAuditor = createGitHubRemoteAuditor({
-    tokenProvider: createGitHubAppTokenProvider({
-      appId: env.GITHUB_APP_ID ?? "",
-      installationId: env.GITHUB_APP_INSTALLATION_ID ?? "",
-      privateKey: env.GITHUB_APP_PRIVATE_KEY ?? "",
-      repositories: GITHUB_PUBLICATION_REPOSITORIES,
-      permissions: { contents: "read", pull_requests: "read", metadata: "read" },
-      now: () => Date.now(),
-    }),
-  });
-  return createCirclePortalHandlers({
-    auditPublicationRecovery: env.ORGANIZER_PUBLICATION_MODE === "github" ? createPublicationRecoveryAuditor({
-      tokenProvider: createGitHubAppTokenProvider({ appId: env.GITHUB_APP_ID ?? "", installationId: env.GITHUB_APP_INSTALLATION_ID ?? "",
-        privateKey: env.GITHUB_APP_PRIVATE_KEY ?? "", repositories: GITHUB_PUBLICATION_REPOSITORIES,
-        permissions: { contents: "read", pull_requests: "read", checks: "read", metadata: "read" }, now: () => Date.now() }),
-    }) : undefined,
-    loadPublishedAmendmentBaseline: env.ORGANIZER_PUBLICATION_MODE === "github" ? createPublishedAmendmentBaselineLoader({
-      onUnavailable: (diagnostic) => console.warn(JSON.stringify({ event: "organizer.amendment.baseline_unavailable", ...diagnostic })),
-      tokenProvider: createGitHubAppTokenProvider({ appId: env.GITHUB_APP_ID ?? "", installationId: env.GITHUB_APP_INSTALLATION_ID ?? "",
-        privateKey: env.GITHUB_APP_PRIVATE_KEY ?? "", repositories: GITHUB_PUBLICATION_REPOSITORIES,
-        permissions: { contents: "read", metadata: "read" }, now: () => Date.now() }),
-      published: async (id) => {
-        const response = await env.ASSETS.fetch(new Request(new URL("/deployment-manifest.json", request.url)));
-        if (!response.ok) throw new Error("目前無法核對公開版本。");
-        const manifest = await response.json() as { schema?: string; events?: Array<{ eventId: string; dataCommit: string }> };
-        if (manifest.schema !== "publication-deployment/1" || !Array.isArray(manifest.events)) throw new Error("公開版本記錄格式無效。");
-        const pinned = manifest.events.find((item) => item.eventId === id);
-        if (!pinned) return null;
-        return { dataCommit: pinned.dataCommit, catalog: (await catalog(env, request, id)).payload };
-      },
-    }) : undefined,
+  return {
+    loadPublishedAmendmentBaseline: env.ORGANIZER_PUBLICATION_MODE === "r2" ? createR2AmendmentBaselineLoader(env.EVENT_DATA) : undefined,
     repository,
     sendMail: async (message) => {
       const event = { event: "portal.mail", mailType: message.purpose };
@@ -384,42 +396,7 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     turnstileSitekey: () => requireSecret(env, "TURNSTILE_SITEKEY"),
     thumbnailStore,
     mapContributionStore,
-    resolveMapContributionScope: async ({ periodKey, venueSpaceId }) => {
-      const { payload, event } = await catalog(env, request, eventId);
-      const resolvedPeriod = resolveCanonicalMapPeriod(event.days, periodKey);
-      const venue = event.venueAssignments.find((assignment) => assignment.venueSpaceId === venueSpaceId);
-      if (!resolvedPeriod || !venue) return null;
-      const { periodKey: canonicalPeriodKey, periodAliases } = resolvedPeriod;
-      // The resolver owns the artifact path, so the snapshot is read through it
-      // rather than through a second copy of the rule here -- a local copy is
-      // how a per-day event ends up reading another day's floor. Resolving
-      // twice is the price of that: the path has to be known before the
-      // snapshot can be read, and the snapshot before the codes are complete.
-      const input = { event, placements: payload.placements };
-      const located = resolvePublishedAuthoringScope(input, canonicalPeriodKey, venueSpaceId);
-      if (!located) return null;
-      const published = await readPublishedEventMap(located.targetPath);
-      // Empty official booth slots have no placement row but are still valid
-      // geometry. The reviewed public snapshot is authoritative for those
-      // codes; placements add newly announced occupied/moved booths.
-      const resolved = resolvePublishedAuthoringScope({
-        ...input,
-        existingBoothCodes: published?.layout.rows.flatMap((row) => row.slots.map(({ code }) => code)) ?? [],
-      }, canonicalPeriodKey, venueSpaceId);
-      if (!resolved) return null;
-      const circles = new Map(payload.circles.map(circle => [circle.id, circle.name]));
-      const groups = new Map<string, { circleName: string; codes: string[] }>();
-      for (const placement of payload.placements) {
-        if (placement.status === "cancelled" || String(placement.day) !== canonicalPeriodKey || !venue.areaIds.includes(placement.area)) continue;
-        const group = groups.get(placement.circleId) ?? { circleName: circles.get(placement.circleId) ?? placement.circleId, codes: [] };
-        group.codes.push(placement.boothCode);
-        groups.set(placement.circleId, group);
-      }
-      return { ...resolved, periodAliases, groups: [...groups.values()] };
-    },
-    readPublishedEventMap,
-    githubInstallationProbe,
-    githubRemoteAuditor,
+    publicationAuditor,
     dispatchOrganizerPublication,
     projectCircle: async (circleId, fields, updatedAt = new Date().toISOString()) => {
       // Runs the same projection the reader runs, against the same snapshot, so
@@ -455,7 +432,7 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
       // the portal uses.
       publishedEvent,
     },
-  });
+  };
 }
 
 /** Map an unexpected failure onto the same envelope the client already parses. */

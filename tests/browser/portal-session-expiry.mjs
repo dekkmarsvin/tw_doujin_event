@@ -13,16 +13,14 @@ async function routes(page, { isAdmin, failure = 0 }) {
     const path = new URL(route.request().url()).pathname;
     let status = 200;
     let body = {};
-    if (path === "/api/auth/session") body = { email: "session@example.test", isAdmin, isMapContributor: false, hasOrganizerAccess: true, expiresAt: now + week };
+    if (path === "/api/auth/session") body = { email: "session@example.test", isAdmin, hasOrganizerAccess: true, expiresAt: now + week };
     else if (path === "/api/auth/config") body = { turnstileSitekey: "" };
     else if (path === "/api/organizer/events") { status = failure || 200; body = failure ? { error: failure === 401 ? "尚未登入。" : "沒有權限。" } : { events: [] }; }
     else if (path === "/api/admin/admins") body = { admins: [], self: "session@example.test" };
-    else if (path === "/api/admin/review-queue") body = { claims: [], pendingClaimCount: 0, claimCounts: [], mapDrafts: [], organizer: { applications: 0, submissions: 0 } };
+    else if (path === "/api/admin/review-queue") body = { claims: [], pendingClaimCount: 0, claimCounts: [], organizer: { applications: 0, submissions: 0 } };
     else if (path === "/api/admin/site-settings") body = { settings: { organizerApplicationMode: "closed", organizerAllowedEmails: [], accountNotificationsEnabled: false,
       accountNotificationsSince: null, adminReviewNotificationsEnabled: false, publicationEnabled: true, contactUrl: "", claimReviewNotice: "", updatedAt: now, updatedBy: "fixture" },
       publicationMode: "disabled", services: null, publicationActivities: [] };
-    else if (path === "/api/admin/map-contributions/drafts") body = { drafts: [] };
-    else if (path.startsWith("/api/admin/map-contributions/drafts/")) { status = 404; body = { error: "找不到指定草稿。" }; }
     else if (path.endsWith("/claims")) body = { claims: [], eventId: "sample" };
     await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
   });
@@ -55,8 +53,6 @@ try {
   // continuation. The final page still applies the signed-in account's role.
   for (const [destination, isAdmin] of [
     ["/admin?section=circles&view=claims&event=sample&claim=claim-one", true],
-    ["/admin?section=events&view=maps&event=sample&draft=map-one", true],
-    ["/admin#review-notifications", true],
     ["/admin?section=accounts", false],
   ]) {
     let verified = false;
@@ -68,7 +64,7 @@ try {
         window.__ff47TurnstileReady();` }));
       await page.route("**/api/auth/config*", route => route.fulfill({ json: { turnstileSitekey: "journey-sitekey" } }));
       await page.route("**/api/auth/session*", route => route.fulfill({ status: verified ? 200 : 401, json: verified
-        ? { email: "session@example.test", isAdmin, isMapContributor: false, hasOrganizerAccess: true, expiresAt: now + week }
+        ? { email: "session@example.test", isAdmin, hasOrganizerAccess: true, expiresAt: now + week }
         : { error: "尚未登入。" } }));
       await page.route("**/api/auth/request-link*", route => {
         requested = route.request().postDataJSON();
@@ -77,9 +73,8 @@ try {
       await page.route("**/api/auth/verify*", route => {
         assert.equal(route.request().postDataJSON().token, "journey-login-token");
         verified = true;
-        return route.fulfill({ json: { email: "session@example.test", isAdmin, isMapContributor: false, hasOrganizerAccess: true, expiresAt: now + week } });
+        return route.fulfill({ json: { email: "session@example.test", isAdmin, hasOrganizerAccess: true, expiresAt: now + week } });
       });
-      await page.route("**/api/admin/notification-preferences*", route => route.fulfill({ json: { enabled: true, cadence: "five_minutes", version: 1 } }));
     } });
     currentPage = page;
     await page.getByRole("heading", { name: "請先登入", exact: true }).waitFor();

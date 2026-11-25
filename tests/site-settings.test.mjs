@@ -3,16 +3,20 @@ import test, { after, beforeEach } from "node:test";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import { createServer } from "vite";
 import { resetSiteSettings } from "./support/site-settings-fixture.mjs";
+import { applyMigrations } from "./support/d1-migrations.mjs";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const load = name => vite.environments.ssr.runner.import(name);
 const { createIdentityRepository } = await load("/db/identity-repository.ts");
-const { createCirclePortalHandlers, SESSION_COOKIE } = await load("/app/circle-portal-handlers.ts");
+const { SESSION_COOKIE } = await load("/app/circle-portal-handlers.ts");
+const { createAuth } = await load("/server/auth.ts");
+const { createAdmin } = await load("/server/admin.ts");
 const { hmacSign } = await load("/app/portal-crypto.ts");
 const { runPublicationTick } = await load("/app/publication-scheduler.ts");
 const { runRequestedServiceCheck, checkMailService, checkPublicationService } = await load("/app/site-service-check.ts");
 const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: "export default {fetch(){return new Response('ok')}}", d1Databases: { DB: "site-settings" } }));
 const db = await mf.getD1Database("DB");
+await applyMigrations(db);
 const repo = createIdentityRepository(db);
 const origin = "https://map.example.test", now = Date.UTC(2027, 0, 1);
 let admin, cookie, memberCookie, handlers;
@@ -27,10 +31,12 @@ beforeEach(async () => {
   const member = await repo.upsertAccount("member@example.test", now);
   await repo.createSession(member, now, now + 86400000, "member-session");
   memberCookie = `${SESSION_COOKIE}=member-session.${await hmacSign("secret", "member-session")}`;
-  handlers = createCirclePortalHandlers({ repository: repo, sendMail: async () => {}, lookupCircle: async () => null, searchCircles: async () => [],
+  const dependencies = { repository: repo, sendMail: async () => {}, lookupCircle: async () => null, searchCircles: async () => [],
     fetchEvidence: async () => null, verifyHuman: async () => true, turnstileSitekey: () => "test", projectCircle: async () => null,
     config: { eventId: "sample", origin, sessionSecret: "secret", hashPepper: "pepper", adminEmails: [], now: () => now,
-      dataUpdatedAt: "2026-09-01T00:00:00Z", eventEndsAt: "2027-12-31T00:00:00Z", organizerPublicationMode: "github" } });
+      dataUpdatedAt: "2026-09-01T00:00:00Z", eventEndsAt: "2027-12-31T00:00:00Z", organizerPublicationMode: "r2" } };
+  const auth = createAuth(dependencies);
+  handlers = { ...auth.routes, ...createAdmin(dependencies, auth).routes };
 });
 function request(method = "GET", body, signed = cookie) {
   return new Request(`${origin}/api/admin/site-settings`, { method, headers: { origin, "content-type": "application/json", ...(signed ? { cookie: signed } : {}) },
@@ -184,7 +190,8 @@ test("service checks use Worker credentials, return safe sources and never send 
   assert.doesNotMatch(JSON.stringify(rejected), /never-return|secret-provider/);
   assert.equal((await checkMailService(env, async () => new Response(null, { status: 403 }))).status, "unknown");
   assert.equal((await checkMailService(env, async () => { throw new Error("timeout"); })).status, "unknown");
-  assert.equal((await checkPublicationService({ ORGANIZER_PUBLICATION_MODE: "github" })).source, "GitHub App 設定");
+  assert.equal((await checkPublicationService({ ORGANIZER_PUBLICATION_MODE: "r2" })).status, "available");
+  assert.equal((await checkPublicationService({ ORGANIZER_PUBLICATION_MODE: "github" })).status, "unavailable", "the Git pipeline is gone");
   await repo.requestServiceCheck(now + 1);
   await repo.completeServiceCheck(checked.requestedAt, now + 2, { mail: rejected, publication: rejected });
   assert.equal((await repo.getServiceChecks()).checkedAt, null, "an older check cannot overwrite a newer request");

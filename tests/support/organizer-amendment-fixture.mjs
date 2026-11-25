@@ -1,8 +1,9 @@
-import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { buildOfficialCatalogPayload } from "../../scripts/official-catalog-core.mjs";
 import { buildOrganizerCircleGrouping } from "../../app/organizer-circle-groups.mjs";
+import { planCircleIdentityRegistryUpdate } from "../../app/circle-identity-registry.mjs";
+import { EVENT_DATA_REPOSITORY, parseEventDataPin } from "../../app/event-data-pin.mjs";
 
 export const hash = (text) => createHash("sha256").update(text).digest("hex");
 export async function amendmentFixture(runner, adjustSnapshot = () => {}) {
@@ -27,49 +28,23 @@ export async function amendmentFixture(runner, adjustSnapshot = () => {}) {
   const source = { candidateId: "source", candidateVersion: 1, jobId: "published-job", snapshotId: "published-snapshot",
     snapshotJson, approvalHash: hash(snapshotJson), mainCommit: "1".repeat(40), dataCommit: "3".repeat(40), publishedAt: now };
   const artifacts = await builder.buildApprovedPublicationArtifacts(source);
-  const main = await builder.buildPublicationMainStage(source, { dataCommit: source.dataCommit,
-    dataFiles: new Map(artifacts.files.map((file) => [file.path, file.text])), mainCommit: "0".repeat(40),
-    publishedEventsJson: '{"schema":"published-events/1","events":["prior-event"]}', existingPinJson: null,
-    allocationsJson: '{"schema":"circle-id-allocations/1","nextSequence":1,"allocations":[]}', evidenceJson: '{"schema":"circle-identity-evidence/1","entries":[]}' });
-  const mainFiles = new Map(main.files.map((file) => [file.path, file.text]));
   const dataFiles = new Map(artifacts.files.map((file) => [file.path, file.text]));
-  const allocations = JSON.parse(mainFiles.get("data/circle-identities/allocations.json"));
-  const evidence = JSON.parse(mainFiles.get("data/circle-identities/evidence.json"));
+  // The identity registry after this first publication, from an empty one.
+  const { allocations, evidence } = planCircleIdentityRegistryUpdate({ eventId: "event-alpha", official: artifacts.official,
+    grouping: artifacts.grouping, allocations: { schema: "circle-id-allocations/1", nextSequence: 1, allocations: [] },
+    evidence: { schema: "circle-identity-evidence/1", entries: [] }, today: () => snapshot.contentUpdatedAt.slice(0, 10) });
+  // The Git-era `/1` baseline names the data commit and every published file
+  // but NOTICE, as corrections approved before #546 still carry it.
+  const pin = parseEventDataPin({ schema: "event-data-pin/2", eventId: "event-alpha", repository: EVENT_DATA_REPOSITORY,
+    commit: source.dataCommit, files: artifacts.files.filter((file) => !file.path.endsWith("/NOTICE")).map((file) => ({ path: file.path, sha256: hash(file.text) })) });
   const published = { dataCommit: source.dataCommit, catalog: buildOfficialCatalogPayload({ eventId: "event-alpha", event: artifacts.event, official: artifacts.official, evidence }) };
   const baseline = { schema: "organizer-amendment-baseline/1", source: { ...source }, mainCommit: "2".repeat(40),
-    pin: JSON.parse(mainFiles.get("data/event-data-pins/event-alpha.json")), event: artifacts.event, official: artifacts.official,
+    pin, event: artifacts.event, official: artifacts.official,
     grouping: artifacts.grouping, allocations, evidence, draft, references, maps: snapshot.maps };
   delete baseline.source.snapshotJson;
-  return { now, source, snapshot, baseline, published, mainFiles, dataFiles, referenceRecords };
+  return { now, source, snapshot, baseline, published, registry: { allocations, evidence }, dataFiles, referenceRecords };
 }
 
-export function gitReaderFixture(fixture) {
-  const reads = [];
-  const main = fixture.mainFiles;
-  const original = new Map(fixture.originalMainFiles ?? main);
-  const data = fixture.dataFiles;
-  const commits = new Map([[fixture.source.mainCommit, original], [fixture.baseline.mainCommit, main],
-    [fixture.source.dataCommit, fixture.originalDataFiles ?? data], ...(fixture.extraCommits ?? [])]);
-  return { reads, original, async fetch(url, init) {
-    assert.ok(!init?.method || init.method === "GET", "baseline loading must never write to GitHub");
-    const path = new URL(url).pathname;
-    reads.push(path);
-    if (path.endsWith("/git/ref/heads/main")) return Response.json({ ref: "refs/heads/main", object: { type: "commit", sha: fixture.baseline.mainCommit } });
-    const commit = path.match(/\/git\/commits\/([a-f0-9]{40})$/)?.[1];
-    if (commit && commits.has(commit)) return Response.json({ sha: commit, tree: { sha: commit }, parents: [], message: "fixture" });
-    const tree = path.match(/\/git\/trees\/([a-f0-9]{40})$/)?.[1];
-    if (tree && commits.has(tree)) return Response.json({ sha: tree, truncated: false, tree: [...commits.get(tree)].map(([path, text]) => ({ path, type: "blob", mode: "100644", sha: hash(text).slice(0, 40) })) });
-    const blob = path.match(/\/git\/blobs\/([a-f0-9]{40})$/)?.[1];
-    if (blob) for (const files of commits.values()) for (const text of files.values()) {
-      if (hash(text).slice(0, 40) === blob) return Response.json({ sha: blob, encoding: "base64", content: Buffer.from(text).toString("base64") });
-    }
-    throw new Error(`Unexpected GitHub read ${path}`);
-  } };
-}
-
-/** A reviewed migration merges the same two circles across two days, while
- * preserving their earliest IDs and all four placements. Old approvals stay
- * byte-for-byte unchanged, just like the PF45 correction in PR #416. */
 export async function adoptedAmendmentFixture(runner) {
   const data = await amendmentFixture(runner, (snapshot) => {
     snapshot.draft.event.days.push({ id: "2", label: "第二天", date: "2026-11-08" });
@@ -77,8 +52,6 @@ export async function adoptedAmendmentFixture(runner) {
     snapshot.maps.push({ ...structuredClone(snapshot.maps[0]), id: "day-two", periodKey: "2" });
   });
   const { baselineCanonicalJson, baselineEventEvidence } = await runner.import("/app/organizer-baseline-adoption.ts");
-  data.originalMainFiles = new Map(data.mainFiles);
-  data.originalDataFiles = new Map(data.dataFiles);
   const grouping = buildOrganizerCircleGrouping(data.baseline.event.id, data.snapshot.import.rows, data.snapshot.draft.officialSource.url);
   const groupingPath = "events/event-alpha/circle-identity-groups.json";
   const text = JSON.stringify(grouping, null, 2) + "\n";
@@ -86,12 +59,11 @@ export async function adoptedAmendmentFixture(runner) {
   const pin = structuredClone(data.baseline.pin);
   pin.commit = "4".repeat(40);
   pin.files.find((file) => file.path === groupingPath).sha256 = hash(text);
-  data.mainFiles.set("data/event-data-pins/event-alpha.json", JSON.stringify(pin));
   const evidence = structuredClone(data.baseline.evidence);
   evidence.entries[0].sources.push(...evidence.entries[2].sources);
   evidence.entries[1].sources.push(...evidence.entries[3].sources);
   evidence.entries.splice(2);
-  data.mainFiles.set("data/circle-identities/evidence.json", JSON.stringify(evidence));
+  data.registry.evidence = evidence;
   data.published = { dataCommit: pin.commit, catalog: buildOfficialCatalogPayload({ eventId: data.baseline.event.id,
     event: data.baseline.event, official: data.baseline.official, evidence }) };
   const { publishedAt: _publishedAt, snapshotJson: _snapshotJson, ...source } = data.source;
@@ -101,7 +73,6 @@ export async function adoptedAmendmentFixture(runner) {
       pinSha256: hash(baselineCanonicalJson(pin)), groupingSha256: hash(baselineCanonicalJson(grouping)),
       evidenceSha256: hash(baselineCanonicalJson(baselineEventEvidence(evidence, data.baseline.event.id))) },
     authorization: { pullRequest: "https://github.com/dekkmarsvin/tw_doujin_event/pull/416", decision: "ADR-0071" } };
-  data.extraCommits = [[pin.commit, data.dataFiles], [data.adoption.target.mainCommit, new Map(data.mainFiles)]];
   data.expectedBaseline = { ...data.baseline, schema: "organizer-amendment-baseline/2", pin, grouping, evidence,
     adoption: { record: data.adoption, sha256: hash(baselineCanonicalJson(data.adoption)) } };
   return data;

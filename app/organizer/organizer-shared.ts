@@ -72,7 +72,7 @@ export const STATUS_LABEL: Record<OrganizerEventSummary["status"], string> = {
   abandoned: "已終止修正",
 };
 
-export const ROLE_LABEL: Record<string, string> = { owner: "負責人", editor: "協作者", admin: "網站管理者", system: "系統" };
+export const ROLE_LABEL: Record<string, string> = { owner: "成員", editor: "成員", admin: "網站管理者", system: "系統" };
 export const STEP_LABEL: Record<OrganizerValidationIssue["step"], string> = {
   event: "活動",
   venue: "場館與場地",
