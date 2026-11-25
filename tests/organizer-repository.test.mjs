@@ -22,7 +22,7 @@ const { publicationFailureMessage } = await environment.runner.import("/app/orga
 const { sha256Hex } = await environment.runner.import("/app/portal-crypto.ts");
 const { circleRetentionExpiresAt } = await environment.runner.import("/app/circle-overrides.ts");
 const { createPublicationDispatcher } = await environment.runner.import("/app/publication-dispatch.ts");
-const { portalHandlers } = await environment.runner.import("/functions/_portal.ts");
+const { organizerFor } = await environment.runner.import("/functions/_portal.ts");
 const { hmacSign } = await environment.runner.import("/app/portal-crypto.ts");
 const { runPublicationTick, createScheduledPublicationDispatcher,
   PUBLICATION_CRON, PUBLICATION_RETRY_MAX_MS, PUBLICATION_TICK_MAX_TRANSITIONS, PUBLICATION_JOB_MAX_TRANSITIONS,
@@ -362,7 +362,7 @@ test("Pages runtime exposes publication by mode and a fake retry finishes throug
   const eventData = { get: async () => null, put: async () => ({}) };
   for (const [mode, preview, expected] of [["disabled", true, false], ["fake", false, false], ["fake", true, true], ["r2", false, true]]) {
     const env = { ...base, EVENT_DATA: eventData, ORGANIZER_PUBLICATION_MODE: mode, ...(preview ? { PREVIEW_MAIL_SINK: "d1" } : {}) };
-    const runtime = portalHandlers({ request: request(path), env });
+    const runtime = organizerFor({ request: request(path), env });
     const detail = await runtime.getOrganizerCandidate(request(path), id);
     assert.equal(detail.status, 200);
     assert.equal((await detail.json()).publicationAvailable, expected, `${mode}/${preview}`);
@@ -372,7 +372,7 @@ test("Pages runtime exposes publication by mode and a fake retry finishes throug
   assert.equal(await repository.updateOrganizerPublicationJob({ jobId, leaseToken: lease.token, expectedStep: step, nextStep: step, status: "failed", retryable: true, failureCode: "dispatch_failed", error: "Test dispatch failure", now: NOW + 9 }), true);
   await repository.releaseOrganizerPublicationLease(jobId, lease.token);
   const retryPath = `/api/organizer/publications/${jobId}/retry`;
-  const runtime = portalHandlers({ request: request(retryPath, "POST"), env: { ...base, PREVIEW_MAIL_SINK: "d1", ORGANIZER_PUBLICATION_MODE: "fake" } });
+  const runtime = organizerFor({ request: request(retryPath, "POST"), env: { ...base, PREVIEW_MAIL_SINK: "d1", ORGANIZER_PUBLICATION_MODE: "fake" } });
   const response = await runtime.adminRetryOrganizerPublication(request(retryPath, "POST"), jobId);
   assert.equal(response.status, 200, await response.clone().text());
   assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "published");
