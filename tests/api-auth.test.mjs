@@ -27,6 +27,28 @@ test("a mailed link signs in once; the session lasts until sign-out", async () =
   assert.equal((await api.call("GET", "/api/auth/session", { cookie })).status, 401);
 });
 
+test("the session cookie is host-locked and hidden from scripts, and a forged one is refused", async () => {
+  const requested = await api.call("POST", "/api/auth/request-link", { headers: { "cf-connecting-ip": "203.0.113.7" },
+    body: { email: "second@example.test", turnstileToken: "token", locale: "zh-Hant" } });
+  assert.equal(requested.status, 202);
+  const token = /[?&]login=([^&\s]+)/.exec((await api.lastMail("second@example.test")).text)[1];
+  const verified = await api.call("POST", "/api/auth/verify", { body: { token } });
+  const header = verified.headers.get("set-cookie");
+  assert.match(header, /^__Host-[^=]+=/);
+  for (const attribute of ["Secure", "HttpOnly", "SameSite=Lax", "Path=/", "Max-Age=604800"]) {
+    assert.ok(header.split(/;\s*/).includes(attribute), attribute);
+  }
+  assert.doesNotMatch(header, /Domain=/i);
+
+  const [name, value] = header.split(";")[0].split("=");
+  const [sessionId, signature] = value.split(".");
+  // Change the first signature character: the last one can carry only padding bits.
+  const tampered = `${signature[0] === "A" ? "B" : "A"}${signature.slice(1)}`;
+  for (const forged of [`${sessionId}.${tampered}`, `${sessionId}x.${signature}`, sessionId]) {
+    assert.equal((await api.call("GET", "/api/auth/session", { cookie: `${name}=${forged}` })).status, 401, forged);
+  }
+});
+
 test("no link is sent without passing human verification", async () => {
   api.human = false;
   try {

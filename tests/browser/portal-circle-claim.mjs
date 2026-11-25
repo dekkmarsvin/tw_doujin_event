@@ -6,10 +6,10 @@
 // hook name cannot tell you whether any of that works end to end; this is the
 // only place the whole chain is exercised as a person walks it.
 //
-// What deliberately stays in `tests/circle-portal-route.test.mjs`: enumeration
-// resistance, the order Turnstile and CSRF are checked, rejected writes not
-// reaching the database, claim ownership and uniqueness races, retention and
-// deletion, and every token invariant. A browser cannot prove a negative about
+// What deliberately stays in the API tests (`tests/api-*.test.mjs`): human
+// verification and the origin gate, rejected writes not reaching the database,
+// claim ownership and event scope, takedowns and deletion, and the session
+// invariants. A browser cannot prove a negative about
 // the database, and pretending otherwise would trade real coverage for a
 // slower, flakier version of it.
 //

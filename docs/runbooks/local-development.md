@@ -197,7 +197,7 @@ journey 放在 `tests/browser/*.mjs`，**不需要登記到任何清單**：runn
 
 `pinned` 每次都重新從正式站複製 FF47 並核對 hash，核對失敗即停止，不沿用舊資料繼續測試。因此 `pinned` 需要網路，`fixture` 則完全離線。
 
-`portal` journey 使用 `config/local-portal.env` 的本機測試值（Cloudflare 官方 always-pass Turnstile 金鑰、保留的 `.test` 收信地址、local D1 收信槽），magic link 由本機收信槽取得，與 `npm run smoke:portal` 同一條路徑。安全性本身的驗證仍留在 `tests/circle-portal-route.test.mjs`：enumeration resistance、Turnstile/CSRF 檢查順序、rejected request 不寫 DB、claim 唯一性與競態、retention/刪除、token 不變式——這些 browser 證明不了，改用 browser 會是拿真實覆蓋換更慢更不穩的版本。
+`portal` journey 使用 `config/local-portal.env` 的本機測試值（Cloudflare 官方 always-pass Turnstile 金鑰、保留的 `.test` 收信地址、local D1 收信槽），magic link 由本機收信槽取得，與 `npm run smoke:portal` 同一條路徑。安全性本身的驗證留在經過 router 的 API 測試（`tests/api-*.test.mjs`）：真人驗證與同源檢查、被拒的請求不寫 DB、社團／活動層級授權、撤下與刪除、session 不變式——這些 browser 證明不了，改用 browser 會是拿真實覆蓋換更慢更不穩的版本。
 
 `fixture` journey 以攔截 `circles.json` 與 `overrides.json` 的方式供應情境資料，不修改 `fixtures/` 內任何檔案；圖片只接受 https，所以 journey 自行應答該來源，藉此區分「沒有圖」與「有圖但讀不到」。共用工具在 `tests/browser/support/`，該子目錄不會被當成 journey 執行。
 

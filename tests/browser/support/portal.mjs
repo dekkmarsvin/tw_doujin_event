@@ -9,9 +9,9 @@
 // Nothing here weakens a boundary. Turnstile is Cloudflare's own always-pass
 // test key, the addresses are reserved `.test` ones, and the sink only answers
 // with the preview token the local config carries. The security properties this
-// cannot stand in for — enumeration resistance, the order Turnstile and CSRF
-// are checked in, rejected requests not reaching the database, claim ownership
-// races — stay in `tests/circle-portal-route.test.mjs`, where they belong.
+// cannot stand in for — human verification and the origin gate, rejected
+// requests not reaching the database, claim ownership — stay in the API tests
+// (`tests/api-*.test.mjs`), where they belong.
 import { readLocalPortalEnvironment } from "../../../scripts/local-portal-environment.mjs";
 import { base } from "./journey.mjs";
 

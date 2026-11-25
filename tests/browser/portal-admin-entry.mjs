@@ -1,6 +1,6 @@
 // staged-data: fixture
 // Real moved UI and transport; synthetic replies exercise the entry boundary.
-// Authorization/data-integrity invariants stay in circle-portal-route tests.
+// Authorization/data-integrity invariants stay in the API tests (tests/api-*.test.mjs).
 import assert from "node:assert/strict";
 import { start, base, output } from "./support/journey.mjs";
 

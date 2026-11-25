@@ -2,7 +2,7 @@
 // Focused UI regressions: the one-time challenge must survive the claims
 // refresh, and a circle someone else owns never offers a form to fill in.
 // Real authentication and claim ownership are exercised by portal-circle-claim
-// and circle-portal-route; these responses isolate the challenge-only branch.
+// and the API tests; these responses isolate the challenge-only branch.
 import assert from "node:assert/strict";
 import { base, start } from "./support/journey.mjs";
 
