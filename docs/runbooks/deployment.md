@@ -145,7 +145,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))" |
 
 - **新增或修改密鑰後必須重新部署。** Pages 的密鑰是在建立 deployment 時綁定的，既有 deployment 不會追溯取得新密鑰。症狀是所有 `/api/*` 回 503「服務尚未設定完成」，而 `wrangler pages secret list` 明明列得出來。用 `gh workflow run ci.yml --ref main` 重跑即可。
 - **`SESSION_SECRET` 一旦上線就不要更換。** 它簽署 session cookie，更換等同讓所有已登入的社團同時被登出。
-- **`ADMIN_EMAILS` 只在管理者名單為空時作為種子。** 名單存在 D1 的 `admins` 表，之後從 `/admin` 增減，立即生效、不需重新部署。見[社團自助控制面契約](../contracts/circle-portal.md#管理者)。
+- **`ADMIN_EMAILS` 只在管理者名單為空時作為種子。** 名單存在 D1 的 `admins` 表，之後從 `/admin` 增減，立即生效、不需重新部署。見[社團自助控制面契約](../contracts/admin.md#待審通知)。
 
 ## 在 preview 用真實信箱登入
 

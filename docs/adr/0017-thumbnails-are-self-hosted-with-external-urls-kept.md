@@ -4,7 +4,7 @@
 - **部分被取代**（2026-09-23 標註）：主機允許清單由 [ADR-0052](./0052-thumbnail-addresses-are-checked-as-images-not-hosts.md) 移除；本站代管為主線的決策不變。
 - 實作：[#65](https://github.com/dekkmarsvin/tw_doujin_event/issues/65)（2026-08-21）
 - 延續：[ADR-0012：資料來源只留主辦官網與社團本人](./0012-first-party-sources-only.md)
-- 相關契約：[社團自助控制面契約](../contracts/circle-portal.md)、[資料傳輸與離線契約](../contracts/delivery-and-offline.md)
+- 相關契約：[社團自助控制面契約](../contracts/circle-portal.md)、[資料傳輸與離線契約](../contracts/reader.md#資料傳輸與離線)
 - 相關 issue：[#40](https://github.com/dekkmarsvin/tw_doujin_event/issues/40)、[#30](https://github.com/dekkmarsvin/tw_doujin_event/issues/30)、[#48](https://github.com/dekkmarsvin/tw_doujin_event/issues/48)
 
 ## 脈絡

@@ -21,4 +21,4 @@ Reader 按下桌機詳情的 X 後，面板消失但地圖及分享網址仍保�
 
 活動名稱整區提供「切換活動」入口，返回乾淨的既有活動選擇頁，保留瀏覽器歷史與本機規劃。頂部活動資訊可換行，搜尋依空間及字級移往第二列；不新增 URL 參數、活動模型或跨活動搜尋。
 
-驗收與現況分別由 [URL 契約](../contracts/url-state.md)、[活動地圖契約](../contracts/event-map.md) 及 [元件規格](../design/components.md) 管理。
+驗收與現況分別由 [URL 契約](../contracts/reader.md#url-檢視狀態)、[活動地圖契約](../contracts/reader.md#活動地圖) 及 [元件規格](../design/components.md) 管理。

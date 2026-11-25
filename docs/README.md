@@ -1,6 +1,6 @@
 # 文件索引
 
-後端重寫中（[#546](https://github.com/dekkmarsvin/tw_doujin_event/issues/546)）：新工作以 #546 為準，標為**凍結**的文件只描述舊實作，不再更新。
+後端已依 [#546](https://github.com/dekkmarsvin/tw_doujin_event/issues/546) 重寫完成。`docs/adr/` 與 `docs/design/history/` 只是歷史。
 
 | 我想知道… | 去哪裡 |
 |---|---|
@@ -20,25 +20,11 @@
 
 | 文件 | 涵蓋 |
 |---|---|
-| [社團目錄](./contracts/circle-catalog.md) | 社團身分、領域模型、資訊密度、來源標示 |
-| [活動地圖](./contracts/event-map.md) | layout 不變量、renderer 邊界、互動與縮放 |
-| [收藏與走訪規劃](./contracts/planning.md) | 收藏／群組／行程、備份與復原、短網址分享 |
-| [品書瀏覽](./contracts/catalog-browse.md) | 品書入口、日期與場地範圍、瀏覽位置恢復 |
-| [搜尋、篩選與顯示設定](./contracts/search.md) | 三組條件的責任切分、詳細搜尋 |
-| [URL 檢視狀態](./contracts/url-state.md) | 查詢參數與恢復規則 |
-| [地圖編輯器](./contracts/map-editor.md) | 主辦工作區的地圖畫布操作 |
-| [資料匯入範圍](./contracts/data-import.md) | 收藏與行程備份的匯入入口 |
-| [資料傳輸與離線](./contracts/delivery-and-offline.md) | 活動資料的版本與載入、Service Worker、快取標頭 |
-
-## 凍結的後端契約
-
-舊後端的規格，在 #546 中隨對應程式一起刪除。只用來理解現況，不作為新需求的依據；後端的現行規格是[後端 API](./api.md)。
-
-- [社團自助控制面](./contracts/circle-portal.md)
-- [主辦單位工作區](./contracts/organizer-workspace.md)
-- [網站營運設定](./contracts/site-settings.md)
-- [資料 inventory](./contracts/data-inventory.md)
-- [共享 reference 選擇](./contracts/reference-selection.md)
+| [Reader](./contracts/reader.md) | 社團目錄與來源標示、活動地圖、搜尋與篩選、逛品書、收藏與行程、URL 狀態、資料傳輸與離線、匯入範圍 |
+| [社團入口](./contracts/circle-portal.md) | `/circle`：登入、認領、可編輯範圍、預覽、分享、活動後退出、保存與刪除 |
+| [主辦工作區](./contracts/organizer-workspace.md) | `/organizer`：活動申請、建置冊、匯入、地圖與地圖編輯器、修正宣告、送審與發布 |
+| [管理入口](./contracts/admin.md) | `/admin`：審核、帳號、網站營運設定、共用資料 |
+| [資料 inventory](./contracts/data-inventory.md) | 本站持有哪些資料、存在哪裡、保存多久。仍描述 #546 之前的資料表，待更新 |
 
 ## 流程
 

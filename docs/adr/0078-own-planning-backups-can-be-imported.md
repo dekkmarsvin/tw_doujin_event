@@ -2,7 +2,7 @@
 
 - 狀態：已定案（2026-10-03，#415）。
 - 部分取代 [ADR-0005](./0005-import-stays-p2-export-only.md)：只針對讀者自己的 `circle-plan-json/1` 完整備份解除匯入分期；CSV 匯入與外部服務匯入仍維持 P2。
-- 相關契約：[收藏與走訪規劃契約](../contracts/planning.md#匯出與匯入分期)、[資料匯入契約](../contracts/data-import.md)
+- 相關契約：[收藏與走訪規劃契約](../contracts/reader.md#匯出與匯入分期)、[資料匯入契約](../contracts/reader.md#資料匯入範圍)
 
 ## 脈絡
 
@@ -30,5 +30,5 @@ ADR-0005 要求解除分期時同時交付身分比對、預覽分類、確認�
 ## 後果
 
 - 「資料管理」的「完整備份」提供「匯出備份」與「從備份復原」。CSV 仍可匯出，但介面不稱其為完整多日備份，也不開放 CSV 匯入。行程面板不另設 JSON 入口；帶到手機與分享由短網址流程承接。
-- `planning-transfer` 的 JSON 匯入路徑不再過濾未知社團；外部匯入、CSV 匯入與其批次紀錄要求維持 ADR-0005 與[資料匯入契約](../contracts/data-import.md)的 P2 設計。
+- `planning-transfer` 的 JSON 匯入路徑不再過濾未知社團；外部匯入、CSV 匯入與其批次紀錄要求維持 ADR-0005 與[資料匯入契約](../contracts/reader.md#資料匯入範圍)的 P2 設計。
 - 匯入不經後端、不新增帳號或雲端同步；轉移是單次的，之後兩台裝置各自修改。

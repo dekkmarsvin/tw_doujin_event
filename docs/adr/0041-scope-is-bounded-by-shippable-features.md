@@ -3,7 +3,7 @@
 - 狀態：已定案（2026-08-30）
 - 延續：[ADR-0040](./0040-review-findings-are-bounded-by-the-ticket.md)（同一個判準，作用範圍由 review thread 擴大到 backlog 與契約文件）
 - 相關 issue：[#85](https://github.com/dekkmarsvin/tw_doujin_event/issues/85)、[#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104)、[#117](https://github.com/dekkmarsvin/tw_doujin_event/issues/117)、[#118](https://github.com/dekkmarsvin/tw_doujin_event/issues/118)
-- 相關契約：[搜尋、篩選與顯示設定契約](../contracts/search.md)
+- 相關契約：[搜尋、篩選與顯示設定契約](../contracts/reader.md#搜尋篩選與顯示設定)
 
 ## 問題
 
@@ -19,7 +19,7 @@
 | #118 | GitHub PR／pin orchestration（已凍結） | 沒有。且自己寫明不發 token |
 | #119 | production event selection 不硬編 FF47 | 沒有，但它是第二場活動的實際前置 |
 
-**五張票，零張是產品功能。** 同一時間，`docs/contracts/search.md` 有三條標著 `未實作` 的使用者能力（多主題 AND／OR、排除主題、命中原因說明）從來沒有進過追蹤面。
+**五張票，零張是產品功能。** 同一時間，`docs/contracts/reader.md#搜尋篩選與顯示設定` 有三條標著 `未實作` 的使用者能力（多主題 AND／OR、排除主題、命中原因說明）從來沒有進過追蹤面。
 
 commit 歷史指向同一件事。最近一批合併的訊息是 `Count quoted carriage-return source lines`、`Honor zero rowspans within row groups`、`Reject case-colliding booth codes`——都是主辦網頁 HTML 的極端輸入處理。它們各自正確，但它們回答的是「這份 HTML 有沒有可能長成這樣」，不是「使用者能不能完成任務」。
 
@@ -61,7 +61,7 @@ commit 歷史指向同一件事。最近一批合併的訊息是 `Count quoted c
 - #117 與 #118 以本 ADR 關閉。兩者都已自陳解除條件是「第二場真實活動跑完之後再看」——那是**重新評估的觸發器，不是待辦**，留著只會讓 backlog 看起來有五張票在動。#104 的 epic 內文仍保存它們的重啟條件。
 - #85 從「編目五個場館」改為需求驅動：有活動確定用哪個場館，才建立該場館的 record。取代 `tests/event-url-state.test.mjs` 合成 fixture 的那條驗收條件一併移除——它是拿真實資料去驗證一條已有測試覆蓋的 codec 規則，屬決策 2 的推測性擴充。
 - #119 保留。它不是功能，但它是第二場活動的實際前置，符合決策 1 的「明顯更省力」。
-- `docs/contracts/search.md` 的三條 `未實作` 依決策 5 開票並實作。
+- `docs/contracts/reader.md#搜尋篩選與顯示設定` 的三條 `未實作` 依決策 5 開票並實作。
 - 代價明確：本專案會**接受更多在極端輸入下的未定義行為**。主辦網頁若送出本 importer 未涵蓋的形狀，結果是 build 失敗與人工處理，不是自動修復。這是刻意的取捨，不是疏漏。
 - 訊號：若同一類極端輸入在**真實資料**上重複出現兩次，它就不再是邊緣，改依決策 1 評估。
 

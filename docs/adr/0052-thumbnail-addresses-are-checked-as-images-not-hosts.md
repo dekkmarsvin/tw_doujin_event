@@ -3,7 +3,7 @@
 - **狀態**：Accepted
 - **日期**：2026-09-08
 - **部分取代**：[ADR-0017](./0017-thumbnails-are-self-hosted-with-external-urls-kept.md) 的主機允許清單（本站代管為主線的決策不變）
-- **相關文件**：[社團自助控制面契約](../contracts/circle-portal.md#媒體安全)、[資料傳輸與離線契約](../contracts/delivery-and-offline.md#快取標頭)
+- **相關文件**：[社團自助控制面契約](../contracts/circle-portal.md#媒體安全)、[資料傳輸與離線契約](../contracts/reader.md#快取標頭)
 
 ## 背景
 

@@ -2,7 +2,7 @@
 
 - 狀態：已定案（2026-10-03，#415 維護者決策）。
 - 相關：[ADR-0002](./0002-planning-data-stays-on-device.md)（規劃資料留在裝置）、[ADR-0078](./0078-own-planning-backups-can-be-imported.md)（完整備份與復原）
-- 相關契約：[收藏與走訪規劃契約](../contracts/planning.md#分享行程)、[URL 檢視狀態契約](../contracts/url-state.md)
+- 相關契約：[收藏與走訪規劃契約](../contracts/reader.md#分享行程)、[URL 檢視狀態契約](../contracts/reader.md#url-檢視狀態)
 
 ## 脈絡
 
