@@ -153,19 +153,19 @@ CI 的 `Browser acceptance` job 只在 PR 與手動 dispatch 執行，main 不�
 
 | 命令 | 跑什麼 |
 |---|---|
-| `npm run test:browser` | 全部 journey；尺寸矩陣使用各流程的代表性案例 |
-| `npm run test:browser:matrix` | 全部 journey；尺寸矩陣使用完整組合，包含地圖 10 尺寸 × 3 字級 |
+| `npm run test:browser` | 全部 journey；`map-viewport` 使用代表性尺寸 |
+| `npm run test:browser:matrix` | 全部 journey；`map-viewport` 使用完整組合（地圖 10 尺寸 × 3 字級） |
 
-`reader-header`、`reader-mobile-tools`、`mobile-circle-sheet`、`reader-narrow-desktop` 的代表性案例保留手機／桌機操作、360×640 回歸尺寸、相關 760／761 與 1050／1051 斷點、最大字級及觸控拖曳。完整模式保留全部原有尺寸／字級組合。名單的重複尺寸檢查保留 1040、1440、2560，詳情高度保留 761、1440；其餘少量版面分支與 resize／history／recovery 操作在兩種模式都執行，不因尺寸減量而略過整條 journey。
+瀏覽器 journey 只留 Reader 主要旅程與各入口一條登入後操作（#546）。Reader 為 `map-viewport`、`catalog-browse`、`circle-page`、`reader-event-chooser`、`reader-shared-itinerary`，以及離線重新載入的 `reader-offline-prep`。真實登入後的操作：`portal-circle-claim` 以寄出的連結登入社團入口與管理入口，認領、由管理者核准後編輯並發布；`portal-organizer-entry` 以連結登入主辦工作區。`portal-admin-entry` 以注入的 session 與攔截的回應檢查管理入口畫面，不經過真實登入。`portal-session-expiry` 確認閒置到 session 到期時畫面回到登入。
 
-共用 `selectMatrix` 只選尺寸組合，不選斷言。`--matrix none` 在上述流程仍執行代表性操作；它只略過 `map-viewport` 額外的尺寸矩陣。上述流程的 `browser-report-*.json` 記錄實際完成的組合、`pagesOpened`、主文件完成載入的 `documentLoads`（含 reload／跨頁，不含同頁路由）與 `durationMs`；runner 另記錄每條 journey 的開始／結束時間。耗時受資料下載、啟動與執行環境影響，以同環境的報告比較，不把縮小矩陣的比例當成整套 CI 加速比例。
+共用 `selectMatrix` 只選尺寸組合，不選斷言，目前只有 `map-viewport` 使用；`--matrix none` 略過它額外的尺寸矩陣，`map-viewport` 另外寫自己的 `browser-report-<matrix>.json`。其他 journey 的 `browser-report-<journey>.json` 記錄 `pagesOpened`、主文件完成載入的 `documentLoads`（含 reload／跨頁，不含同頁路由）與 `durationMs`；runner 另記錄每條 journey 的開始／結束時間。
 
 `npm run test:browser` 自己處理所有前置：staging、啟動 Vite、等待相依預先打包完成、跑完後關閉伺服器。不需要另開 terminal，也不需要自行組 `MAP_TEST_URL`。
 
 聚焦驗證用 `--journey` 指定檔名（可省略 `.mjs`），可重複提供多個名稱；只準備選定旅程需要的資料與伺服器。未指定時仍跑全部旅程。
 
 ```bash
-npm run test:browser -- --journey reader-thumbnails
+npm run test:browser -- --journey reader-offline-prep
 npm run test:browser -- --journey portal-admin-entry --journey portal-organizer-entry
 ```
 

@@ -5,10 +5,10 @@
 **實作**：`app/map-shape-geometry.ts`、`app/map-shape-drawing.tsx`
 **測試**：`tests/map-shape-geometry.test.mjs`
 **實作**：[`app/map-annotations.ts`](../../app/map-annotations.ts)、[`app/map-annotation-drawing.tsx`](../../app/map-annotation-drawing.tsx)、[`app/staged-event-data.ts`](../../app/staged-event-data.ts)
-**測試**：`tests/map-annotations.test.mjs`、`tests/map-contribution-draft.test.mjs`、`tests/map-contribution-handlers.test.mjs`、`tests/publication-artifacts.test.mjs`、`tests/browser/map-authoring-annotations.mjs`、`tests/browser/map-roster-coverage.mjs`
+**測試**：`tests/map-annotations.test.mjs`、`tests/map-contribution-draft.test.mjs`、`tests/map-contribution-handlers.test.mjs`、`tests/publication-artifacts.test.mjs`
 
 **實作**：[`app/accessible-event-map-renderer.tsx`](../../app/accessible-event-map-renderer.tsx)、[`app/event-map.ts`](../../app/event-map.ts)、[`app/map-viewport.ts`](../../app/map-viewport.ts)、[`app/use-map-viewport.ts`](../../app/use-map-viewport.ts)、[`app/map-label-presentation.ts`](../../app/map-label-presentation.ts)、[`app/map-marker-presentation.ts`](../../app/map-marker-presentation.ts)、[`app/map-marker-icons.tsx`](../../app/map-marker-icons.tsx)、[`app/map-facility-directory.ts`](../../app/map-facility-directory.ts)、[`app/map-facility-panel.tsx`](../../app/map-facility-panel.tsx)、[`app/map-view-state.ts`](../../app/map-view-state.ts)
-**測試**：`tests/map-viewport.test.mjs`、`tests/map-desktop-geometry.test.mjs`、`tests/map-label-renderer.test.mjs`、`tests/map-marker-presentation.test.mjs`、`tests/map-view-state.test.mjs`、`tests/map-import.test.mjs`、`tests/browser/map-viewport.mjs`、`tests/browser/reader-map-facilities.mjs`
+**測試**：`tests/map-viewport.test.mjs`、`tests/map-desktop-geometry.test.mjs`、`tests/map-label-renderer.test.mjs`、`tests/map-marker-presentation.test.mjs`、`tests/map-view-state.test.mjs`、`tests/map-import.test.mjs`、`tests/browser/map-viewport.mjs`
 **活動資料**：data repo 的 `map.json`（只有一組「活動日 × 場地」，或尚未改用 scoped map 的既有活動）或 `map-manifest.json` + `maps/<periodKey>/<venueSpaceId>.json`（多組），由 pin 驗證後 staging 到 `dist/data/events/<event>/`
 **流程**：[地圖 authoring](../runbooks/map-authoring.md)
 

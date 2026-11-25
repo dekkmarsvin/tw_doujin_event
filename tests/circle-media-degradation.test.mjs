@@ -3,9 +3,8 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 /**
- * The remaining copy guard covers surfaces not all opened by the media
- * journeys. Empty frames, centered pictureless details and portrait geometry
- * run in reader-thumbnails; narrow preview layout runs in portal-circle-claim.
+ * The remaining copy guard covers surfaces the browser journeys do not open;
+ * the narrow preview layout runs in portal-circle-claim.
  */
 
 const source = async (path) => readFile(new URL(`../app/${path}`, import.meta.url), "utf8");

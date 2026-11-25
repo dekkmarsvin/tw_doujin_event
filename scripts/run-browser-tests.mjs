@@ -3,7 +3,7 @@
 //   node scripts/run-browser-tests.mjs                 representative sizes
 //   node scripts/run-browser-tests.mjs --matrix full   every size and scale
 //   node scripts/run-browser-tests.mjs --matrix none   interaction journeys only
-//   node scripts/run-browser-tests.mjs --journey reader-thumbnails
+//   node scripts/run-browser-tests.mjs --journey reader-offline-prep
 //
 // Journeys live in tests/browser/*.mjs. Each declares the staged data it needs
 // with a `// staged-data: pinned|fixture` line; pinned is the default.
