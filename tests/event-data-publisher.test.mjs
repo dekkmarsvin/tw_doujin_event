@@ -71,7 +71,7 @@ test("approval publishes the reader files and registry the Git pipeline produced
   // main-repository ledger recorded.
   assert.equal(store.store.get(`events/event-alpha/${entry.version}/event.json`).text, fixture.dataFiles.get("events/event-alpha/event.json"));
   assert.deepEqual(circlesOf(store), fixture.published.catalog);
-  assert.deepEqual(store.read(`registry/${result.version}/evidence.json`), JSON.parse(fixture.mainFiles.get("data/circle-identities/evidence.json")));
+  assert.deepEqual(store.read(`registry/${result.version}/evidence.json`), fixture.registry.evidence);
   assert.deepEqual(entry.definition, JSON.parse(fixture.dataFiles.get("events/event-alpha/event.json")));
   // The registry readers were built with before stays as it was.
   assert.deepEqual(store.read("registry/r0/allocations.json").allocations, []);
@@ -263,7 +263,7 @@ test("a correction starts from the grouping readers were published with, includi
   const merged = fixture.dataFiles.get("events/event-alpha/circle-identity-groups.json");
   store.store.set(`events/event-alpha/${version}/source/circle-identity-groups.json`, { text: merged, etag: "g" });
   store.store.set(`events/event-alpha/${version}/circles.json`, { text: JSON.stringify(fixture.published.catalog), etag: "c" });
-  store.store.set(`registry/${index.registry}/evidence.json`, { text: fixture.mainFiles.get("data/circle-identities/evidence.json"), etag: "r" });
+  store.store.set(`registry/${index.registry}/evidence.json`, { text: JSON.stringify(fixture.registry.evidence), etag: "r" });
   const baseline = await createR2AmendmentBaselineLoader(store)({ ...fixture.source });
   assert.deepEqual(baseline.grouping, JSON.parse(merged));
   await publishApprovedSnapshot(store, amendmentSnapshot(baseline, [], "after-merge", { name: "整合後的活動" }), tick);

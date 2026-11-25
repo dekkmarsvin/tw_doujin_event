@@ -55,10 +55,21 @@ const staged = stage.events ?? [{ eventId: stage.eventId }];
 const eventIds = staged.map(({ eventId }) => eventId);
 // A sortable timestamp: later uploads always carry a later version.
 const version = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
-// The circle identity registry approvals read and extend (#546).
+// The circle identity registry approvals read and extend (#546). The local
+// portal starts from an empty one, as a new environment does: the fixtures'
+// circles carry their own ids, and production's registry lives only in R2.
 const index = { schema: "event-index/1", registry: version, events: [] };
 const staging = path.join(root, "public", "data", "events");
-for (const file of ["allocations.json", "evidence.json"]) put(`registry/${version}/${file}`, path.join(root, "data", "circle-identities", file));
+const registry = await mkdtemp(path.join(tmpdir(), "event-registry-"));
+try {
+  for (const [file, value] of [["allocations.json", { schema: "circle-id-allocations/1", nextSequence: 1, allocations: [] }],
+    ["evidence.json", { schema: "circle-identity-evidence/1", entries: [] }]]) {
+    await writeFile(path.join(registry, file), `${JSON.stringify(value)}\n`);
+    put(`registry/${version}/${file}`, path.join(registry, file));
+  }
+} finally {
+  await rm(registry, { recursive: true, force: true });
+}
 for (const eventId of eventIds) {
   const directory = path.join(staging, eventId);
   const files = await jsonFiles(directory);
