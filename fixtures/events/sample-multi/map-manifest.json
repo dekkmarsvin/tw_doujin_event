@@ -1,0 +1,12 @@
+{
+  "schema": "event-map-manifest/1",
+  "eventId": "sample-multi",
+  "maps": [
+    { "periodKey": "1", "venueSpaceId": "hall-a", "path": "maps/1/hall-a.json" },
+    { "periodKey": "1", "venueSpaceId": "hall-b", "path": "maps/1/hall-b.json" },
+    { "periodKey": "1", "venueSpaceId": "hall-c", "path": "maps/1/hall-c.json" },
+    { "periodKey": "2", "venueSpaceId": "hall-a", "path": "maps/2/hall-a.json" },
+    { "periodKey": "2", "venueSpaceId": "hall-b", "path": "maps/2/hall-b.json" },
+    { "periodKey": "2", "venueSpaceId": "hall-c", "path": "maps/2/hall-c.json" }
+  ]
+}

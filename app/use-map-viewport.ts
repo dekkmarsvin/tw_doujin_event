@@ -27,6 +27,7 @@ export function useMapViewport({ elements, publishedMap, scope, artifactKey, des
 }) {
   const [view, setViewState] = useState<MapView>({ zoom: .8, offset: { x: 0, y: 0 } });
   const [minimum, setMinimum] = useState(0);
+  const [visibleRect, setVisibleRect] = useState<MapRect | null>(null);
   const viewRef = useRef(view);
   const fittedScope = useRef<string | null>(null);
   const geometry = useRef<{ width: number; height: number; fitWidth: number; windowWidth: number; inset: { x: number; y: number }; fit: MapView } | null>(null);
@@ -103,12 +104,37 @@ export function useMapViewport({ elements, publishedMap, scope, artifactKey, des
     setView(next.fit);
   }, [cancelPosition, fittedKey, getFit, setView]);
 
+  const fitInVisibleRect = useCallback(() => {
+    cancelPosition();
+    const next = getFit();
+    if (!next) return;
+    const bounds = measure(false);
+    const targetRect = bounds && bounds.rect.width > 0 && bounds.rect.height > 0 ? bounds.rect : null;
+    geometry.current = next;
+    fittedScope.current = fittedKey;
+    setMinimum(next.fit.zoom);
+    if (!targetRect) {
+      setView(next.fit);
+      return;
+    }
+    setView({
+      zoom: next.fit.zoom,
+      offset: offsetMapPointInRect({ x: floorWidth / 2, y: floorHeight / 2 }, targetRect, next.fit.zoom, next.inset),
+    });
+  }, [cancelPosition, fittedKey, floorWidth, getFit, measure, setView]);
+
   useLayoutEffect(() => {
     if (!publishedMap) return;
     let frame: number | null = null;
     const update = () => {
       const next = getFit();
       if (!next) return;
+      const visible = measure(false);
+      if (visible && visible.rect.width > 0 && visible.rect.height > 0) {
+        const rect = visible.rect;
+        setVisibleRect((current) => current && current.x === rect.x && current.y === rect.y
+          && current.width === rect.width && current.height === rect.height ? current : rect);
+      }
       const previous = geometry.current;
       const first = fittedScope.current !== fittedKey;
       // Ignore the borrowed search-column width when detecting a resize, but
@@ -144,5 +170,5 @@ export function useMapViewport({ elements, publishedMap, scope, artifactKey, des
     return () => { observer.disconnect(); if (frame !== null) cancelAnimationFrame(frame); };
   }, [controls, details, fittedKey, fitTools, getFit, getInset, map, measure, mobileDock, mobileNav, publishedMap, request, scope, setView, tools]);
 
-  return { view, viewRef, setView, minimum, floorWidth, floorHeight, getInset, position, positionPoint, cancelPosition, reset };
+  return { view, viewRef, setView, minimum, visibleRect, floorWidth, floorHeight, getInset, position, positionPoint, cancelPosition, reset, fitInVisibleRect };
 }

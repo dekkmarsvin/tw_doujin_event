@@ -4,6 +4,7 @@ import sampleTwoDefinition from "../fixtures/events/sample-two/event.json";
 import sampleTwoReferences from "../fixtures/events/sample-two/reference-records.json";
 import { circleCategoryLabels, parseCircleCategoryCatalog, type CircleCategoryCatalog } from "./circle-categories";
 import { eventAliasProblems } from "./event-aliases";
+import { VENUE_OVERVIEW_SCHEMA, parseVenueOverviewRecord, venueOverviewSpaceIds, type VenueOverviewRecord } from "./venue-overview.mjs";
 
 declare const __PUBLISHED_EVENTS__: readonly { definition: unknown; references: unknown }[];
 
@@ -50,6 +51,8 @@ export type EventDefinition<TDay extends string | number = string | number, TAre
   officialData: OfficialDataDefinition;
   /** 活動圖片 (#396): already public when this definition is. Absent when none. */
   image?: { url: string; width: number; height: number };
+  /** 單一場館園區總覽 (#578): 僅在多場地且全屬同一場館並涵蓋全部分配場地時存在。 */
+  venueOverview?: VenueOverviewRecord;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -249,6 +252,28 @@ export function parseEventDefinition(value: unknown, references: unknown): Event
     throw new Error("Event venue assignments must uniquely cover every area.");
   }
 
+  const assignedByVenue = new Map<string, string[]>();
+  for (const assignment of venueAssignments) {
+    const list = assignedByVenue.get(assignment.venueId) ?? [];
+    list.push(assignment.venueSpaceId);
+    assignedByVenue.set(assignment.venueId, list);
+  }
+  const overviews = new Map<string, VenueOverviewRecord>();
+  for (const record of records) {
+    if (record.schema !== VENUE_OVERVIEW_SCHEMA) continue;
+    const overview = parseVenueOverviewRecord(record, "Event reference venue-overview");
+    if (overviews.has(overview.venueId)) throw new Error(`Duplicate venue-overview for ${overview.venueId}.`);
+    const assignedSpaces = assignedByVenue.get(overview.venueId);
+    if (!assignedSpaces) throw new Error(`Venue-overview ${overview.venueId} is not assigned to event ${value.id}.`);
+    const overviewSpaces = venueOverviewSpaceIds(overview);
+    if (assignedSpaces.some((spaceId) => !overviewSpaces.has(spaceId))) {
+      throw new Error(`Venue-overview ${overview.venueId} does not cover every assigned venue space.`);
+    }
+    overviews.set(overview.venueId, overview);
+  }
+  const singleVenueId = venueAssignments.length > 1 && assignedByVenue.size === 1 ? venueAssignments[0].venueId : null;
+  const venueOverview = singleVenueId ? overviews.get(singleVenueId) : undefined;
+
   return {
     schema: EVENT_DEFINITION_SCHEMA,
     id: value.id as string,
@@ -270,6 +295,7 @@ export function parseEventDefinition(value: unknown, references: unknown): Event
     officialData: value.officialData as OfficialDataDefinition,
     dataLastUpdatedLabel: dataDateLabel(value.dataUpdatedAt as string),
     ...(image ? { image: { url: image.url, width: image.width, height: image.height } } : {}),
+    ...(venueOverview ? { venueOverview } : {}),
   };
 }
 

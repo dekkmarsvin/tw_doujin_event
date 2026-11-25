@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSPrope
 import { createPortal } from "react-dom";
 import { useMapViewport } from "./use-map-viewport";
 import AccessibleEventMapRenderer from "./accessible-event-map-renderer";
+import VenueOverviewRenderer from "./venue-overview-renderer";
 import { loadStaticEventMapResource } from "./static-event-map-client";
 import type { PublishedEventMap } from "./event-map";
 import { placementStatusLabel, resolveCircleIdAliases, type CircleViewRecord } from "./circle-records";
@@ -38,7 +39,20 @@ import tabStyles from "./reader-mobile-tabs.module.css";
 import { useModalFocus } from "./use-modal-focus";
 import { UiIcon } from "./ui-icons";
 import { resolveCircleSelection } from "./map-view-state";
-import { calculatePinchMapView, clampMapZoom, mapViewFromWheel, MOBILE_SUMMARY_PEEK_HEIGHT, shouldShowMapMedia, zoomOffsetAroundPoint, type MapPinchOrigin } from "./map-viewport";
+import {
+  calculatePinchMapView,
+  clampMapZoom,
+  INITIAL_WHEEL_OVERVIEW_STATE,
+  isAtMinimumZoom,
+  mapViewFromWheel,
+  MOBILE_SUMMARY_PEEK_HEIGHT,
+  shouldEnterOverviewFromPinch,
+  shouldShowMapMedia,
+  stepWheelOverviewGesture,
+  zoomOffsetAroundPoint,
+  type MapPinchOrigin,
+  type WheelOverviewState,
+} from "./map-viewport";
 import {
   eventUsesScopedMaps, venueAssignmentForArea,
   venueAssignmentForVenueSpace, type EventDayDefinition, type EventDefinition,
@@ -139,7 +153,13 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   const [restoreVersion, setRestoreVersion] = useState(0);
   const [mapRetry, setMapRetry] = useState(0);
   const [mapGestureActive, setMapGestureActive] = useState(false);
+  const [venueOverviewOpen, setVenueOverviewOpen] = useState(false);
   const [facilityListOpen, setFacilityListOpen] = useState(false);
+  const venueOverview = event.venueOverview ?? null;
+  const venueOverviewSpaces = useMemo(
+    () => event.venueAssignments.map((item) => ({ venueSpaceId: item.venueSpaceId, name: item.venueSpaceName })),
+    [event.venueAssignments],
+  );
   // Outlined until the next map operation. It carries the scope it was located
   // in, so a marker id that recurs on another day's map is not outlined there.
   const [locatedFacility, setLocatedFacility] = useState<{ scope: string; key: string } | null>(null);
@@ -170,6 +190,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   const floorRef = useRef<HTMLDivElement | null>(null);
   const fullDetailRef = useRef<HTMLDivElement | null>(null);
   const gesture = useRef<MapGesture | null>(null);
+  const wheelOverviewRef = useRef<WheelOverviewState>(INITIAL_WHEEL_OVERVIEW_STATE);
   const mapGestureFrame = useRef<number | null>(null);
   const mobileSheetGesture = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
   const mobileSheetWasDragged = useRef(false);
@@ -177,6 +198,11 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   const tapStart = useRef<{ pointerId: number; x: number; y: number } | null>(null);
   const lastTap = useRef<{ x: number; y: number; time: number } | null>(null);
   const facilityTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const zoomInButtonRef = useRef<HTMLButtonElement | null>(null);
+  const zoomOutButtonRef = useRef<HTMLButtonElement | null>(null);
+  const fitButtonRef = useRef<HTMLButtonElement | null>(null);
+  const currentOverviewSpaceRef = useRef<SVGGElement | null>(null);
+  const venueOverviewLayerRef = useRef<HTMLDivElement | null>(null);
   const facilityPanelId = useId();
   const toolsRef = useRef<HTMLDivElement | null>(null);
   const fitToolsRef = useRef<HTMLDivElement | null>(null);
@@ -207,9 +233,65 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     elements: { map: mapRef, floor: floorRef, tools: toolsRef, fitTools: fitToolsRef, controls: controlsRef, details: detailsRef, mobileDock: mobileDockRef, mobileNav: mobileNavRef },
     publishedMap, scope: mapScopeKey, artifactKey: publishedMap ? loadedMap!.artifactKey : null, desktop, detailsOpen: desktopDetailsOpen,
   });
-  const { view: mapView, viewRef: mapViewRef, setView: setMapView, minimum: mapMinZoom, floorHeight, floorWidth, getInset: getFloorInset, position: focusCode, positionPoint, cancelPosition } = viewport;
+  const {
+    view: mapView,
+    viewRef: mapViewRef,
+    setView: setMapView,
+    minimum: mapMinZoom,
+    visibleRect,
+    floorHeight,
+    floorWidth,
+    getInset: getFloorInset,
+    position: focusCode,
+    positionPoint,
+    cancelPosition,
+    fitInVisibleRect,
+  } = viewport;
   const { zoom, offset } = mapView;
   const interruptPosition = useCallback(() => { restoreInterrupted.current = true; cancelPosition(); setLocatedFacility(null); }, [cancelPosition, setLocatedFacility]);
+  const restoreFocusAfterOverviewExit = useCallback(() => {
+    requestAnimationFrame(() => {
+      const candidates = [
+        zoomOutButtonRef.current,
+        zoomInButtonRef.current,
+        fitButtonRef.current,
+        mobileDockRef.current?.querySelector<HTMLButtonElement>(`button.${styles.mobileSheetHandle}`) ?? null,
+        desktopTabRef.current,
+      ];
+      const target = candidates.find((element) => element && !element.disabled && element.getClientRects().length > 0);
+      target?.focus({ preventScroll: true });
+    });
+  }, []);
+  const enterVenueOverview = useCallback(() => {
+    if (!venueOverview || venueOverviewOpen) return;
+    interruptPosition();
+    fitInVisibleRect();
+    if (mapGestureFrame.current !== null) {
+      cancelAnimationFrame(mapGestureFrame.current);
+      mapGestureFrame.current = null;
+    }
+    const mapElement = mapRef.current;
+    if (mapElement) {
+      for (const pointerId of pointers.current.keys()) {
+        if (mapElement.hasPointerCapture?.(pointerId)) mapElement.releasePointerCapture(pointerId);
+      }
+    }
+    pointers.current.clear();
+    tapStart.current = null;
+    lastTap.current = null;
+    gesture.current = null;
+    wheelOverviewRef.current = INITIAL_WHEEL_OVERVIEW_STATE;
+    setMapGestureActive(false);
+    setFacilityListOpen(false);
+    setVenueOverviewOpen(true);
+    requestAnimationFrame(() => currentOverviewSpaceRef.current?.focus({ preventScroll: true }));
+  }, [fitInVisibleRect, interruptPosition, venueOverview, venueOverviewOpen]);
+  const exitVenueOverview = useCallback((restoreFocus = false) => {
+    fitInVisibleRect();
+    wheelOverviewRef.current = INITIAL_WHEEL_OVERVIEW_STATE;
+    setVenueOverviewOpen(false);
+    if (restoreFocus) restoreFocusAfterOverviewExit();
+  }, [fitInVisibleRect, restoreFocusAfterOverviewExit]);
   const facilityDirectory = useMemo(() => publishedMap ? mapFacilityDirectory(publishedMap.layout) : null, [publishedMap]);
   const fontScale = textScale === "extra" ? 1.24 : textScale === "large" ? 1.12 : 1;
   const previousDesktop = useRef<boolean | null>(null);
@@ -278,6 +360,8 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
       cancelPosition();
       setLocatedFacility(null);
       setFacilityListOpen(false);
+      wheelOverviewRef.current = INITIAL_WHEEL_OVERVIEW_STATE;
+      setVenueOverviewOpen(false);
       setRestoreVersion((current) => current + 1);
       if (fromHistory) suppressUrlWrite.current = true;
       setDay(state.day);
@@ -374,6 +458,18 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   useModalFocus(showFullDetail, fullDetailRef, () => setShowFullDetail(false));
 
   useEffect(() => {
+    if (!venueOverviewOpen) return;
+    const closeOverviewOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || showFullDetail || toolsMenuRef.current?.open) return;
+      event.preventDefault();
+      event.stopPropagation();
+      exitVenueOverview(true);
+    };
+    document.addEventListener("keydown", closeOverviewOnEscape, true);
+    return () => document.removeEventListener("keydown", closeOverviewOnEscape, true);
+  }, [exitVenueOverview, showFullDetail, venueOverviewOpen]);
+
+  useEffect(() => {
     const focusSearch = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "k") {
         event.preventDefault();
@@ -402,17 +498,36 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
       event.preventDefault();
       interruptPosition();
       const rect = map.getBoundingClientRect();
-      const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-      const inset = getFloorInset();
       const multiplier = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? rect.height : 1;
       const delta = { x: event.deltaX * multiplier, y: event.deltaY * multiplier };
       const mobileScroll = window.matchMedia("(max-width: 760px)").matches && !event.ctrlKey;
+      if (venueOverviewOpen) {
+        if (!mobileScroll && delta.y < 0) {
+          exitVenueOverview(Boolean(venueOverviewLayerRef.current?.contains(document.activeElement)));
+        }
+        return;
+      }
+      const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      const inset = getFloorInset();
+      if (!mobileScroll && venueOverview) {
+        const nextOverview = stepWheelOverviewGesture(wheelOverviewRef.current, {
+          now: event.timeStamp,
+          deltaY: delta.y,
+          zoom: mapViewRef.current.zoom,
+          minimum: mapMinZoom,
+        });
+        wheelOverviewRef.current = nextOverview.state;
+        if (nextOverview.enterOverview) {
+          enterVenueOverview();
+          return;
+        }
+      }
       setMapView((current) => mapViewFromWheel(current, delta, point, mapMinZoom, mobileScroll ? "pan" : "zoom", inset));
     };
 
     map.addEventListener("wheel", handleWheel, { passive: false });
     return () => map.removeEventListener("wheel", handleWheel);
-  }, [getFloorInset, interruptPosition, mapMinZoom, setMapView]);
+  }, [enterVenueOverview, exitVenueOverview, getFloorInset, interruptPosition, mapMinZoom, mapViewRef, setMapView, venueOverview, venueOverviewOpen]);
 
   useEffect(() => {
     // Hold the URL untouched while the catalog snapshot is still downloading, so
@@ -493,6 +608,8 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     if (destination.venueSpaceId !== venueAssignment.venueSpaceId) {
       setVenueSpaceId(destination.venueSpaceId);
     }
+    wheelOverviewRef.current = INITIAL_WHEEL_OVERVIEW_STATE;
+    setVenueOverviewOpen(false);
     const destinationScope = eventUsesScopedMaps(event) ? `${String(record.day)}\u0000${destination.venueSpaceId}` : eventId;
     focusCode(record.code, destinationScope);
   }, [day, event, eventId, focusCode, rememberMobileResultScroll, setDay, setDesktopDetailsOpen, setLocatedFacility, setSelectedRecordId, setMobilePanel, setMobileSheetLevel, venueAssignment]);
@@ -509,6 +626,8 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     cancelPosition();
     setLocatedFacility(null);
     setFacilityListOpen(false);
+    wheelOverviewRef.current = INITIAL_WHEEL_OVERVIEW_STATE;
+    setVenueOverviewOpen(false);
     pendingSelection.current = null;
     pendingRestoreCode.current = null;
     setVenueSpaceId(nextVenueSpaceId);
@@ -522,6 +641,8 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   const resetAdvancedSearch = () => { historyIntent.current = "push"; setAdvancedSearch(DEFAULT_ADVANCED_CIRCLE_SEARCH); };
   const resetMap = () => {
     interruptPosition();
+    wheelOverviewRef.current = INITIAL_WHEEL_OVERVIEW_STATE;
+    setVenueOverviewOpen(false);
     if (desktop) setDesktopDetailsOpen(false);
     else setMobileSheetLevel("peek");
     viewport.reset();
@@ -553,6 +674,15 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   /** One button step, around the map's centre or a map-local point. */
   const stepZoom = (delta: number, around?: MapPoint) => {
     interruptPosition();
+    if (venueOverviewOpen) {
+      if (delta > 0) exitVenueOverview(false);
+      return;
+    }
+    if (delta < 0 && venueOverview && isAtMinimumZoom(mapViewRef.current.zoom, mapMinZoom)) {
+      enterVenueOverview();
+      return;
+    }
+    wheelOverviewRef.current = INITIAL_WHEEL_OVERVIEW_STATE;
     const viewport = mapRef.current?.getBoundingClientRect();
     if (!viewport) return;
     const point = around ?? { x: viewport.width / 2, y: viewport.height / 2 };
@@ -562,6 +692,14 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
       if (nextZoom === current.zoom) return current;
       return { zoom: nextZoom, offset: zoomOffsetAroundPoint(current.offset, current.zoom, nextZoom, point, getFloorInset()) };
     });
+  };
+  const selectOverviewVenueSpace = (nextVenueSpaceId: string) => {
+    if (nextVenueSpaceId === venueAssignment.venueSpaceId) {
+      exitVenueOverview(true);
+      return;
+    }
+    changeVenueSpace(nextVenueSpaceId);
+    restoreFocusAfterOverviewExit();
   };
   // On a phone the list needs the map's height, so opening it collapses the
   // sheet the way 查看全場 does.
@@ -655,6 +793,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     setFavoriteUndo(existing ? { favorite: existing, circleName: record.name } : null);
   };
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (venueOverviewOpen) return;
     if ((event.target as Element).closest("button, input, select, aside, [data-map-tools], [data-map-overlay]")) return;
     interruptPosition();
     if ((event.target as HTMLElement).closest('button, a, input, select, textarea, [role="button"]')) return;
@@ -670,14 +809,28 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     if (active.length === 1) gesture.current = { kind: "drag", pointerId: event.pointerId, x: active[0].x, y: active[0].y, ox: currentView.offset.x, oy: currentView.offset.y };
     if (active.length === 2) {
       const center = { x: (active[0].x + active[1].x) / 2, y: (active[0].y + active[1].y) / 2 };
-      gesture.current = { kind: "pinch", distance: Math.hypot(active[0].x - active[1].x, active[0].y - active[1].y), zoom: currentView.zoom, mapX: (center.x - inset.x - currentView.offset.x) / currentView.zoom, mapY: (center.y - inset.y - currentView.offset.y) / currentView.zoom, center, inset };
+      gesture.current = {
+        kind: "pinch",
+        distance: Math.hypot(active[0].x - active[1].x, active[0].y - active[1].y),
+        zoom: currentView.zoom,
+        mapX: (center.x - inset.x - currentView.offset.x) / currentView.zoom,
+        mapY: (center.y - inset.y - currentView.offset.y) / currentView.zoom,
+        center,
+        inset,
+        startedAtMinimum: isAtMinimumZoom(currentView.zoom, mapMinZoom),
+      };
     }
   };
   const applyMapGesture = () => {
+    if (venueOverviewOpen) return null;
     const active = [...pointers.current.values()];
     if (active.length >= 2 && gesture.current?.kind === "pinch") {
       const center = { x: (active[0].x + active[1].x) / 2, y: (active[0].y + active[1].y) / 2 };
       const distance = Math.hypot(active[0].x - active[1].x, active[0].y - active[1].y);
+      if (venueOverview && shouldEnterOverviewFromPinch(gesture.current, distance, mapMinZoom)) {
+        enterVenueOverview();
+        return null;
+      }
       const view = calculatePinchMapView(gesture.current, distance, center, mapMinZoom);
       gesture.current.boundaryCenter = view.boundaryCenter;
       setMapView({ zoom: view.zoom, offset: view.offset });
@@ -693,7 +846,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     return null;
   };
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!pointers.current.has(event.pointerId)) return;
+    if (venueOverviewOpen || !pointers.current.has(event.pointerId)) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
     pointers.current.set(event.pointerId, point);
@@ -706,6 +859,11 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     });
   };
   const handlePointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (venueOverviewOpen) {
+      pointers.current.clear();
+      setMapGestureActive(false);
+      return;
+    }
     let finalOffset: { x: number; y: number } | null = null;
     if (mapGestureFrame.current !== null) {
       cancelAnimationFrame(mapGestureFrame.current);
@@ -811,6 +969,8 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     cancelPosition();
     setLocatedFacility(null);
     setFacilityListOpen(false);
+    wheelOverviewRef.current = INITIAL_WHEEL_OVERVIEW_STATE;
+    setVenueOverviewOpen(false);
     pendingSelection.current = null;
     pendingRestoreCode.current = null;
     setDay(next);
@@ -865,6 +1025,8 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     onChooseEvent();
   }}>{eventInfo}<span className={styles.eventSwitch}>{t("switchEvent")}<UiIcon name="chevron-right" /></span></a> : eventInfo;
 
+  const showOverviewTrigger = Boolean(venueOverview) && !venueOverviewOpen && isAtMinimumZoom(zoom, mapMinZoom);
+
   return <main className={`app-shell ${styles.shell}`} style={mobileShellStyle} data-mobile-summary={mobileSummary || undefined} data-text-scale={textScale} data-mobile-sheet-level={mobileSheetLevel} data-mobile-sheet-dragging={mobileSheetDragging || undefined} data-notice={overrides?.notice ? "" : undefined}>
     <header className="topbar">
       <div className="brand"><span aria-hidden="true">場</span><div><b>場刊 Map</b>{desktop && <small>{header("tagline")}</small>}</div></div>
@@ -888,13 +1050,30 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
       <section className="map-region" aria-label={t("mapRegion")}>
         <div ref={mapRef} className={`map ${styles.mapCanvas}`} data-details-open={desktop && desktopDetailsOpen && Boolean(selected) || undefined} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerEnd} onPointerCancel={handlePointerEnd} onLostPointerCapture={handlePointerEnd}>
           <div ref={toolsRef} className={styles.mapTools} data-map-tools>{renderMapTools()}</div>{desktop && <div ref={fitToolsRef} className={`${styles.mapTools} ${styles.fitTools}`} inert aria-hidden="true" data-map-tools>{renderMapTools(true)}</div>}
-          {publishedMap ? <div ref={floorRef} className={`floor ${styles.vectorFloor} ${mapGestureActive ? styles.mapGestureActive : ""}`} style={{ width: `${floorWidth}px`, height: `${floorHeight}px`, transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }}><AccessibleEventMapRenderer eventName={event.name} layout={publishedMap.layout} slots={slots} showMedia={shouldShowMapMedia(zoom)} showAreaRegions={!shouldShowMapMedia(zoom)} areaLabels={Object.fromEntries(event.areas.map((area) => [area.id, area.label]))} labelPresentation={desktop ? { screenScale: floorHeight / publishedMap.layout.height * zoom, targetPx: 12 * fontScale, paddingPx: 2 } : undefined} markerPresentation={{ screenScale: floorHeight / publishedMap.layout.height * zoom, fontScale }} locatedMarker={locatedFacility?.scope === mapScopeKey ? locatedFacility.key : null} onFocusCode={setFocusedCode} onSelect={(code) => { const marker = markersByCode.get(code); if (marker) selectRecord(marker.records[0]); }} /></div> : <div className={styles.mapState}><b>{mapLoading ? t("mapLoading") : t("mapFailed")}</b><span className={mapError ? styles.mapError : ""}>{mapError ? t("mapRetryHint") : t("mapWait")}</span>{!mapLoading && <button onClick={() => setMapRetry((value) => value + 1)}>{t("mapRetry")}</button>}</div>}
-          {selectedMapPoint && selected && <><span className={styles.mobileMapMarker} style={selectedMapPoint} aria-hidden="true" /><div className={styles.mobileMapSelection} style={selectedMapPointStyle}><b>{selected.code}</b><span>{selected.name}</span></div></>}
-          <div ref={controlsRef} className="controls" data-navigation={desktop && navigationMode || undefined} aria-label={t("zoomControls")}><button type="button" onClick={() => stepZoom(.1)} aria-label={t("zoomIn")}><UiIcon name="plus" /></button><span>{Math.round(zoom * 100)}%</span><button type="button" onClick={() => stepZoom(-.1)} aria-label={t("zoomOut")}><UiIcon name="minus" /></button><button type="button" className={styles.fitButton} onClick={resetMap} aria-label={t("fitAll")}><UiIcon name="locate" />{!desktop && <span className={styles.fitLabel}>{t("fitAllShort")}</span>}</button>{facilityDirectory?.entries.length ? <button ref={facilityTriggerRef} type="button" className={styles.facilityTrigger} aria-expanded={facilityListOpen} aria-controls={facilityListOpen ? facilityPanelId : undefined} onClick={toggleFacilityList}>{desktop && <UiIcon name="map-pin" />}{t("facilities")}</button> : null}{desktop && navigationMode && <button className={styles.exitNavigation} onClick={toggleNavigationMode}>{t("navigationExit")}</button>}</div>{facilityListOpen && facilityDirectory?.entries.length ? <MapFacilityPanel id={facilityPanelId} entries={facilityDirectory.entries} legend={facilityDirectory.legend} triggerRef={facilityTriggerRef} onClose={closeFacilityList} onLocate={locateFacility} /> : null}<div className="compass"><small>N</small><UiIcon name="north" /></div>
-          {desktop && selected && desktopDetailsOpen && <aside ref={detailsRef} className={styles.rightRail} aria-label={t("detailsRail")} onKeyDownCapture={(keyEvent) => { if (keyEvent.key === "Escape" && !showFullDetail) { keyEvent.stopPropagation(); closeDetails(); } }}><span className={styles.selectionAnnouncement} role="status">{t("detailsUpdated", { code: selected.code, name: selected.name })}</span><button type="button" className={styles.returnToSearch} onClick={closeDetails}>{desktopPanel === "plan" ? t("backToPlan") : t("backToSearch")}</button><div className={styles.detailSlot}>{detailsPanel}</div></aside>}
+          {publishedMap ? <div ref={floorRef} className={`floor ${styles.vectorFloor} ${mapGestureActive ? styles.mapGestureActive : ""} ${venueOverviewOpen ? styles.vectorFloorHidden : ""}`} aria-hidden={venueOverviewOpen || undefined} inert={venueOverviewOpen || undefined} style={{ width: `${floorWidth}px`, height: `${floorHeight}px`, transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }}><AccessibleEventMapRenderer eventName={event.name} layout={publishedMap.layout} slots={slots} showMedia={shouldShowMapMedia(zoom)} showAreaRegions={!shouldShowMapMedia(zoom)} areaLabels={Object.fromEntries(event.areas.map((area) => [area.id, area.label]))} labelPresentation={desktop ? { screenScale: floorHeight / publishedMap.layout.height * zoom, targetPx: 12 * fontScale, paddingPx: 2 } : undefined} markerPresentation={{ screenScale: floorHeight / publishedMap.layout.height * zoom, fontScale }} locatedMarker={locatedFacility?.scope === mapScopeKey ? locatedFacility.key : null} onFocusCode={setFocusedCode} onSelect={(code) => { const marker = markersByCode.get(code); if (marker) selectRecord(marker.records[0]); }} /></div> : <div className={styles.mapState}><b>{mapLoading ? t("mapLoading") : t("mapFailed")}</b><span className={mapError ? styles.mapError : ""}>{mapError ? t("mapRetryHint") : t("mapWait")}</span>{!mapLoading && <button onClick={() => setMapRetry((value) => value + 1)}>{t("mapRetry")}</button>}</div>}
+          {venueOverview && venueOverviewOpen && visibleRect && (
+            <div ref={venueOverviewLayerRef} className={styles.venueOverviewLayer} style={{ left: `${visibleRect.x}px`, top: `${visibleRect.y}px`, width: `${visibleRect.width}px`, height: `${visibleRect.height}px` }}>
+              <VenueOverviewRenderer
+                overview={venueOverview}
+                venueName={venueAssignment.venueName}
+                spaces={venueOverviewSpaces}
+                currentVenueSpaceId={venueAssignment.venueSpaceId}
+                currentSpaceRef={currentOverviewSpaceRef}
+                labels={{
+                  regionLabel: t("venueOverviewRegion", { venue: venueAssignment.venueName }),
+                  currentTag: t("venueOverviewCurrent"),
+                  spaceAriaLabel: (name, isCurrent) => isCurrent ? t("venueOverviewSpaceCurrent", { name }) : name,
+                }}
+                onSelectVenueSpace={selectOverviewVenueSpace}
+              />
+            </div>
+          )}
+          {!venueOverviewOpen && selectedMapPoint && selected && <><span className={styles.mobileMapMarker} style={selectedMapPoint} aria-hidden="true" /><div className={styles.mobileMapSelection} style={selectedMapPointStyle}><b>{selected.code}</b><span>{selected.name}</span></div></>}
+          <div ref={controlsRef} className="controls" data-navigation={desktop && navigationMode || undefined} aria-label={t("zoomControls")}><button ref={zoomInButtonRef} type="button" onClick={() => stepZoom(.1)} aria-label={venueOverviewOpen ? t("exitVenueOverview") : t("zoomIn")} title={venueOverviewOpen ? t("exitVenueOverview") : undefined}><UiIcon name="plus" /></button><span>{Math.round(zoom * 100)}%</span><button ref={zoomOutButtonRef} type="button" disabled={venueOverviewOpen} onClick={() => stepZoom(-.1)} aria-label={showOverviewTrigger ? t("venueOverview") : t("zoomOut")} title={showOverviewTrigger ? t("venueOverview") : undefined}><UiIcon name={showOverviewTrigger ? "map" : "minus"} /></button><button ref={fitButtonRef} type="button" className={styles.fitButton} onClick={resetMap} aria-label={t("fitAll")}><UiIcon name="locate" />{!desktop && <span className={styles.fitLabel}>{t("fitAllShort")}</span>}</button>{!venueOverviewOpen && facilityDirectory?.entries.length ? <button ref={facilityTriggerRef} type="button" className={styles.facilityTrigger} aria-expanded={facilityListOpen} aria-controls={facilityListOpen ? facilityPanelId : undefined} onClick={toggleFacilityList}>{desktop && <UiIcon name="map-pin" />}{t("facilities")}</button> : null}{desktop && navigationMode && <button className={styles.exitNavigation} onClick={toggleNavigationMode}>{t("navigationExit")}</button>}</div>{!venueOverviewOpen && facilityListOpen && facilityDirectory?.entries.length ? <MapFacilityPanel id={facilityPanelId} entries={facilityDirectory.entries} legend={facilityDirectory.legend} triggerRef={facilityTriggerRef} onClose={closeFacilityList} onLocate={locateFacility} /> : null}<div className="compass"><small>N</small><UiIcon name="north" /></div>
+          {desktop && selected && desktopDetailsOpen && <aside ref={detailsRef} className={styles.rightRail} aria-label={t("detailsRail")} onKeyDownCapture={(keyEvent) => { if (keyEvent.key === "Escape" && !showFullDetail && !venueOverviewOpen) { keyEvent.stopPropagation(); closeDetails(); } }}><span className={styles.selectionAnnouncement} role="status">{t("detailsUpdated", { code: selected.code, name: selected.name })}</span><button type="button" className={styles.returnToSearch} onClick={closeDetails}>{desktopPanel === "plan" ? t("backToPlan") : t("backToSearch")}</button><div className={styles.detailSlot}>{detailsPanel}</div></aside>}
         </div>
       </section>
-      <aside ref={mobileDockRef} className={styles.mobileDock} data-summary={mobileSummary || undefined} data-mobile-sheet-level={mobileSheetLevel} data-dragging={mobileSheetDragging || undefined} aria-label={t("mobileDock")} onKeyDownCapture={(keyEvent) => { if (keyEvent.key === "Escape" && !showFullDetail) { keyEvent.stopPropagation(); if (mobileSummary) closeDetails(); else collapseMobilePanel(); } }}>
+      <aside ref={mobileDockRef} className={styles.mobileDock} data-summary={mobileSummary || undefined} data-mobile-sheet-level={mobileSheetLevel} data-dragging={mobileSheetDragging || undefined} aria-label={t("mobileDock")} onKeyDownCapture={(keyEvent) => { if (keyEvent.key === "Escape" && !showFullDetail && !venueOverviewOpen) { keyEvent.stopPropagation(); if (mobileSummary) closeDetails(); else collapseMobilePanel(); } }}>
         <div className={styles.mobileHalfMeasure} data-half-measure aria-hidden="true" />
           <button type="button" className={styles.mobileSheetHandle} aria-label={mobileSheetActionLabel} aria-expanded={mobileSheetLevel !== "peek"} onKeyDown={(event) => {
             if (event.key === "ArrowUp" || event.key === "ArrowDown") {

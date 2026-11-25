@@ -1,0 +1,34 @@
+{
+  "schema": "event-definition/3",
+  "id": "sample-multi",
+  "name": "範例園區活動",
+  "dateRangeLabel": "9.1–2",
+  "dataUpdatedAt": "2026-01-01T00:00:00.000+08:00",
+  "eventEndsAt": "2026-09-02T23:59:59.999+08:00",
+  "mapTemplate": "SAMPLE",
+  "areaMode": "switchable",
+  "days": [
+    { "id": 1, "label": "DAY 1", "dateLabel": "9月1日" },
+    { "id": 2, "label": "DAY 2", "dateLabel": "9月2日" }
+  ],
+  "areas": [
+    { "id": "area-a", "label": "A 館區", "shortLabel": "A" },
+    { "id": "area-b", "label": "B 館區", "shortLabel": "B" },
+    { "id": "area-c", "label": "C 館區", "shortLabel": "C" }
+  ],
+  "organizerAssignments": [{ "organizerId": "sample-organizer", "role": "lead" }],
+  "categoryCatalog": { "organizerId": "sample-organizer", "id": "circle-topics", "revision": "2026-01-01" },
+  "venueAssignments": [
+    { "venueId": "sample-campus", "venueSpaceId": "hall-a", "areaIds": ["area-a"] },
+    { "venueId": "sample-campus", "venueSpaceId": "hall-b", "areaIds": ["area-b"] },
+    { "venueId": "sample-campus", "venueSpaceId": "hall-c", "areaIds": ["area-c"] }
+  ],
+  "officialData": {
+    "adapter": "fixture/1",
+    "eventUrl": "https://example.invalid/sample-multi",
+    "boothListUrls": {
+      "1": "https://example.invalid/sample-multi/day-1",
+      "2": "https://example.invalid/sample-multi/day-2"
+    }
+  }
+}
