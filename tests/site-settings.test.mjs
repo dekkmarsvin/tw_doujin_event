@@ -8,7 +8,9 @@ import { applyMigrations } from "./support/d1-migrations.mjs";
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const load = name => vite.environments.ssr.runner.import(name);
 const { createIdentityRepository } = await load("/db/identity-repository.ts");
-const { createCirclePortalHandlers, SESSION_COOKIE } = await load("/app/circle-portal-handlers.ts");
+const { SESSION_COOKIE } = await load("/app/circle-portal-handlers.ts");
+const { createAuth } = await load("/server/auth.ts");
+const { createAdmin } = await load("/server/admin.ts");
 const { hmacSign } = await load("/app/portal-crypto.ts");
 const { runPublicationTick } = await load("/app/publication-scheduler.ts");
 const { runRequestedServiceCheck, checkMailService, checkPublicationService } = await load("/app/site-service-check.ts");
@@ -29,10 +31,12 @@ beforeEach(async () => {
   const member = await repo.upsertAccount("member@example.test", now);
   await repo.createSession(member, now, now + 86400000, "member-session");
   memberCookie = `${SESSION_COOKIE}=member-session.${await hmacSign("secret", "member-session")}`;
-  handlers = createCirclePortalHandlers({ repository: repo, sendMail: async () => {}, lookupCircle: async () => null, searchCircles: async () => [],
+  const dependencies = { repository: repo, sendMail: async () => {}, lookupCircle: async () => null, searchCircles: async () => [],
     fetchEvidence: async () => null, verifyHuman: async () => true, turnstileSitekey: () => "test", projectCircle: async () => null,
     config: { eventId: "sample", origin, sessionSecret: "secret", hashPepper: "pepper", adminEmails: [], now: () => now,
-      dataUpdatedAt: "2026-09-01T00:00:00Z", eventEndsAt: "2027-12-31T00:00:00Z", organizerPublicationMode: "r2" } });
+      dataUpdatedAt: "2026-09-01T00:00:00Z", eventEndsAt: "2027-12-31T00:00:00Z", organizerPublicationMode: "r2" } };
+  const auth = createAuth(dependencies);
+  handlers = { ...auth.routes, ...createAdmin(dependencies, auth).routes };
 });
 function request(method = "GET", body, signed = cookie) {
   return new Request(`${origin}/api/admin/site-settings`, { method, headers: { origin, "content-type": "application/json", ...(signed ? { cookie: signed } : {}) },

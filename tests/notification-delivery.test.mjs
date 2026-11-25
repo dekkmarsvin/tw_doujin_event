@@ -12,7 +12,8 @@ const load = name => vite.environments.ssr.runner.import(name);
 const { createIdentityRepository } = await load("/db/identity-repository.ts");
 const { deliverNotifications } = await load("/app/notification-delivery.ts");
 const { MailDeliveryError, sendPortalMail } = await load("/app/portal-mail.ts");
-const { createCirclePortalHandlers, SESSION_COOKIE } = await load("/app/circle-portal-handlers.ts");
+const { SESSION_COOKIE } = await load("/app/circle-portal-handlers.ts");
+const { createAuth } = await load("/server/auth.ts");
 const { hmacSign } = await load("/app/portal-crypto.ts");
 const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: "export default {fetch(){return new Response('ok')}}", d1Databases: { DB: "notification-delivery" } }));
 const db = await mf.getD1Database("DB");
@@ -51,10 +52,10 @@ beforeEach(async () => {
   owner = await repo.upsertAccount("owner@example.test", now);
   await repo.createSession(owner, now, now + 365 * 86400000, owner);
   cookie = `${SESSION_COOKIE}=${owner}.${await hmacSign("secret", owner)}`;
-  handlers = createCirclePortalHandlers({ repository: repo, sendMail: async () => {}, lookupCircle: async () => null,
+  handlers = createAuth({ repository: repo, sendMail: async () => {}, lookupCircle: async () => null,
     searchCircles: async () => [], fetchEvidence: async () => null, verifyHuman: async () => true, turnstileSitekey: () => "test", projectCircle: async () => null,
     config: { eventId: "sample", origin: "https://map.kotoban.top", sessionSecret: "secret", hashPepper: "pepper", adminEmails: [],
-      dataUpdatedAt: "2026-09-01T00:00:00Z", eventEndsAt: "2027-12-31T00:00:00Z", now: () => now } });
+      dataUpdatedAt: "2026-09-01T00:00:00Z", eventEndsAt: "2027-12-31T00:00:00Z", now: () => now } }).routes;
 });
 
 test("each claim result and content change is its own email, sent at once and only once", async () => {

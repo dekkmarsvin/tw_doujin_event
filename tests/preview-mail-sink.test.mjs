@@ -8,7 +8,7 @@ import { applyMigrations } from "./support/d1-migrations.mjs";
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
-const { portalHandlers, previewE2eAuthorized, previewMailRouteFor, previewSinkRecipientAllowed, repositoryFor } = await environment.runner.import("/functions/_portal.ts");
+const { authFor, organizerFor, previewE2eAuthorized, previewMailRouteFor, previewSinkRecipientAllowed, repositoryFor } = await environment.runner.import("/functions/_portal.ts");
 const { onRequestDelete, onRequestGet } = await environment.runner.import("/functions/api/preview/mail.ts");
 const { SESSION_COOKIE } = await environment.runner.import("/app/circle-portal-handlers.ts");
 const { hmacSign } = await environment.runner.import("/app/portal-crypto.ts");
@@ -155,7 +155,7 @@ for (const scenario of ["sink", "sandbox", "denied", "production", "sandbox-reje
     });
     const request = new Request("https://preview.example/api/auth/request-link", { method: "POST",
       headers: { "content-type": "application/json" }, body: JSON.stringify({ email, turnstileToken: "fixture" }) });
-    const sending = portalHandlers({ env: runtime, request }).requestLink(request);
+    const sending = authFor({ env: runtime, request }).requestLink(request);
     if (scenario.endsWith("rejected")) await assert.rejects(sending, error => error.code === "mailgun_403" && error.message === "mailgun_403");
     else if (scenario.endsWith("timeout") || scenario.endsWith("network")) await assert.rejects(sending);
     else {
@@ -200,7 +200,7 @@ test("Pages logs one invitation event for creation, each role's invitation and r
     return Response.json({ id: `invitation-provider-${mail.length}` });
   });
   const creation = request("/api/admin/organizer/events", { tentativeName: "Private invitation name", ownerEmail: admin });
-  const handlers = portalHandlers({ request: creation, env: runtime });
+  const handlers = organizerFor({ request: creation, env: runtime });
   const created = await handlers.adminCreateOrganizerCandidate(creation);
   assert.equal(created.status, 201, await created.clone().text());
   const { candidateId } = await created.json();

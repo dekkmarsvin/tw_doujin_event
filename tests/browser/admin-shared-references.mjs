@@ -1,5 +1,5 @@
 // staged-data: fixture
-// Real admin UI and transport; authorization and atomicity run against D1 in organizer-handlers.
+// Real admin UI and transport; who may reach these routes is tested through the router in tests/api-admin.test.mjs.
 import assert from 'node:assert/strict';
 import { start, base } from './support/journey.mjs';
 const journey = await start('admin-shared-references');

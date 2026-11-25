@@ -13,7 +13,10 @@ import { applyMigrations } from "../support/d1-migrations.mjs";
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const runner = vite.environments.ssr.runner;
 const { createIdentityRepository } = await runner.import("/db/identity-repository.ts");
-const { createCirclePortalHandlers, SESSION_COOKIE } = await runner.import("/app/circle-portal-handlers.ts");
+const { SESSION_COOKIE } = await runner.import("/app/circle-portal-handlers.ts");
+const { createAuth } = await runner.import("/server/auth.ts");
+const { createAdmin } = await runner.import("/server/admin.ts");
+const { createOrganizer } = await runner.import("/server/organizer.ts");
 const { hmacSign } = await runner.import("/app/portal-crypto.ts");
 const { createOrganizerPublicationExecutor, PublicationFailure } = await runner.import("/app/organizer-publication.ts");
 const { buildApprovedPublicationArtifacts, buildPublicationMainStage } = await runner.import("/app/publication-artifacts.ts");
@@ -133,7 +136,7 @@ try {
         productionVerified: step === "verifying_production" };
     },
   }, () => data.now + 1000);
-  const handlers = createCirclePortalHandlers({ repository: repo, sendMail: async () => {}, lookupCircle: async () => null,
+  const dependencies = { repository: repo, sendMail: async () => {}, lookupCircle: async () => null,
     searchCircles: async () => [], fetchEvidence: async () => null, verifyHuman: async () => true, turnstileSitekey: () => "test",
     mapContributionStore: {
       async get(key) { backgroundReads.push(key); return key === backgroundKey ? { body: new Response(backgroundBytes).body, contentType: "image/png" } : null; },
@@ -148,7 +151,9 @@ try {
       throw new Error("Isolated executor did not settle");
     },
     config: { eventId: "event-alpha", origin: base, sessionSecret: secret, hashPepper: "test", adminEmails: ["admin@example.test"],
-      dataUpdatedAt: data.baseline.event.dataUpdatedAt, eventEndsAt: data.baseline.event.eventEndsAt, now: () => data.now, organizerPublicationMode: "fake" } });
+      dataUpdatedAt: data.baseline.event.dataUpdatedAt, eventEndsAt: data.baseline.event.eventEndsAt, now: () => data.now, organizerPublicationMode: "fake" } };
+  const auth = createAuth(dependencies);
+  const handlers = { ...auth.routes, ...createOrganizer(dependencies, auth, createAdmin(dependencies, auth)).routes };
   const routes = (role) => async (page) => {
     // The handlers and seeded sessions use the fixture's clock. The browser
     // must share it or its real date eventually expires a valid test session.

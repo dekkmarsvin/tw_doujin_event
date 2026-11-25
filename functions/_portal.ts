@@ -1,7 +1,7 @@
 import { mailFailure, sendPortalMail, previewMailRouteFor } from "../app/portal-mail";
 import type { ApiErrorCode } from "../app/i18n/api-error";
 export { previewMailRouteFor } from "../app/portal-mail";
-import { createCirclePortalHandlers, type CircleLookup, type CirclePortalHandlers, type PortalDependencies } from "../app/circle-portal-handlers";
+import { type CircleLookup, type PortalDependencies } from "../app/circle-portal-handlers";
 import { createAuth } from "../server/auth";
 import { createCircle } from "../server/circle";
 import { createAdmin } from "../server/admin";
@@ -248,10 +248,6 @@ export function previewE2eAuthorized(env: PortalEnv, request: Request) {
 export function requestedEventId(request: Request, env: PortalEnv) {
   const requested = new URL(request.url).searchParams.get("event");
   return requested === null ? env.EVENT_ID : requested.trim();
-}
-
-export function portalHandlers(context: { request: Request; env: PortalEnv }): CirclePortalHandlers {
-  return createCirclePortalHandlers(portalDependencies(context));
 }
 
 /** The auth module's routes: sign-in, session, sign-out and the caller's own account. */

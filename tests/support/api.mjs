@@ -20,8 +20,13 @@ export const ADMIN = "local-admin@example.test";
 
 const FIXTURE_FILES = ["circles.json", "event.json", "map.json", "reference-records.json"];
 
-/** Publish the fixture events the way approvals leave them in R2. */
+/** Publish the fixture events the way `scripts/upload-event-data.mjs` and
+ * approvals leave them in R2: files, an identity registry, the index, and the
+ * index's history copy a rollback restores. The registry starts empty, as a
+ * new environment's does. */
 async function publishFixtures(bucket, eventIds, definition) {
+  await bucket.put("registry/1/allocations.json", JSON.stringify({ schema: "circle-id-allocations/1", nextSequence: 1, allocations: [] }));
+  await bucket.put("registry/1/evidence.json", JSON.stringify({ schema: "circle-identity-evidence/1", entries: [] }));
   const events = [];
   for (const eventId of eventIds) {
     const directory = new URL(`../../fixtures/events/${eventId}/`, import.meta.url);
@@ -31,7 +36,9 @@ async function publishFixtures(bucket, eventIds, definition) {
     for (const [name, value] of Object.entries(files)) await bucket.put(`events/${eventId}/1/${name}`, JSON.stringify(value));
     events.push({ eventId, version: "1", files: FIXTURE_FILES, definition: files["event.json"], references: files["reference-records.json"] });
   }
-  await bucket.put("index.json", JSON.stringify({ schema: "event-index/1", events }));
+  const index = JSON.stringify({ schema: "event-index/1", registry: "1", events });
+  await bucket.put("history/index-1.json", index);
+  await bucket.put("index.json", index);
 }
 
 /**
@@ -46,8 +53,9 @@ export async function startApi(name, { env: overrides = {}, event = {} } = {}) {
   const environment = vite.environments.ssr;
   if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
   const load = (path) => environment.runner.import(path);
-  const [{ onRequest: middleware }, { onRequest: router }, { onRequestGet: overlayRoute }] = await Promise.all([
+  const [{ onRequest: middleware }, { onRequest: router }, { onRequestGet: overlayRoute }, { onRequestGet: dataRoute }] = await Promise.all([
     load("/functions/_middleware.ts"), load("/functions/api/[[path]].ts"), load("/functions/data/events/[eventId]/overrides.json.ts"),
+    load("/functions/data/events/[eventId]/[[path]].ts"),
   ]);
 
   const miniflare = new Miniflare(convertV4MiniflareOptions({
@@ -111,6 +119,14 @@ export async function startApi(name, { env: overrides = {}, event = {} } = {}) {
       const response = await api.call("GET", `/data/events/${eventId}/overrides.json`, { route: overlayRoute, params: { eventId } });
       if (response.status !== 200) throw new Error(`overlay ${response.status}`);
       return (await response.json()).overrides.find((entry) => entry.circleId === circleId)?.fields;
+    },
+
+    /** What readers load from `/data/events/<file>`: the event index with no
+     * event, else one event's file; parsed JSON, or null when not served. */
+    async readerFile(eventId, file = "") {
+      const path = file ? `/data/events/${eventId}/${file}` : `/data/events/${eventId}`;
+      const response = await api.call("GET", path, { route: dataRoute, params: { eventId, path: file ? file.split("/") : [] } });
+      return response.status === 200 ? response.json() : null;
     },
 
     /** Publish an event again as its next version, with fields of its

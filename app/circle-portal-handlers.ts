@@ -1,18 +1,14 @@
 import { type CircleOverrideFields } from "./circle-overrides";
 import { type PortalMail } from "./portal-mail";
 import type { IdentityRepository } from "../db/identity-repository";
-import { createAuth } from "../server/auth";
-import { createCircle } from "../server/circle";
-import { createAdmin } from "../server/admin";
-import { createOrganizer } from "../server/organizer";
 import { type HostedThumbnailStore } from "./hosted-thumbnails";
 import { type MapContributionFileStore } from "./map-contribution-files";
 import { type AmendmentPublishedSource, type OrganizerAmendmentBaseline } from "./organizer-amendment-baseline";
 
 /**
- * The wiring every backend module is built from, and all modules' routes in
- * one object for the handler tests. Requests are served by the single router
- * in `functions/api/[[path]].ts`, which builds each module on its own (#546).
+ * The wiring every backend module is built from. Requests are served by the
+ * single router in `functions/api/[[path]].ts`, which builds each module on
+ * its own (#546).
  */
 
 export { SESSION_COOKIE, emailAuditSubjectId } from "../server/auth";
@@ -91,13 +87,3 @@ export type PortalDependencies = {
   publicationAuditor?: (jobId: string) => Promise<{ clear: boolean }>;
   config: PortalConfig;
 };
-
-export function createCirclePortalHandlers(dependencies: PortalDependencies) {
-  const auth = createAuth(dependencies);
-  const circle = createCircle(dependencies, auth);
-  const admin = createAdmin(dependencies, auth);
-  const organizer = createOrganizer(dependencies, auth, admin);
-  return { ...admin.routes, ...auth.routes, ...organizer.routes, ...circle.routes };
-}
-
-export type CirclePortalHandlers = ReturnType<typeof createCirclePortalHandlers>;
