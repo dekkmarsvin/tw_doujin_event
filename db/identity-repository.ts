@@ -2421,7 +2421,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       ...["account_notification_items", "account_notification_preferences"].map(table => database.prepare(`DELETE FROM ${table}`)),
     ]);
     await database.batch([
-      "organizer_publication_lease", "organizer_publication_jobs", "organizer_submission_snapshots",
+      "organizer_submission_snapshots",
       "organizer_amendment_changes", "organizer_amendments", "organizer_applications", "organizer_category_sequences",
       "organizer_import_rows", "organizer_import_sources", "organizer_event_reviews", "organizer_event_invitations", "organizer_event_grants", "organizer_event_revisions", "organizer_workspace_preferences", "organizer_workspace_state", "organizer_event_candidates", "organizer_venue_spaces", "organizer_venues", "organizer_reference_records",
       "map_draft_revisions", "map_drafts",
