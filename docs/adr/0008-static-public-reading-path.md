@@ -1,7 +1,7 @@
 # ADR-0008：公開閱讀路徑純靜態，不經 Worker
 
 - 狀態：部分被取代；[ADR-0074](./0074-html-responses-carry-per-request-csp-nonces.md) 取代 HTML 直送要求，[ADR-0077](./0077-circle-share-images-follow-published-media.md) 允許社團分享 metadata 讀取，[ADR-0079](./0079-shared-itineraries-use-short-links-and-qr-codes.md) 新增匿名行程分享 API 與短網址頁。場刊／地圖與資產保持靜態，不使用 advanced mode。
-- 相關契約：[資料傳輸與離線契約](../contracts/delivery-and-offline.md)、[活動地圖契約](../contracts/event-map.md)
+- 相關契約：[資料傳輸與離線契約](../contracts/reader.md#資料傳輸與離線)、[活動地圖契約](../contracts/reader.md#活動地圖)
 - 相關流程：[部署](../runbooks/deployment.md)
 
 ## 脈絡

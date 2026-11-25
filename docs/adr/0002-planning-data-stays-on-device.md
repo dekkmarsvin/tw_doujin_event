@@ -1,7 +1,7 @@
 # ADR-0002：規劃資料只留在使用者裝置
 
 - 狀態：部分被取代；[ADR-0079](./0079-shared-itineraries-use-short-links-and-qr-codes.md) 允許使用者主動建立匿名精簡行程 snapshot。完整規劃與私人欄位仍留在裝置，不建立帳號同步。
-- 相關契約：[收藏與走訪規劃契約](../contracts/planning.md)
+- 相關契約：[收藏與走訪規劃契約](../contracts/reader.md#收藏與走訪規劃)
 
 ## 脈絡
 
@@ -29,4 +29,4 @@
 - 儲存失敗、格式損壞與 schema 遷移都必須保留原始字串並提供下載，不能靜默丟棄。
 - 孤兒記錄（catalog 找不到對應社團）必須可見、可個別移除、可匯出。
 
-**推翻的代價**：把收藏搬到伺服器需要同時定義隱私政策、衝突解決與刪除政策，並重新檢視 [ADR-0001](./0001-adopt-webcatalog-patterns-selectively.md) 對 WebCatalog 社群功能的拒絕。跨裝置同步已列在 [資料匯入契約](../contracts/data-import.md) 的 P2，但它不是「把現有東西搬上去」，是一個新的信任邊界。
+**推翻的代價**：把收藏搬到伺服器需要同時定義隱私政策、衝突解決與刪除政策，並重新檢視 [ADR-0001](./0001-adopt-webcatalog-patterns-selectively.md) 對 WebCatalog 社群功能的拒絕。跨裝置同步已列在 [資料匯入契約](../contracts/reader.md#資料匯入範圍) 的 P2，但它不是「把現有東西搬上去」，是一個新的信任邊界。

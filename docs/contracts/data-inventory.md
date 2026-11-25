@@ -2,7 +2,7 @@
 
 > **凍結（2026-11-21）**：描述舊後端，後端依 [#546](https://github.com/dekkmarsvin/tw_doujin_event/issues/546) 重寫後隨對應程式刪除。只用來理解現況，不作為新需求的依據。
 
-網站營運設定 `site_settings` 僅供管理者讀寫，保存目前申請模式、邀請 email 名單、通知起點及發布開關，保留至覆寫。操作者只保存 account ID，顯示時讀取目前帳號；不另存歷任管理者 email。單筆 `site_service_check` 只保存最近一次請求／完成時間及安全的來源／原因分類，下次檢查覆寫，沒有信件、憑證、provider 原始內容或診斷歷史；詳見[網站營運設定](./site-settings.md)。
+網站營運設定 `site_settings` 僅供管理者讀寫，保存目前申請模式、邀請 email 名單、通知起點及發布開關，保留至覆寫。操作者只保存 account ID，顯示時讀取目前帳號；不另存歷任管理者 email。單筆 `site_service_check` 只保存最近一次請求／完成時間及安全的來源／原因分類，下次檢查覆寫，沒有信件、憑證、provider 原始內容或診斷歷史；詳見[網站營運設定](./admin.md#網站營運設定)。
 
 本站實際持有哪些資料、寫在哪一欄、由什麼動作寫入、保存多久。**這份文件只記事實**；保存期限、排程與帳號刪除依序由 [ADR-0018](../adr/0018-retention-is-the-circles-choice.md)、[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)、[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)、[ADR-0027](../adr/0027-personal-data-lifecycle-and-account-deletion.md) 、[ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md) 與 [ADR-0054](../adr/0054-the-retention-choice-is-withdrawn-publish-or-delete.md) 決定。
 
@@ -266,7 +266,7 @@ D1 保存草稿 revision、私人 object key、官方來源 URL、文件日期�
 
 ### 管理者待審通知資料
 
-`admin_notification_preferences` 保存管理者明文 email、收信開關、頻率、設定版本、啟用起點、下一摘要時間與交易 token；只接受本人經授權修改。預設及行為見[個人待審通知](./circle-portal.md#待審通知)。管理者移除或帳號刪除時清除。
+`admin_notification_preferences` 保存管理者明文 email、收信開關、頻率、設定版本、啟用起點、下一摘要時間與交易 token；只接受本人經授權修改。預設及行為見[個人待審通知](./admin.md#待審通知)。管理者移除或帳號刪除時清除。
 
 `review_notification_items` 保存收件者 email、待審類型、來源 ID、送審識別、活動代碼、建立時間、所屬摘要及完成狀態。`review_notification_batches` 保存每位收件者的摘要識別、lease、嘗試次數、重試時間、供應商訊息 ID 與去除敏感內容的錯誤分類。兩表不保存申請內文、證據或信件全文；完成／取消 30 天後由既有清除 Worker 刪除，pending 保留至受理或取消。管理者移除／帳號刪除立即清除收件者紀錄，停用則取消 pending。
 
@@ -303,7 +303,7 @@ pepper 是固定值，不輪替。`login_tokens` 的值隨該列在 24 小時內
 
 ## 閱讀端不在本表範圍
 
-一般參觀者不登入、不建立任何伺服器端紀錄。瀏覽器端只有兩個 `localStorage` 鍵：規劃資料（`event-map-planning-v1`，見[收藏與走訪規劃契約](./planning.md#儲存與版本)）與介面字級偏好。本站程式不設 cookie；分析只有上述由 Cloudflare 自動注入的 Web Analytics beacon。代管縮圖由本站圖片網域載入；社團選用外部網址時則由設定的圖片主機直接載入。
+一般參觀者不登入、不建立任何伺服器端紀錄。瀏覽器端只有兩個 `localStorage` 鍵：規劃資料（`event-map-planning-v1`，見[收藏與走訪規劃契約](./reader.md#儲存與版本)）與介面字級偏好。本站程式不設 cookie；分析只有上述由 Cloudflare 自動注入的 Web Analytics beacon。代管縮圖由本站圖片網域載入；社團選用外部網址時則由設定的圖片主機直接載入。
 
 規劃資料只留在使用者裝置，是刻意的隱私姿態，不是本站持有的資料——見 [ADR-0002](../adr/0002-planning-data-stays-on-device.md)。
 

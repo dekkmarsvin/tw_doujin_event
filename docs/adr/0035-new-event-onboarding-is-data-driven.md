@@ -135,7 +135,7 @@ type BoothRow = { label: string; orientation: MapOrientation; confidence: number
 - **不新增任何場館專屬辨識器。** 原敘述為「排原語落地前不新增」；排原語已落地，該限制轉為常設邊界，不因落地而解除。
 - [#86](https://github.com/dekkmarsvin/tw_doujin_event/issues/86) 要求的重新切分**已完成**：錨定推算切為 #99（主線前置，已實作），審閱協作切為 #100／#101（次要，亦已實作），效率缺口切為 #96／#97／#98。#86 已於 2026-08-27 關閉。
 - [#85](https://github.com/dekkmarsvin/tw_doujin_event/issues/85) 與本決策**正交**。場館 reference 記錄不受排原語影響，可獨立進行。初稿把 #85 列為 C 的阻擋項，該敘述已撤回。截至 2026-08-28 該編目仍未進行。
-- 人工繪製的 layout 沒有 template 完整性規則可擋，逐格核對成為人工責任；已發布快照也無法在資料層區分人工繪製與滿分辨識，追溯只靠 `sourceName`。兩者都寫入[活動地圖契約](../contracts/event-map.md)。
+- 人工繪製的 layout 沒有 template 完整性規則可擋，逐格核對成為人工責任；已發布快照也無法在資料層區分人工繪製與滿分辨識，追溯只靠 `sourceName`。兩者都寫入[活動地圖契約](../contracts/reader.md#活動地圖)。
 
 ## 未決
 
@@ -143,5 +143,5 @@ type BoothRow = { label: string; orientation: MapOrientation; confidence: number
 - ~~是否為 `PublishedEventMap` 增加 provenance 欄位。~~ **已裁決（2026-08-27，[#89](https://github.com/dekkmarsvin/tw_doujin_event/issues/89) 以 not planned 關閉）：不加。**理由是目前沒有任何消費者會因 provenance 不同而改變發布、審閱或呈現行為；`ReportOrigin` 只存在 authoring UI，已發布快照仍由必填 `sourceName` 與 `confidence` 承載來源語意。出現明確消費者（例如人工繪製須套用不同審閱政策）時可重新開啟。
 - 排原語的編號規則要支援到什麼程度（等距、雙面對排、跳號、連格如 `A01,A02` 與 `A01A02`）。應由駁二與 CWT 的實際編號決定，見[主辦官方攤位頁面盤點](../research/taiwan-organizer-booth-pages.md)。
 - 企業／商業攤的表示方式。FF47 於 authoring 階段以 landmark 人工加入，CWT 的 `商` 則是官方編號的一等公民。排原語必須先解這一題。
-- ~~「貼上官方表格 → 預覽差異」的輸入格式是否共用[資料匯入契約](../contracts/data-import.md)的 CSV v1，或另立格式。~~ **已裁決（2026-08-28，[#115](https://github.com/dekkmarsvin/tw_doujin_event/issues/115)）：不共用 `circle-plan-csv/1`。** 官方攤位匯入採不保存的 ephemeral model，確認後直接輸出既有 `official-booths.json`；只有未來需要交換中間檔時，才另立獨立 versioned schema。
+- ~~「貼上官方表格 → 預覽差異」的輸入格式是否共用[資料匯入契約](../contracts/reader.md#資料匯入範圍)的 CSV v1，或另立格式。~~ **已裁決（2026-08-28，[#115](https://github.com/dekkmarsvin/tw_doujin_event/issues/115)）：不共用 `circle-plan-csv/1`。** 官方攤位匯入採不保存的 ephemeral model，確認後直接輸出既有 `official-booths.json`；只有未來需要交換中間檔時，才另立獨立 versioned schema。
 - ~~B 落地後，本機 authoring 環境是否保留為離線備援，或完全退場。~~ **已裁決於 [ADR-0038](./0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md)（2026-08-28）：保留為離線備援。**

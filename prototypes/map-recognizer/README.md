@@ -2,7 +2,7 @@
 
 上傳主辦的配置圖（PNG／JPEG）與攤位清單，產生一份攤位 layout 草稿與 SVG 圖面。這個 **Worker 介面維持獨立原型**，沒有部署設定；純計算核心已由主辦編輯器的「自動建立草稿（實驗）」共用，在瀏覽器中運算，見 [地圖 authoring](../../docs/runbooks/map-authoring.md#自動建立草稿實驗)。既有 FF47 adapter 保持原行為。
 
-輸出是現行的 `EventMapLayout`（`app/event-map.ts`），回應前一律經過 `validateEventMapLayout`；座標為原圖像素，與[活動地圖契約](../../docs/contracts/event-map.md#地圖資料不變量)相同。
+輸出是現行的 `EventMapLayout`（`app/event-map.ts`），回應前一律經過 `validateEventMapLayout`；座標為原圖像素，與[活動地圖契約](../../docs/contracts/reader.md#地圖資料不變量)相同。
 
 ## 執行
 

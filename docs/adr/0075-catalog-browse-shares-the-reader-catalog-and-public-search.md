@@ -20,4 +20,4 @@ Reader bundle 增加瀏覽介面；以 bundle 與 300 社團 journey 量測代�
 
 ## 契約
 
-[品書瀏覽](../contracts/catalog-browse.md)、[URL 狀態](../contracts/url-state.md)、[收藏規劃](../contracts/planning.md)、[社團目錄](../contracts/circle-catalog.md)。
+[品書瀏覽](../contracts/reader.md#品書瀏覽)、[URL 狀態](../contracts/reader.md#url-檢視狀態)、[收藏規劃](../contracts/reader.md#收藏與走訪規劃)、[社團目錄](../contracts/reader.md#社團目錄)。

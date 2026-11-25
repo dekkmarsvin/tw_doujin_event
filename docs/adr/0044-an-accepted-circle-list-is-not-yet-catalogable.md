@@ -32,7 +32,7 @@
 
 ### 2. 只有名稱的清單不足以編目
 
-錄取名單唯一的 per-circle 鍵是名稱，而名稱在本專案明文不是身分（[`CONTEXT.md`](../../CONTEXT.md)、[社團目錄契約](../contracts/circle-catalog.md)「同名不是合併依據」、identity grouping「名稱相同本身不符合 linkage」）。
+錄取名單唯一的 per-circle 鍵是名稱，而名稱在本專案明文不是身分（[`CONTEXT.md`](../../CONTEXT.md)、[社團目錄契約](../contracts/reader.md#社團目錄)「同名不是合併依據」、identity grouping「名稱相同本身不符合 linkage」）。
 
 因此**錄取名單不可作為配號輸入**，即使它就是最終參展名單。
 

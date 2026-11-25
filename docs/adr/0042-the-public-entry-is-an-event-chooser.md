@@ -1,7 +1,7 @@
 # ADR-0042：公開入口支援多活動選擇，既有 deep link 保持有效
 
 - 狀態：已定案（2026-08-30）
-- **取代**：[URL 檢視狀態契約](../contracts/url-state.md)「加入第二個活動前不先顯示活動選擇器」一句
+- **取代**：[URL 檢視狀態契約](../contracts/reader.md#url-檢視狀態)「加入第二個活動前不先顯示活動選擇器」一句
 - 相關 issue：[#119](https://github.com/dekkmarsvin/tw_doujin_event/issues/119)、[#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104)
 - 延續：[ADR-0002](./0002-planning-data-stays-on-device.md)、[ADR-0028](./0028-versioned-json-event-definitions.md)、[ADR-0041](./0041-scope-is-bounded-by-shippable-features.md)
 
@@ -68,7 +68,7 @@ production 可以同時存在多個 published events。Reader 可以選擇其中
 ## 後果
 
 - #119 的 P0 必須同時處理 published event collection 與 Reader event addressing，不能只讓 build 知道多活動。
-- `docs/contracts/url-state.md` 在 #119 實作落地時同步更新，描述實際多活動 URL 行為。
+- `docs/contracts/reader.md#url-檢視狀態` 在 #119 實作落地時同步更新，描述實際多活動 URL 行為。
 - #134 明確維持 P1，不阻塞第二場活動。
 - Circle portal 的多活動 self-service 是另一個 P0 問題，由 [#136](https://github.com/dekkmarsvin/tw_doujin_event/issues/136) 處理；本 ADR 不規定其登入、claim 或授權模型。
 

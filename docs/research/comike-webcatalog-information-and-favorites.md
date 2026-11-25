@@ -181,4 +181,4 @@ integration = pixivImport | pixivExport | csvImport | csvExport
 favorite = circleId + colorId + memo
 ```
 
-移除收藏不是只切換畫面上的愛心，而是刪除對應顏色與 Memo。本專案採用了相似的複合模型，並據此在移除時提供七秒 Undo——決策見 [ADR-0002](../adr/0002-planning-data-stays-on-device.md)，現行契約見 [收藏與走訪規劃契約](../contracts/planning.md)。
+移除收藏不是只切換畫面上的愛心，而是刪除對應顏色與 Memo。本專案採用了相似的複合模型，並據此在移除時提供七秒 Undo——決策見 [ADR-0002](../adr/0002-planning-data-stays-on-device.md)，現行契約見 [收藏與走訪規劃契約](../contracts/reader.md#收藏與走訪規劃)。

@@ -1,15 +1,13 @@
 # 主辦單位工作區契約
 
-> **角色（#546 階段 5b）**：Owner／Editor 已合併為單一「活動成員」，資料庫仍以 `owner` 保存。每位成員都能編輯、送審、管理成員、撤銷認領、重試發布與開始修正；網站管理者負責核准。下文提到 Editor 的限制已不適用。
-
-> **凍結（2026-11-21）**：描述舊後端，後端依 [#546](https://github.com/dekkmarsvin/tw_doujin_event/issues/546) 重寫後隨對應程式刪除。只用來理解現況，不作為新需求的依據。
+> **角色（#546 階段 5b）**：Owner／Editor 已合併為單一「活動成員」，資料庫仍以 `owner` 保存。每位成員都能編輯、送審、管理成員、撤銷認領、重試發布與開始修正；網站管理者負責核准。
 
 **實作**：`app/organizer-status-summary.ts`、`app/organizer/organizer-workspace-header.tsx`、`app/organizer/use-organizer-pending-claims.ts`、`app/organizer/organizer-takedown-panel.tsx`
 
-主辦單位在獨立入口 `/organizer` 建立候選活動、匯入攤位資料、畫地圖、驗證、預覽並送審。它產生的是**候選內容**，不是公開資料：公開場刊仍只來自 data repository 的 reviewed snapshot 與 pin。
+主辦單位在獨立入口 `/organizer` 建立候選活動、匯入攤位資料、畫地圖、驗證、預覽並送審。它產生的是**候選內容**，不是公開資料：公開資料只來自核准後寫入活動資料 bucket 的版本。
 
-**實作**：[`app/organizer-event-groups.ts`](../../app/organizer-event-groups.ts)、[`app/admin-reference-edit.ts`](../../app/admin-reference-edit.ts)、[`app/organizer/`](../../app/organizer)、[`app/organizer-client.ts`](../../app/organizer-client.ts)、[`app/organizer-event.ts`](../../app/organizer-event.ts)、[`app/event-aliases.ts`](../../app/event-aliases.ts)、[`app/event-image.ts`](../../app/event-image.ts)、[`app/organizer-workspace.ts`](../../app/organizer-workspace.ts)、[`app/organizer-import.ts`](../../app/organizer-import.ts)、[`app/organizer-circle-groups.mjs`](../../app/organizer-circle-groups.mjs)、[`app/organizer-workbook.ts`](../../app/organizer-workbook.ts)、[`app/organizer-publication.ts`](../../app/organizer-publication.ts)、[`app/organizer-publication-presentation.ts`](../../app/organizer-publication-presentation.ts)、[`app/event-authoring-scope.ts`](../../app/event-authoring-scope.ts)、[`app/publication-bundle-assembler.ts`](../../app/publication-bundle-assembler.ts)、[`app/github-app-token.ts`](https://github.com/dekkmarsvin/tw_doujin_event/blob/2d6985c/app/github-app-token.ts)、[`app/github-installation-probe.ts`](https://github.com/dekkmarsvin/tw_doujin_event/blob/2d6985c/app/github-installation-probe.ts)、[`app/github-publication.ts`](https://github.com/dekkmarsvin/tw_doujin_event/blob/2d6985c/app/github-publication.ts)、[`app/github-remote-auditor.ts`](https://github.com/dekkmarsvin/tw_doujin_event/blob/2d6985c/app/github-remote-auditor.ts)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`server/organizer.ts`](../../server/organizer.ts)、[`server/organizer-content.ts`](../../server/organizer-content.ts)、[`server/organizer-publication.ts`](../../server/organizer-publication.ts)、[`functions/api/admin/integrations/github/probe.ts`](https://github.com/dekkmarsvin/tw_doujin_event/blob/2d6985c/functions/api/admin/integrations/github/probe.ts)、[`app/organizer-amendment.mjs`](../../app/organizer-amendment.mjs)、[`app/organizer-amendment-baseline.ts`](../../app/organizer-amendment-baseline.ts)、[`app/organizer-baseline-adoption.ts`](../../app/organizer-baseline-adoption.ts)、[`app/organizer-amendment-settings.ts`](../../app/organizer-amendment-settings.ts)、[`app/publication-artifacts.ts`](../../app/publication-artifacts.ts)、[`app/publication-rollout.ts`](https://github.com/dekkmarsvin/tw_doujin_event/blob/2d6985c/app/publication-rollout.ts)、[`app/publication-dispatch.ts`](../../app/publication-dispatch.ts)、[`app/publication-scheduler.ts`](../../app/publication-scheduler.ts)、[`app/publication-runtime.ts`](https://github.com/dekkmarsvin/tw_doujin_event/blob/2d6985c/app/publication-runtime.ts)、[`app/publication-origin.ts`](https://github.com/dekkmarsvin/tw_doujin_event/blob/2d6985c/app/publication-origin.ts)、[`app/github-publication-driver.ts`](https://github.com/dekkmarsvin/tw_doujin_event/blob/2d6985c/app/github-publication-driver.ts)、[`app/github-publication-deployment.ts`](https://github.com/dekkmarsvin/tw_doujin_event/blob/2d6985c/app/github-publication-deployment.ts)、[`db/organizer-amendment-repository.ts`](../../db/organizer-amendment-repository.ts)、[`db/organizer-application-repository.ts`](../../db/organizer-application-repository.ts)、[`workers/publication-dispatch/`](https://github.com/dekkmarsvin/tw_doujin_event/tree/4f76ee6bb13370409f5c146024182425a88dfebe/workers/publication-dispatch)
-**測試**：`tests/organizer-event-groups.test.mjs`、`tests/api-organizer.test.mjs`、`tests/organizer-workspace.test.mjs`、`tests/event-image.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-reopen.test.mjs`、`tests/github-remote-auditor.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/browser/catalog-browse.mjs`、`tests/organizer-import.test.mjs`、`tests/organizer-circle-groups.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/github-app-token.test.mjs`、`tests/github-installation-probe.test.mjs`、`tests/multi-space-event-map.test.mjs`、`tests/organizer-amendment.test.mjs`、`tests/organizer-amendment-baseline.test.mjs`、`tests/organizer-amendment-repository.test.mjs`、`tests/organizer-publication-presentation.test.mjs`、`tests/publication-artifacts.test.mjs`、`tests/publication-amendment-artifacts.test.mjs`、`tests/publication-deployment.test.mjs`、`tests/publication-workerd.test.mjs`、`tests/github-publication-driver.test.mjs`、`tests/organizer-event-aliases.test.mjs`、`tests/organizer-amendment-settings.test.mjs`
+**實作**：[`app/organizer-event-groups.ts`](../../app/organizer-event-groups.ts)、[`app/admin-reference-edit.ts`](../../app/admin-reference-edit.ts)、[`app/organizer/`](../../app/organizer)、[`app/organizer-client.ts`](../../app/organizer-client.ts)、[`app/organizer-event.ts`](../../app/organizer-event.ts)、[`app/event-aliases.ts`](../../app/event-aliases.ts)、[`app/event-image.ts`](../../app/event-image.ts)、[`app/organizer-workspace.ts`](../../app/organizer-workspace.ts)、[`app/organizer-import.ts`](../../app/organizer-import.ts)、[`app/organizer-circle-groups.mjs`](../../app/organizer-circle-groups.mjs)、[`app/organizer-workbook.ts`](../../app/organizer-workbook.ts)、[`app/organizer-publication.ts`](../../app/organizer-publication.ts)、[`app/organizer-publication-presentation.ts`](../../app/organizer-publication-presentation.ts)、[`app/event-authoring-scope.ts`](../../app/event-authoring-scope.ts)、[`app/publication-bundle-assembler.ts`](../../app/publication-bundle-assembler.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`server/organizer.ts`](../../server/organizer.ts)、[`server/organizer-content.ts`](../../server/organizer-content.ts)、[`server/organizer-publication.ts`](../../server/organizer-publication.ts)、[`app/organizer-amendment.mjs`](../../app/organizer-amendment.mjs)、[`app/organizer-amendment-baseline.ts`](../../app/organizer-amendment-baseline.ts)、[`app/organizer-baseline-adoption.ts`](../../app/organizer-baseline-adoption.ts)、[`app/organizer-amendment-settings.ts`](../../app/organizer-amendment-settings.ts)、[`app/publication-artifacts.ts`](../../app/publication-artifacts.ts)、[`app/publication-dispatch.ts`](../../app/publication-dispatch.ts)、[`app/publication-scheduler.ts`](../../app/publication-scheduler.ts)、[`db/organizer-amendment-repository.ts`](../../db/organizer-amendment-repository.ts)、[`db/organizer-application-repository.ts`](../../db/organizer-application-repository.ts)
+**測試**：`tests/organizer-event-groups.test.mjs`、`tests/api-organizer.test.mjs`、`tests/organizer-workspace.test.mjs`、`tests/event-image.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-reopen.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/browser/catalog-browse.mjs`、`tests/organizer-import.test.mjs`、`tests/organizer-circle-groups.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/multi-space-event-map.test.mjs`、`tests/organizer-amendment.test.mjs`、`tests/organizer-amendment-repository.test.mjs`、`tests/organizer-publication-presentation.test.mjs`、`tests/publication-artifacts.test.mjs`、`tests/publication-amendment-artifacts.test.mjs`、`tests/organizer-event-aliases.test.mjs`、`tests/organizer-amendment-settings.test.mjs`
 **決策**：[ADR-0047](../adr/0047-organizer-onboarding-opens-into-a-resumable-workspace.md)、[ADR-0046](../adr/0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md)、[ADR-0058](../adr/0058-publication-is-enforced-by-the-app-not-the-ruleset.md)、[ADR-0038](../adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md)、[ADR-0039](../adr/0039-one-data-repo-for-events-and-references.md)、[ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md)、[ADR-0068](../adr/0068-published-event-settings-are-declared-amendments.md)、[ADR-0070](../adr/0070-event-images-are-published-by-approval-under-their-hash.md)
 
 首次發布與發布後更正均已接上 Web UI 與自動發布。真實執行證據見 [CH20 首次發布／恢復](https://github.com/dekkmarsvin/tw_doujin_event/issues/212)及[地圖更正](https://github.com/dekkmarsvin/tw_doujin_event/issues/190)，其中記錄的人工補救不因功能已上線而抹除。部署模式與缺少 dispatcher 時的處置見[發布邊界](#發布邊界)。
@@ -25,6 +23,7 @@
 - 左側活動列表可以收合，收合後把寬度讓給工作區。收合狀態不保存，重新登入回到展開。
 - 活動列表依 `eventId` 分組並可逐活動摺疊；尚未指定活動代碼的候選各自一組，不按名稱合併。同一活動的初次建置與每次發布後修正候選，以建立時間及候選 ID 的固定順序編為「第 X 版」，不使用逐次儲存的 `current_version`。編號以資料庫中該活動的候選計算，授權清單只回傳本人可達的候選，因此只獲授權新版者的編號不會重新從 1 開始。
 - 一般進入及恢復上次活動時預設選該活動本人可達的最新版；明確 `candidate` 連結仍開指定候選。左側活動展開區的版本選單可切換初版與修正版，版本切換沿用未儲存變更保護及各候選原有的編輯／發布鎖定。保存舊候選的新修改不會把它變成最新版。
+- 上次開啟的候選依同源、同瀏覽器、同帳號保存於 localStorage；讀寫被封鎖時仍可在記憶體中操作，登入後仍以伺服器授權清單確認可達性，各成員的區段仍由 D1 保存。
 - `candidate=<候選>&section=members` 直接開指定候選的既有成員面板，優先於上次的內容頁偏好。未登入或 session 到期時以既有 Organizer 登入流程保留這組固定目的地；沒有候選或無權限時不改開別場。窄螢幕保留目的地並沿用桌機限制；成員操作仍由原有元件與候選授權負責。
 - 活動功能導覽只出現在左側展開區，不在右側重複顯示。右側頂部集中活動名稱、身分、審核與發布狀態；審核已通過不等於發布已完成，發布失敗仍顯示已核准與發布失敗兩個結果。「成員與權限」開啟目前版本的協作者與負責人管理；審核與發布狀態開啟「檢查與發布」，社團認領狀態開啟「社團管理」，切換都沿用未儲存變更保護。成員管理不是準備區段，不計入準備進度。
 - 網站管理者在頁首顯示「管理」連結，進入 `/admin`；非管理者不顯示。
@@ -35,13 +34,13 @@
 
 右側頂部顯示此活動的社團認領待審筆數；初版及修正版共用目前待審清單，不統計社團數或歷史裁決。總數在清單 500 筆上限之前計算，超出上限不會少算。核准、婉拒及清單重新整理後同步更新；其他面板在可見時每 30 秒與返回視窗時更新。未能讀取不顯示為零，切換活動不沿用另一活動的筆數。
 
-`GET／POST /api/organizer/events/:candidateId/claims` 要求有效 session 與該候選的有效 Owner／Editor grant，或網站管理者身分。候選須有已發布版次記錄，或為伺服器從同一活動已發布來源建立的修正版；一般 CREATE 草稿即使填入已公開活動 ID，也不取得審核權限。活動由伺服器讀取這項可信關聯的 `event_id` 決定；不接受由 body 或 query 改寫活動範圍。沒有候選授權、可信關聯、活動未公開或認領屬於另一活動時回 404。列表只回此活動的待審認領與佐證，不回跨活動管理總覽或其他帳號 email。
+`GET／POST /api/organizer/events/:candidateId/claims` 要求有效 session 與該候選的有效成員 grant，或網站管理者身分。候選須有已發布版次記錄，或為伺服器從同一活動已發布來源建立的修正版；一般 CREATE 草稿即使填入已公開活動 ID，也不取得審核權限。活動由伺服器讀取這項可信關聯的 `event_id` 決定；不接受由 body 或 query 改寫活動範圍。沒有候選授權、可信關聯、活動未公開或認領屬於另一活動時回 404。列表只回此活動的待審認領與佐證，不回跨活動管理總覽或其他帳號 email。
 
-面板共用 `/admin` 的單筆／批次核准及婉拒、佐證、重複申請提示與重新整理。Owner／Editor 可核准或婉拒 `pending` 認領；撤銷已通過的認領限 Owner（與網站管理者），Editor 回 `403`。Owner 在同一面板以社團名稱搜尋此活動的公開社團，已通過認領的社團附撤銷，確認後沿用唯一擁有者約束與公開文件重建；搜尋結果只多帶已通過認領的 ID，不回帳號個資。任何組合都不取得其他全域管理權限。每筆裁決沿用唯一擁有者約束、狀態 CAS 及帳號通知，SQL 寫入時再次核對 actor 有效、候選可信關聯與認領活動相同，以及 grant／管理者身分仍有效；撤權競態不改寫認領；撤銷在 SQL 寫入時另核對 Owner grant，請求中途降為 Editor 時回 `403` 且認領不變。主辦裁決的 method 為 `organizer`，audit action 為 `claim.organizer_approve／reject／revoke`，保留 actorRole、candidateId、eventId 與結果。
+面板共用 `/admin` 的單筆／批次核准及婉拒、佐證、重複申請提示與重新整理。成員可核准或婉拒 `pending` 認領，也可撤銷已通過的認領。成員在同一面板以社團名稱搜尋此活動的公開社團，已通過認領的社團附撤銷，確認後沿用唯一擁有者約束與公開文件重建；搜尋結果只多帶已通過認領的 ID，不回帳號個資。任何組合都不取得其他全域管理權限。每筆裁決沿用唯一擁有者約束、狀態 CAS 及帳號通知，SQL 寫入時再次核對 actor 有效、候選可信關聯與認領活動相同，以及 grant／管理者身分仍有效；撤權競態不改寫認領。主辦裁決的 method 為 `organizer`，audit action 為 `claim.organizer_approve／reject／revoke`，保留 actorRole、candidateId、eventId 與結果。
 
 ### 活動內撤下社團補充資料
 
-`GET／POST /api/organizer/events/:candidateId/overrides` 沿用相同有效 session、Owner／Editor grant／管理者、可信候選關聯及已公開活動條件，範圍由候選 `event_id` 決定。GET 依社團名稱搜尋此活動的公開社團清單，回傳社團名稱、ID 與補充資料狀態，不回內容或帳號個資。POST 要求社團 ID 與撤下原因，並核對社團屬於此活動。
+`GET／POST /api/organizer/events/:candidateId/overrides` 沿用相同有效 session、成員 grant／管理者、可信候選關聯及已公開活動條件，範圍由候選 `event_id` 決定。GET 依社團名稱搜尋此活動的公開社團清單，回傳社團名稱、ID 與補充資料狀態，不回內容或帳號個資。POST 要求社團 ID 與撤下原因，並核對社團屬於此活動。
 
 主辦與 `/admin` 共用搜尋、選取、原因及確認面板。確認時說明補充資料停止公開、已上傳圖片刪除，活動攤位與認領保留。D1 更新在寫入時再次核對有效授權與活動，並比較所讀取的內容及更新時間；衝突或撤權不修改資料、不刪 R2。更新成功後依該活動日期重建公開投影，清除所屬活動／社團的 R2 圖片；不重新公開活動後隱藏的其他社團。
 
@@ -51,9 +50,9 @@ R2 清除暫時失敗時，資料維持撤下，搜尋顯示圖片待清除並�
 
 「活動公告」與社團管理並列，出現條件相同（活動已在目前部署的公開清單中），不算入活動建置進度。每個活動同一時間只有一則公告：類型「一般」或「重要」、說明（純文字，200 字以內）與選填的 https 連結。儲存就是發布，不經網站管理者審核、不另設確認；清除後讀者端不再顯示。不保留歷史版本。主辦表單沿用工作區的桌機寬度限制，沒有手機發布入口。
 
-`GET／PUT／DELETE /api/organizer/events/:candidateId/notice` 沿用上方 `/overrides` 的有效 session、Owner／Editor grant／管理者、可信候選關聯及已公開活動條件，活動範圍由候選 `event_id` 決定，不接受 body 或 query 改寫。PUT 驗證失敗回 400 並說明是哪個欄位。寫入或清除後重建該活動的公開 overlay，`notice` 隨 `/data/events/:eventId/overrides.json` 送出；所有重建入口（社團更新、撤下、認領裁決與活動階段切換）都讀取目前公告。重建的 revision 以原子遞增寫入，不同公開內容不共用同一 revision 與 strong ETag，較舊的重建不覆蓋已完成的公告更新／清除。稽核 action 為 `event_notice.published`／`event_notice.cleared`，保留 actorRole、candidateId 與 eventId。
+`GET／PUT／DELETE /api/organizer/events/:candidateId/notice` 沿用上方 `/overrides` 的有效 session、成員 grant／管理者、可信候選關聯及已公開活動條件，活動範圍由候選 `event_id` 決定，不接受 body 或 query 改寫。PUT 驗證失敗回 400 並說明是哪個欄位。寫入或清除後重建該活動的公開 overlay，`notice` 隨 `/data/events/:eventId/overrides.json` 送出；所有重建入口（社團更新、撤下、認領裁決與活動階段切換）都讀取目前公告。重建的 revision 以原子遞增寫入，不同公開內容不共用同一 revision 與 strong ETag，較舊的重建不覆蓋已完成的公告更新／清除。稽核 action 為 `event_notice.published`／`event_notice.cleared`，保留 actorRole、candidateId 與 eventId。
 
-讀者端在地圖、逛品書頂端及社團介紹頁名稱上方顯示公告：重要公告使用警示色，只顯示主辦的說明與連結，不加站方提醒或免責文字。更新時機見[交付與離線](./delivery-and-offline.md#更新可見性)。活動選擇頁不載入 overlay，不顯示公告。
+讀者端在地圖、逛品書頂端及社團介紹頁名稱上方顯示公告：重要公告使用警示色，只顯示主辦的說明與連結，不加站方提醒或免責文字。更新時機見[交付與離線](./reader.md#更新可見性)。活動選擇頁不載入 overlay，不顯示公告。
 
 ## 活動申請
 
@@ -65,7 +64,7 @@ R2 清除暫時失敗時，資料維持撤下，搜尋顯示圖片待清除並�
 
 新候選沿用申請名稱與官方來源，預計日期／地點留在申請供確認；真正活動日與場地由既有引導填寫。核准申請僅准許建置，不建立「官方認證」標示；內容送審、核准 snapshot、publication job、恢復與 production smoke 全沿用既有路徑。
 
-申請資格由共用 D1 的 `organizer_application_mode` 控制：`closed`、`invite_only`、`public`；Session、申請清單與送件均讀取當次設定。首頁沿用既有登入入口，不新增申請按鈕，也不為開關呼叫 Reader Function。維護者於 `/admin?section=settings` 手動開放；既有邀請、grant 與申請查詢不受關閉開關影響。詳見[網站營運設定](./site-settings.md)及[部署 runbook](../runbooks/deployment.md#網站營運設定遷移477)。
+申請資格由共用 D1 的 `organizer_application_mode` 控制：`closed`、`invite_only`、`public`；Session、申請清單與送件均讀取當次設定。首頁沿用既有登入入口，不新增申請按鈕，也不為開關呼叫 Reader Function。維護者於 `/admin?section=settings` 手動開放；既有邀請、grant 與申請查詢不受關閉開關影響。詳見[網站營運設定](./admin.md#網站營運設定)及[部署 runbook](../runbooks/deployment.md#網站營運設定遷移477)。
 
 申請與決策不設新的 TTL／排程；帳號刪除時刪除 pending 申請，已審核申請保留去識別的決策與候選連結，清空申請自由內容與理由。帳號／審核者去識別化沿用既有刪除交易；正式活動內容及 sole-owner 刪除保護不變。
 
@@ -96,10 +95,10 @@ R2 清除暫時失敗時，資料維持撤下，搜尋顯示圖片待清除並�
 - 建立成功即寄出主辦工作區邀請信；受邀者以該連結登入後自動接受待處理邀請並取得 grant。信件由 `app/mail-letter.ts` 產生，同時寄出 HTML 與純文字；連結過期時，信中指示受邀者到 `/organizer` 用同一信箱重新索取登入連結，任何 `organizer` 登入都會接受該信箱的待處理邀請。
 - 首次邀請與重寄的 HTML／純文字均列出寄送當下的活動暫定名稱，以及此次邀請操作的角色：建立活動、管理者邀請負責人，或沒有該活動 Owner grant 的管理者邀請協作者為「網站管理者」；一般 Owner 邀請負責人、任何 Owner 邀請協作者為「活動負責人」。邀請者 Email 不寫入信件內容，名稱與角色由伺服器取得。
 - **管理者把自己填成負責人時，owner grant 在建立活動的同一個 transaction 內直接成立**，該筆邀請同時標記為建立時即接受，不必先收信。管理者具有指派 Owner 的權限，繞一圈收信不增加任何保證。稽核寫的是 `organizer_event.owner_granted_on_create`，與接受邀請分開。信照常寄出（那是一條可用的登入連結），寄信預算與寄送失敗的處理都不變；負責人填別人時行為完全不變，仍由對方收信登入後取得 grant。送審與核准的 有效 session 要求不因此放寬。
-- 該候選的 Owner 與全域管理者（不需持有該活動的 Owner grant，見 [ADR-0080](../adr/0080-site-admins-submit-and-manage-collaborators-without-an-owner-grant.md)）可邀請或撤銷同一候選活動的 Editor，也可邀請、重寄或撤銷同一候選活動的 Owner。Editor 與其他候選活動的 Owner 無此權限。成員管理在資料庫寫入時重查有效帳號及該候選的 Owner grant／目前管理者名冊，撤權後不能沿用先前讀取的授權。撤銷對尚未登入者同樣有效——撤掉 grant 或撤掉尚未接受的邀請，任一成立即算成功。撤銷已接受的 Owner 時必須仍有另一位有效 Owner grant，待接受邀請不算；此條件由同一 SQL 寫入保護，並行移除也不能清空 Owner。另有 Owner 時可移除自己，工作區重新載入可存取的活動清單。
+- 該候選的成員與全域管理者（不需持有該活動的 grant，見 [ADR-0080](../adr/0080-site-admins-submit-and-manage-collaborators-without-an-owner-grant.md)）可邀請、重寄或撤銷同一候選活動的成員；其他候選活動的成員無此權限。成員管理在資料庫寫入時重查有效帳號及該候選的成員 grant／目前管理者名冊，撤權後不能沿用先前讀取的授權。撤銷對尚未登入者同樣有效——撤掉 grant 或撤掉尚未接受的邀請，任一成立即算成功。撤銷已接受的成員時必須仍有另一位有效成員，待接受邀請不算；此條件由同一 SQL 寫入保護，並行移除也不能清空成員。另有成員時可移除自己，工作區重新載入可存取的活動清單。
 - 寄信失敗保留已建立的活動與邀請；回傳 `invitationSent: false` 及 `invitationDelivery`（`failed` 為明確拒絕，`unknown` 為逾時或無法確認），清除本次寄信建立的登入權杖並寫入 `organizer_event.invitation_failed`。邀請建立的稽核先於寄信，不會因寄信失敗遺失。成功受理回 `sent`，不代表已送達。
 - 協作者／負責人表單可用「重寄邀請信」對既有 Email 重寄，包含重新開啟工作區後；`POST …/collaborators` 的 `resend` 只接受同一候選、信箱與角色下尚未接受且未撤銷的邀請，沿用邀請的權限。重寄不新增邀請、grant 或候選版本，成功另留 `organizer_event.editor_resend`／`owner_resend` 稽核。已具該角色不再新增邀請，另一角色的待接受邀請不會被重寄或覆寫。
-- 有效 Owner 不可被邀請或重寄為 Editor，API 回 409 且不寄信；建立 Editor 邀請的 SQL 也重查目前 grant，避免預讀後已升為 Owner 仍寄出協作者邀請。既有 Editor 邀請在登入時會結束待接受狀態，但接受交易不得覆寫有效 Owner 的角色、授權來源或時間。Editor 接受 Owner 邀請仍可升為 Owner；已透過負責人撤銷流程移除的 grant 可重新接受 Editor 邀請，不把曾經是 Owner 視為永久角色。
+- 舊的 Editor 待接受邀請視為成員邀請，可重寄或撤回；接受任何邀請都成為成員。已撤銷的成員可再次接受新的邀請。
 - 邀請會鑄造真正的登入連結，因此受三道獨立預算限制：每小時每收件匣 3 封**他人寄來的**邀請、每小時每邀請人 10 封，另沿用每 IP 每小時 20 封登入連結的上限。收件匣預算刻意不與本人自助索取的登入連結共用計數器，否則邀請人可以花光對方的額度把人鎖在帳號外。
 - 首次寄送與重寄均以登入權杖計數，邀請人依 `minted_by` 及建立時間計算，不能重用舊邀請繞過額度。preview 不允許的收件地址在新增邀請或寄信前拒絕，既有邀請不受影響。
 
@@ -129,17 +128,17 @@ draft → submitted → approved → publishing → published
 
 選填（[ADR-0070](../adr/0070-event-images-are-published-by-approval-under-their-hash.md)）。`event.image` 為 `{ url, sha256, contentType, width, height }`，`url` 必須等於公開 bucket 的 `event-images/<sha256>.<ext>`，由 `app/event-image.ts` 檢查。
 
-- `PUT /api/organizer/events/:candidateId/image`（multipart：`file`）由可編輯候選的 Owner／Editor／Admin 上傳；只在 `draft`、`changes_requested` 接受。JPEG、PNG 或 WebP，5 MiB 以內，寬度至少 1200 px，不限比例，結構檢查沿用配置圖。上傳不要求另行勾選權利聲明。上傳只寫入非公開 bucket 的 `organizer-event-images/<candidateId>/<sha256>.<ext>` 並回傳 `image`，**不修改草稿**；主辦儲存草稿（或修正宣告）後才生效。未綁定 bucket 時 503。
+- `PUT /api/organizer/events/:candidateId/image`（multipart：`file`）由可編輯候選的成員／Admin 上傳；只在 `draft`、`changes_requested` 接受。JPEG、PNG 或 WebP，5 MiB 以內，寬度至少 1200 px，不限比例，結構檢查沿用配置圖。上傳不要求另行勾選權利聲明。上傳只寫入非公開 bucket 的 `organizer-event-images/<candidateId>/<sha256>.<ext>` 並回傳 `image`，**不修改草稿**；主辦儲存草稿（或修正宣告）後才生效。未綁定 bucket 時 503。
 - 圖片與其他欄位共用表單的儲存狀態，不另顯示「已上傳／已移除，尚未儲存」。儲存成功而後續讀取失敗時，仍以已儲存呈現；上傳進度、格式限制與可處理的錯誤保留在圖片欄位。
 - 修正影響以原圖與修正後圖片供主辦核對，不以尺寸代替圖片。原圖讀已發布網址；修正後圖片先讀此候選的非公開預覽，已有公開圖片時可回退至公開網址。新增或移除的一側顯示「無」。
-- `GET /api/organizer/events/:candidateId/image?sha256=&contentType=` 供候選的 Owner／Editor／Admin 預覽暫存圖片，回應 `private, no-store`、`nosniff` 與 sandbox CSP；已公開的圖片直接讀公開網址。
+- `GET /api/organizer/events/:candidateId/image?sha256=&contentType=` 供候選的成員／Admin 預覽暫存圖片，回應 `private, no-store`、`nosniff` 與 sandbox CSP；已公開的圖片直接讀公開網址。
 - 儲存草稿或修正宣告時，若圖片與上次儲存不同，伺服器重新讀取暫存位元組並重新檢查，雜湊、類型與尺寸都必須相符，否則 422；相同時不讀 bucket。
 - 送審成功後刪除此候選送審內容沒有使用的暫存。只在送審後清理：草稿可編輯時，協作者的儲存隨時可能指向任何一張暫存。清理失敗不影響送審。
 - 核准時、建立發布工作之前，把核准內容的圖片複製到公開 bucket 的 `event-images/<sha256>.<ext>`；已存在則略過。只有對「目前待審版本」的核准才複製；已退回修改或版本不符的過時核准不會公開圖片。暫存位元組缺少或不符時回 503 `event_image_unavailable`，候選狀態不變，可再次核准。
 
 新增活動日時，第一日的日期留空；之後以最後一個有效日期加一天，若已有列但皆無有效日期才回退為作者當地的今天。新活動日的 id 取最小尚未使用的序號。這是可覆寫的預設值，不是驗證規則。
 
-`venueId` 與 `venueSpaceId` 是系統保存的 stable ID，介面不要求主辦輸入。主辦先從共用場館目錄選擇場館，再從該場館的場地下拉選擇；找不到時可以立即建立新場館與第一個場地，或在既有場館立即新增場地。每筆目錄資料都要求官方 HTTPS 來源，但場地的來源網址可以留空——留空時沿用它所屬場館的網址，因為「全館」這類場地通常沒有自己的官方頁面，而主辦通常只有一條官方網址。格式錯誤的網址仍然退回；沿用是補齊，不是豁免。建立場館另要求地址：主辦貼上場館官方網頁上的完整地址，NFKC 正規化並合併空白後須為 1–200 字，空白或只有空格時退回「請填寫場館地址。」地址只寫入場館的公開 `venue/1` 記錄（`address`，出處指向同一官方來源），不另存於 `organizer_venues`；場地沒有地址。建立與 audit 在同一個 D1 transaction；新資料只是候選控制面的來源記錄，不會因此自動成為已發布 reference pin。
+`venueId` 與 `venueSpaceId` 是系統保存的 stable ID，介面不要求主辦輸入。主辦先從共用場館目錄選擇場館，再從該場館的場地下拉選擇；找不到時可以立即建立新場館與第一個場地，或在既有場館立即新增場地。每筆目錄資料都要求官方 HTTPS 來源，但場地的來源網址可以留空——留空時沿用它所屬場館的網址，因為「全館」這類場地通常沒有自己的官方頁面，而主辦通常只有一條官方網址。格式錯誤的網址仍然退回；沿用是補齊，不是豁免。建立場館另要求地址：主辦貼上場館官方網頁上的完整地址，NFKC 正規化並合併空白後須為 1–200 字，空白或只有空格時退回「請填寫場館地址。」地址只寫入場館的公開 `venue/1` 記錄（`address`，出處指向同一官方來源），不另存於 `organizer_venues`；場地沒有地址。建立與 audit 在同一個 D1 transaction；新資料只是候選控制面的來源記錄，不會因此自動成為已發布的 reference 記錄。
 
 場館表單直接列出已設定的活動日期（唯讀），場館與場地共用於所有活動日。尚無選擇時直接顯示第一組空白選擇器，不因此產生未儲存變更；選好後可「再選一個場地」。「建立新場館」只保留一個入口，建立後優先填入空白選擇列，沒有空白列才加入一列。
 
@@ -164,7 +163,7 @@ draft → submitted → approved → publishing → published
 
 未知或重複來源、跨社團混選、換手仍為同一名稱、大小寫折疊後重複或原已佔用的目的地，以及未公開配號或缺列的 baseline 均拒絕。目的地不因同批另一筆退出而變可用；同攤換手必須用 `released`。沿用官方資料每個活動日至少一攤的限制。未選資料與其他活動 evidence 保留；空宣告清單為無變動預覽。
 
-planner 產出既有 `circle-identity-groups/2`，只套用本次 transitions；baseline 的舊 transitions 已生效，不再重播。保留既有群組與 linkage；部分換手／移動造成群組跨列時，由明確宣告及其來源（未另填時用活動官方來源）產生 linkage。連續修正的退役證據與 Reader 投影依 [circle catalog 契約](./circle-catalog.md)。
+planner 產出既有 `circle-identity-groups/2`，只套用本次 transitions；baseline 的舊 transitions 已生效，不再重播。保留既有群組與 linkage；部分換手／移動造成群組跨列時，由明確宣告及其來源（未另填時用活動官方來源）產生 linkage。連續修正的退役證據與 Reader 投影依 [circle catalog 契約](./reader.md#社團目錄)。
 
 ### 活動設定更正宣告
 
@@ -177,18 +176,18 @@ planner 產出既有 `circle-identity-groups/2`，只套用本次 transitions；
 
 ### 修正候選與基準 API
 
-- `POST /api/organizer/events/:sourceCandidateId/amendments` 只接受 `expectedVersion`。來源 Owner 或 Admin 可以建立；Editor 不行。來源候選、該版本 snapshot 與 publication job 必須一致且已 published。伺服器以既有 GitHub App 的唯讀 token 核對目前 main pin、原 job 的 main pin、固定 data commit 每檔 SHA-256、核准 bytes，以及 Pages 正在提供的 data commit／Reader catalog；錯版、未公開、缺檔、讀取失敗均不建立，客戶端不能指定基準內容。
-- [ADR-0073](../adr/0073-reviewed-grouping-corrections-have-explicit-amendment-baselines.md) 的已核准跨日身分整合可由隨程式部署的 `data/organizer-baseline-adoptions.json` 承接。紀錄綁定精確的原 published job／snapshot 及目標 pin／分組／本活動身分證據；只有分組檔可偏離原核准產物，其他檔案維持原檢查。新 `/2` baseline 保留原 `source`，另固定承接紀錄與 hash，使用整合後的 pin／grouping／evidence；既有 `/1` 不改語意。其他活動推進 main 與全域 allocations 不阻擋；本活動的未知變動仍拒絕。新格式沿用現有 D1 baseline JSON，成功發布後的下一次修正使用新 job 的一般基準。
-- 基準與發布紀錄不符回 409 `amendment_baseline_changed`，公開版本尚未與 main pin 一致回 409 `amendment_publication_pending`，上游讀取失敗回 503 `amendment_baseline_unavailable`。不將未知錯誤內容直接傳給使用者，也不對無法靠重新載入解決的差異要求重新載入。
-- 建立新的候選、鎖定 eventId、immutable baseline、首版空宣告、版本紀錄、匯入列、獨立地圖草稿及 audit 在同一 D1 batch。交易內重新檢查來源版本、published job／snapshot 與 Owner grant 或目前 Admin 名冊；宣告保存同樣重檢 grant／Admin，避免預讀後撤權仍寫入。候選複製當下有效的 Owner／Editor grants；之後沿用每候選的協作者管理。Admin 不因建立動作取得 Owner。
-- `GET /api/organizer/events/:candidateId/amendment` 由候選 Owner／Editor／Admin 讀目前宣告、影響、設定宣告及其前後值（`settings`、`settingsImpact`）與可選來源名單；以同一 SQL 讀取 candidate 版本與最新宣告，地圖單獨修改後仍回目前候選版本，不能將舊宣告配上並行保存後的新版本。不回傳 global allocations／evidence 或核准 snapshot。`PUT` 只接受 `expectedVersion`、完整 `changes[]` 與選填 `settings`，從固定 baseline 重新規劃，不從前一次結果累加或推論。未知來源、錯誤宣告或允許清單外的設定為 422，版本／狀態或交易內撤權衝突為 409。
+- `POST /api/organizer/events/:sourceCandidateId/amendments` 只接受 `expectedVersion`。來源候選的成員或 Admin 可以建立。來源候選、該版本 snapshot 與 publication job 必須一致且已 published。伺服器以 D1 中來源候選的核准 snapshot 重算公開檔，與活動資料 bucket 目前提供的版本逐檔比對；分組取自該版本的來源檔，沒有時沿用核准 snapshot。錯版、未公開、缺檔、讀取失敗均不建立，客戶端不能指定基準內容。
+- [ADR-0073](../adr/0073-reviewed-grouping-corrections-have-explicit-amendment-baselines.md) 的跨日身分整合承接紀錄只存在於 #546 之前核准的 `/2` 基準；這些基準仍可讀取。新修正一律從活動資料 bucket 取得基準。
+- 讀不到活動資料 index 回 503 `amendment_baseline_unavailable`；index 可讀但基準與發布紀錄不符、或版本內的檔案讀不到時回 409 `amendment_baseline_changed`。不將未知錯誤內容直接傳給使用者，也不對無法靠重新載入解決的差異要求重新載入。
+- 建立新的候選、鎖定 eventId、immutable baseline、首版空宣告、版本紀錄、匯入列、獨立地圖草稿及 audit 在同一 D1 batch。交易內重新檢查來源版本、published job／snapshot 與成員 grant 或目前 Admin 名冊；宣告保存同樣重檢 grant／Admin，避免預讀後撤權仍寫入。候選複製當下有效的成員 grants；之後沿用每候選的成員管理。Admin 不因建立動作成為成員。
+- `GET /api/organizer/events/:candidateId/amendment` 由候選成員／Admin 讀目前宣告、影響、設定宣告及其前後值（`settings`、`settingsImpact`）與可選來源名單；以同一 SQL 讀取 candidate 版本與最新宣告，地圖單獨修改後仍回目前候選版本，不能將舊宣告配上並行保存後的新版本。不回傳 global allocations／evidence 或核准 snapshot。`PUT` 只接受 `expectedVersion`、完整 `changes[]` 與選填 `settings`，從固定 baseline 重新規劃，不從前一次結果累加或推論。未知來源、錯誤宣告或允許清單外的設定為 422，版本／狀態或交易內撤權衝突為 409。
 - 宣告保存以唯一 revision token 串起版本、不可變宣告紀錄、衍生匯入列與 audit；同時保存只成功一份，失敗請求不能把勝出者的匯入列退役。baseline 不隨保存改變。沿用 20,000 列、代碼 80 字、名稱 200 字及 8 MiB 名單限制；宣告本身也限制 8 MiB。匯入列只供既有地圖及驗證接線，身分仍由 baseline／宣告決定，不編造主辦 stable key。
 - AMEND 的一般活動設定儲存與匯入覆蓋一律回 409 `amendment_declaration_required`，名單變動與活動設定更正都只能經修正宣告；地圖沿用原候選版本及權限檢查。送審與核准沿用 CREATE 的 publication engine，不能用 CREATE 繞過修正宣告。送審的 snapshot 帶上已保存的設定宣告（沒有時不出現這個鍵）；核准時 snapshot 的 `changes`、`settings` 必須與已保存內容一致，否則回 409 `snapshot_mismatch`。
-- Runtime schema 新增 `publication_operation`（舊候選預設 CREATE）、`organizer_amendments` 與 `organizer_amendment_changes`；設定宣告存在 `organizer_amendment_changes.settings_json`，由 runtime 欄位遷移補上。舊 eventId index 以同名在一個交易中替換，避免舊部署的 `CREATE INDEX IF NOT EXISTS` 重建舊規則；CREATE 唯一及 AMEND 活躍唯一各自保留，不需要人工 SQL 遷移。
+- `publication_operation`（舊候選為 CREATE）、`organizer_amendments` 與 `organizer_amendment_changes`（設定宣告在 `settings_json`）由 `migrations/` 建立；CREATE 唯一及 AMEND 活躍唯一兩條 eventId index 各自保留。
 
 ### 修正操作介面
 
-- 已發布候選的 Owner／Admin 可按「開始修正已發布活動」，核對成功後開啟獨立修正候選。活動列表及工作區標示「發布後修正」；Editor 可編輯既有修正候選，沒有建立入口。
+- 已發布候選的成員或 Admin 可按「開始修正已發布活動」，核對成功後開啟獨立修正候選。活動列表及工作區標示「發布後修正」。
 - **名單修正只能表達四種變動，純分類變更不在其中。** 退出、換手、移動／重編號、新增——只有「移動」帶得動目的地的活動日、展區與代碼。所以「把展區重新歸類、攤位本身沒動」這種修正，在系統裡只能寫成逐攤的移動宣告，而讀者會因此在每一個攤位看到「已移動攤位」。發布時 `publication-artifacts` 還會比對 snapshot 的攤位清單與「baseline + 宣告」推出的結果，不一致就以 `snapshot_mismatch` 退件——因此直接改候選的匯入列也走不通。修正的 baseline 取自目前對外服務的目錄而非 D1，改舊候選同樣不影響未來的修正。遇到管線表達不了的資料更正時，預設是不動已發布資料、改為修正上游避免再發生；若確實必須更動已發布位元組，那是繞過「已發布內容來自已核准 snapshot」的治理例外，要明確記錄後才執行。
 - AMEND 的「名單修正」取代一般攤位匯入。表單明選變動類型、搜尋／勾選來源攤位，填接手或新增社團名稱，以及逐攤目的活動日、展區、代碼；選填 HTTPS 更正依據。來源每頁最多 50 個，跨頁／搜尋仍保留選取。
 - 修正面板的「活動設定」預填目前生效的活動名稱、別稱與各活動日日期，可直接更正，與名單宣告一起儲存；「已儲存的活動設定更正」逐欄列出原本與修正後的值。
@@ -199,7 +198,7 @@ planner 產出既有 `circle-identity-groups/2`，只套用本次 transitions；
 
 活動設定的 `references` 保存 `organizerAssignments[]`（organizerId／lead、co-organizer、partner）與 `categoryCatalog`（id／organizerId／revision）。必須恰好一位 lead，單位不可重複；分類目錄屬於已選單位且至少含一個有效分類。建立及選取共用 Reader 分類驗證，分類名稱不可使用其保留名稱「全部類別」。未選可以儲存未完成草稿，但 validate／submit 會阻擋；明確選入的錯誤 reference 在 save 即拒絕。
 
-`POST /api/organizer/events/:candidateId/references` 接受 expectedVersion、kind、名稱、HTTPS 官方來源；分類目錄另含所屬主辦與分類 label／選填 description。Owner／Editor／Admin 可在 draft／changes_requested 建立，舊版本或已鎖定狀態拒絕；建立與 audit 原子完成，候選內容不因目錄建立而前進版本。使用者選取後以原本的草稿 save 套用。除了下方的場館補上地址，沒有原地修改既有 reference 的 API；不提供猜測分類或 stable ID 輸入欄。
+`POST /api/organizer/events/:candidateId/references` 接受 expectedVersion、kind、名稱、HTTPS 官方來源；分類目錄另含所屬主辦與分類 label／選填 description。成員／Admin 可在 draft／changes_requested 建立，舊版本或已鎖定狀態拒絕；建立與 audit 原子完成，候選內容不因目錄建立而前進版本。使用者選取後以原本的草稿 save 套用。除了下方的場館補上地址，沒有原地修改既有 reference 的 API；不提供猜測分類或 stable ID 輸入欄。
 
 建立分類目錄時，「分類官方來源網址」預填活動設定的官方公告網址（分類通常公布在活動公告裡），可以修改；活動尚未填網址時留空。
 
@@ -251,12 +250,12 @@ validate／preview／submit 共用 selected-reference resolver。`organizer-read
 
 清單的「已儲存地圖」逐群組顯示待畫、部分已畫或已畫，以該活動日 × 場地最新已存地圖的代碼核對，讀取失敗不當作待畫。已有座標可定位到同一範圍的編輯器；清單尚有未保存變更時先儲存再定位。此狀態來自既有 maps 列表的選填 `coverage=1` 投影，不另外保存完成旗標。
 
-編輯器的清單對照則依目前地圖草稿即時更新，清楚標示儲存後才更新清單狀態；畫入、改碼、刪除及復原都參與計算。可搜尋代碼與社團名稱，待畫代碼沒有無效定位，選取已有攤位可核對同範圍的群組。共用行為見[地圖編輯器契約](./map-editor.md)。
+編輯器的清單對照則依目前地圖草稿即時更新，清楚標示儲存後才更新清單狀態；畫入、改碼、刪除及復原都參與計算。可搜尋代碼與社團名稱，待畫代碼沒有無效定位，選取已有攤位可核對同範圍的群組。共用行為見[地圖編輯器](#地圖編輯器)。
 
 - 每一個「活動日 × venue-space」各一份地圖草稿，沿用既有的 `MapLayoutEditor` 與 template 辨識器。
 - 編輯器可在已匯入的展區代碼中選擇一個，逐點畫不規則範圍並選淡色；同碼可畫多塊且共用顏色。可重開選取範圍、編輯頂點／展區／顏色或刪除，並使用既有復原與儲存。scope 不接受其他場地的展區代碼；Reader 預覽顯示範圍與顯示名稱，發布時保留 `areaRegions`。
-- 共用的[私人輔助線與吸附](./map-editor.md#私人輔助線與吸附)隨地圖 revision 保存。API 以 layout 同層的可選 `authoring` 讀寫，公開預覽／publication 只採地圖 layout；畫布個人顯示開關不觸發候選保存。
-- 共用的[描摹顯示與精準操作](./map-editor.md#描摹顯示與精準操作)與[排段整體調整](./map-editor.md#排段整體調整)在本工作區與地圖貢獻控制面行為一致。配置圖顯示、透明度、描摹模式與微移步進只留在瀏覽器，不進草稿也不進 revision。
+- 共用的[私人輔助線與吸附](./organizer-workspace.md#私人輔助線與吸附)隨地圖 revision 保存。API 以 layout 同層的可選 `authoring` 讀寫，公開預覽／publication 只採地圖 layout；畫布個人顯示開關不觸發候選保存。
+- 共用的[描摹顯示與精準操作](./organizer-workspace.md#描摹顯示與精準操作)與[排段整體調整](./organizer-workspace.md#排段整體調整)在地圖編輯器中的行為見下方。配置圖顯示、透明度、描摹模式與微移步進只留在瀏覽器，不進草稿也不進 revision。
 - **「儲存地圖變更」只儲存，不關閉編輯器。** 一張地圖要畫很多輪，關閉是另一個決定，由「關閉編輯器」負責。儲存後編輯器沿用同一份 layout 繼續編輯，並改為更新剛才存下的那份地圖：第一次儲存之後的每一次儲存都是更新，不會再建立第二份。有未儲存變更時關閉才會出現「儲存並關閉／放棄／取消」。已保存的地圖沒有新變更時儲存鍵停用，旁邊沿用草稿表單同一組「尚有未儲存變更／目前沒有未儲存的變更」；畫布上沒有任何攤位或設施時，不論這張地圖是否已經建立，儲存鍵同樣停用並說明缺什麼。停用不只是版面整潔：每次儲存都讓 candidate 前進一個版本並寫入一份 revision，沒有變更的儲存會在歷史留下一步空紀錄，而空白地圖的第一次儲存是同一件事的另一個入口——它還會讓「N 張地圖」這個計數記上一張沒有內容的地圖。
 - **地圖儲存帶的是面板看到的最新活動版本。** 在其他項目儲存後隨即切到地圖時，儲存後的重讀可能在地圖面板開啟之後才到；下一次儲存的 `expectedVersion` 取這份活動資料與面板自己上一次儲存回應中較新的一個，有未儲存的地圖變更時也一樣，不因此回 409。地圖內容本身由 `expectedMapRevision` 保護，它只來自讀取地圖與面板自己的儲存：另一個分頁或裝置已經存過同一份地圖時，下一次儲存仍回 409，畫面上的變更保留。
 - **配置圖跟著地圖存下來。** 一份地圖草稿有一張目前的配置圖，經 `PUT /api/organizer/events/:candidateId/maps/:draftId/background` 存進私人 bucket `MAP_CONTRIBUTIONS`，由 `GET` 同一個位址讀回，兩者都限協作者且回應 `private, no-store`。物件位址由草稿自己的 id 決定（`organizer-map-backgrounds/<candidateId>/<draftId>`），因此**沒有任何 D1 資料列指向它**：再上傳一次就是覆蓋同一個位址，草稿被保存期限清除時也照同一組 id 刪除，不需要先讀 metadata。只接受 JPEG／PNG／WebP，上限 10 MB，容器檢查與貢獻來源檔共用同一份 [`prepareMapImageFile()`](../../app/map-contribution-files.ts)。
@@ -282,114 +281,28 @@ AMEND 沿用驗證、Reader 預覽、Owner／Admin 送審及 Admin 核准。送�
 - `POST …/submit` 只有該候選的 Owner 或全域管理者可以呼叫（ADR-0080），且要求有效 session；寫入時重查 Owner grant／管理者名冊。管理者以自己的帳號送審時記為 `submitted_by`，稽核角色為 `admin`，之後核准自己送出的版本照常記錄 `selfApproval`。CREATE 新送審固定 `organizer-submission-snapshot/5`：草稿、完整 reference selection、各 reference 的 path／原始 JSON bytes／SHA-256、匯入來源 metadata、`codes[]` 攤位群組與地圖內容；`contentUpdatedAt` 取該 candidate version 的 immutable revision.created_at。既有 `/1`、`/2`、`/3` snapshot bytes/hash 保持不變，`/3` 產物沿用只依明確編號分組的規則。產檔只能使用 snapshot，不可回讀 live catalog 或推測舊 snapshot 缺少的公開資料。
 - **validate、preview 與 submit 讀同一份 bytes**：候選、匯入與每份地圖各只讀一次，所以送審固定的內容與剛才驗證過的內容不可能不同。
 - `POST /api/admin/organizer/events/:candidateId/review` 由全域管理者以有效 session 核准或要求修改。核准前重跑驗證；找不到該 revision 的 immutable snapshot 就拒絕。
-- 送審頁的「網站管理者審閱」表單僅對全域管理者顯示；一般 Owner／Editor 保留送審狀態與發布進度，不顯示停用的管理者審閱表單。負責人管理表單僅對該候選的 Owner／全域管理者顯示，協作者管理與送出審閱對兩者都可操作；新增 Owner 不授予全域建活動或核准權限。
+- 送審頁的「網站管理者審閱」表單僅對全域管理者顯示；一般成員保留送審狀態與發布進度，不顯示停用的管理者審閱表單。成員管理與送出審閱對成員與全域管理者都可操作；新增成員不授予全域建活動或核准權限。
 - **管理者可以核准自己送出的 revision**，但稽核會記下 `selfApproval`、actor、snapshot hash、版本與時間。
 
 ## 發布邊界
 
-核心實作：[`organizer-publication.ts`](../../app/organizer-publication.ts)、[`organizer-publication-presentation.ts`](../../app/organizer-publication-presentation.ts)、[`publication-rollout.ts`](https://github.com/dekkmarsvin/tw_doujin_event/blob/2d6985c/app/publication-rollout.ts)、[`github-remote-auditor.ts`](https://github.com/dekkmarsvin/tw_doujin_event/blob/2d6985c/app/github-remote-auditor.ts)。測試：`tests/api-organizer.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-reopen.test.mjs`、`tests/github-remote-auditor.test.mjs`、`tests/organizer-publication-presentation.test.mjs`。決策：[ADR-0057](../adr/0057-approval-starts-create-publication.md)、[ADR-0058](../adr/0058-publication-is-enforced-by-the-app-not-the-ruleset.md)、[ADR-0059](../adr/0059-failed-publication-requires-explicit-reopen.md)。
+核心實作：[`server/organizer-publication.ts`](../../server/organizer-publication.ts)、[`app/organizer-publication.ts`](../../app/organizer-publication.ts)、[`app/publication-dispatch.ts`](../../app/publication-dispatch.ts)、[`app/event-data-publisher.ts`](../../app/event-data-publisher.ts)、[`app/publication-artifacts.ts`](../../app/publication-artifacts.ts)、[`app/organizer-publication-presentation.ts`](../../app/organizer-publication-presentation.ts)。部署設定與回滾見[部署 runbook](../runbooks/deployment.md#核准即發布)。
 
-依 ADR-0057，UI 動作為「核准並發布」。已啟用且有 durable dispatch adapter 時，同一 D1 transaction 記錄核准、建立唯一 `queued/preparing_data` job、把 candidate 改為 publishing，再交給 dispatcher；不需要第二次人工發布。dispatch 失敗記錄 `dispatch_failed`，內容保持核准與鎖定，可由 Owner 或 Admin 重試。
+- 依 ADR-0057，UI 動作為「核准並發布」。發布啟用（`ORGANIZER_PUBLICATION_MODE=r2` 且[網站營運設定](./admin.md#網站營運設定)的發布開關開啟）時，同一 D1 交易記錄核准、建立唯一的發布工作並將候選改為發布中，再於同一請求內完成發布：產生公開檔、更新社團配號表、寫入新版本，最後以 ETag 條件改寫 `index.json`。未啟用時核准回 503，候選保留送審狀態。
+- **寫入失敗不切換 `index.json`**，讀者看到的內容不變；發布工作記為失敗，可重試的失敗可再試。另一筆發布剛完成造成的 ETag 衝突同樣要求重試。
+- 同版本核准重送沿用同一筆發布工作，不重複發布；`index.json` 已指向這次核准時視為已發布。
+- `POST /api/organizer/publications/:jobId/retry` 只恢復同一筆失敗且可重試的發布工作，不建立另一筆。
+- `POST /api/organizer/events/:candidateId/reopen` 以目前版本與必填理由把發布失敗的候選退回修改；只有發布尚未開始寫入活動資料、且讀者尚未看到這次核准（`index.json` 沒有指向它）時才允許；已開始寫入的失敗只能重試，工作區會說明原因。成功遞增候選版本並新增含理由的退回修改紀錄，舊發布工作不能再重試。
+- 請求中斷留下的發布工作由之後的寫入請求接手；處理方式見部署 runbook。
+- 工作區只顯示單一發布結果與可理解的失敗原因。發布進行中每五秒重新讀取工作與活動列表狀態，不重疊請求；讀取失敗立即標示目前為上次讀取的進度，401 停止輪詢並提供重新登入入口，其他錯誤連續三次後停止，提供手動重新讀取。
 
-`app/organizer-publication.ts` 每次 delivery 至多執行一個 transition，持有有時限的全域 lease。snapshot id、版本、hash 與 snapshot bytes 必須相符。driver 以 job/step/hash 作為 reconciliation key，副作用前必須再次確認 lease；pending 保留步驟。已保存的 PR、head SHA、merge SHA 與 workflow id 不能被新的 checkpoint 改寫。
-
-步驟為 preparing_data → waiting_data_checks → merging_data → preparing_main → waiting_main_checks → merging_main → waiting_deployment → verifying_production → completed。失敗保留原 step、failure_code、error、retryable 與 metadata。Main 需要 data merge SHA，deployment 需要 main merge SHA；productionVerified 必須明確為 true 才能完成。此 boolean 是 **driver 的 blocking Pages smoke 結果**，由下方 deployment adapter 核對實際公開來源；測試 driver 的結果不能當成真實 smoke。
-
-driver 第一次 remote mutation 前必須先以目前 job、candidate version、approval 與 lease CAS 寫入 sticky `remote_write_intent_at`，再在每個 mutation 前 assert lease；錯誤、timeout、空 remote audit 與 retry 都不清除它。這個欄位只表示遠端結果可能未知，不代替已確認的 PR／SHA／workflow checkpoint，因此有 intent 的 failed candidate 不能被 reopen。
-
-同版本核准重送沿用相同 snapshot/hash 的既有 job，不重寫核准、不重複 dispatch；不一致回報 `approval_mismatch`。相同 snapshot/hash 的既有 queued job 可在 submitted 核准時沿用。nullish metadata 表示未提供更新，保留已保存的 checkpoint。
-
-lease 過期後，只允許仍持有原 token 與原 step 的 executor 寫入 failed/retryable；不能推進步驟，也不能覆寫新 lease 持有者。失敗記錄遭 fence 拒絕時向 dispatcher 拋出失敗，不把該 delivery 當成成功。
-
-`POST /api/organizer/publications/:jobId/retry` 先驗證登入再查詢 job，與既有 admin route 共用 Owner／Admin 有效 session 檢查，Editor 無權重試。只恢復同一 failed/retryable job 與 snapshot，不建立另一筆 job；不可重試的 collision/hash failure 顯示具體下一步，不表示內容退件。
-
-只有明確的 Owner／Admin 動作可以把「目前版本、已核准、狀態為 `failed`」的候選退回 `changes_requested`：`POST /api/organizer/events/:candidateId/reopen` 需要 有效 session、`expectedVersion` 與必填退回理由。它不受 publication mode disabled 影響，但會先取得既有 global lease，查核固定 data/main repository 中 `organizer/{jobId}/data` 與 `/main` 的分支，以及包含 closed／merged 的完整 PR 分頁；任何 branch、PR、403、網路錯誤、格式錯誤或不完整分頁都拒絕。七個 remote checkpoint 與 `remote_write_intent_at` 都必須為 NULL，且 audit 與提交交易間 lease token 仍有效。
-
-成功退回會遞增 candidate version、保留 `eventId` 鎖定與舊 snapshot／review／job，新增 immutable revision 與含理由的 `changes_requested` review，並令舊 job `retryable = 0`。舊 job 仍會在頁面顯示為上一版本的歷史發布紀錄，不能再 retry；新的版本回到一般編輯、驗證與送審流程。Owner／Admin 以外的 Editor 沒有此動作。
-
-### 還原未公開的失敗修正
-
-依 [ADR-0069](../adr/0069-restored-unpublished-amendments-retain-failed-history.md)，data 已合併但 main 未合併的 failed AMEND 使用獨立恢復路徑，不放寬上述 reopen。維護者先依[部署 runbook](https://github.com/dekkmarsvin/tw_doujin_event/blob/2d6985c/docs/runbooks/deployment.md#還原未公開的失敗修正)合併還原 PR，Admin 再送出 `POST /api/admin/organizer/events/:candidateId/abandon`，body 只接受 `expectedVersion`、正整數 `restorationPullNumber` 與 1–1000 字的 `reason`。Owner／Editor 不具此權限。
-
-伺服器核對原 snapshot／基準、已發布來源、原 data／main PR、還原 PR 的成功檢查、完整 tree 與目前公開 pin。data main 必須恢復至原活動內容及其 reference；還原 PR 不得改動其他活動或 reference。任何未知遠端結果、已合併的 main、現有 workflow checkpoint、lease 競爭或過期、Admin 撤銷、版本／checkpoint 改變都拒絕，保留 failed 與 active AMEND 鎖定。
-
-成功時在同一 D1 batch 寫入 `failed → abandoned` review、含原因及還原證據的 `organizer.amendment.abandoned` audit，並讓 candidate 進入唯讀終態「已終止修正」。舊 job 保持 failed、所有失敗與發布紀錄保留，只有 retryable 固定為 0。active AMEND 唯一索引排除 published 與 abandoned；其餘狀態仍限制每活動一筆。從已發布來源開始新修正會重新讀取基準，重新驗證／預覽／送審／核准，不沿用舊核准、snapshot 或 job。
-
-實作：[`organizer-publication-recovery.ts`](https://github.com/dekkmarsvin/tw_doujin_event/blob/2d6985c/app/organizer-publication-recovery.ts)、[`organizer-recovery-repository.ts`](https://github.com/dekkmarsvin/tw_doujin_event/blob/2d6985c/db/organizer-recovery-repository.ts)。驗證：`tests/organizer-publication-recovery.test.mjs`、`tests/api-organizer.test.mjs`、`tests/organizer-amendment-repository.test.mjs`、`tests/browser/portal-organizer-recovery.mjs`。
-
-### 持續推進與呈現
-
-**`queued` 停留超過 15 分鐘就是失敗。** 依 ADR-0062，獨立 publication Worker 每分鐘掃描，把超時 job 改為 `failed` + `queued_timeout` + retryable，step 原封不動，candidate 一併轉為 `failed`；活動列表與候選 GET 不執行掃描或寫入。更新交易再次檢查 live lease，避免掃描與 dispatch 同時開始時錯誤判定逾時。恢復沿用同一筆 job、同一份 snapshot，不新增手動啟動 queued job 的入口。等待 CI 是 `publishing`，不受 queued timeout 影響。
-
-**持續推進不依賴使用者開啟頁面。** Pages 核准／retry 僅提交到期的持久化 job；cron 每輪最多挑十筆目前核准版本且到期的 queued／publishing job。成功寫入 checkpoint 後，同輪可續推已就緒的下一步，每 job 最多八步、整輪最多十六步，tick 開始二十秒後不再啟動新步驟；已啟動的單步仍完成原有 lease／timeout／checkpoint 邊界。每一步重新核對 snapshot、版本與 lease，遇到 pending／failed／skipped／published 即停止，不在 invocation 內等待 CI。預算不足保留 due work，下一輪或重啟仍由原 checkpoint 接續。pending 的 next attempt 與 checkpoint 在同一 lease 下寫入 D1，外部等待退避依序 1、2、4、5 分鐘，上限五分鐘，短於 queued timeout；workflow run／attempt 首次記錄或 completed job 的 step metadata 尚未收斂時改於一分鐘後確認，不放寬正式部署與 smoke 必要證據。failed 不自動 retry，舊版本不派送。Webhook 只重設到期時間，漏送或早於 checkpoint 到達仍由 cron 接手。服務停機時不保證一分鐘執行，恢復後超時 queued 仍按既有失敗／retry 路徑處理。
-
-**逾時的 job 不一定從未開始，所以失敗訊息看 checkpoint 而不是 step。** retry 會把 job 放回 `queued` 並保留原 step，因此同一個逾時有兩種來源：從未被 dispatch 的 job，以及重試後 dispatch 又沒發生、先前 checkpoint 都還在的 job。判準是這份工作有沒有留下任何 checkpoint。`preparing_data` 是新工作唯一能通過的第一步，而 `missing_checkpoint` 不允許它在缺 `data_pr_number` 與 `data_head_sha` 的情況下前進；其後每一步在它完成前都到不了，`preparing_main` 起另有 `missing_data_commit` 把關。因此七個 checkpoint 欄位全空就代表這份工作什麼都還沒碰到。（並非每個步驟都宣告 required checkpoint——`waiting_data_checks`、`waiting_main_checks` 與 `verifying_production` 沒有——但新建的工作過不到那裡。）pending 的 delivery 會寫下 metadata 卻不推進 step，所以這個判準量的是「有沒有東西跑過」，不是「有沒有階段完成」；區分從未被 dispatch 的工作與遠端產物已經釘住的工作，要的正是前者。**step 不能拿來判斷**：核准流程建立的 job 落在 `preparing_data`，舊的建立路徑落在 `assemble`，而 retry 保留上次失敗的那一步，同一個名字同時涵蓋兩種情形。只有從未完成任何階段的才說發布沒有開始；其餘沿用既有 retryable 措辭，因為 UI 四階段對它已經顯示出已完成的階段，說「沒有開始」會與同一畫面互相矛盾。
-
-UI 四階段保留已完成進度，raw error 與 step 放在「技術詳細資訊」，僅網站管理者在發布失敗時可見。每五秒重新讀取進行中的工作與活動列表狀態，不重疊請求；讀取失敗立即標示目前為上次讀取的進度，401 停止輪詢並提供重新登入入口，其他錯誤連續三次後停止，提供手動重新讀取。檢查與發布只有 published 才算完成，不能在 approved/queued 顯示 5/5。同源、同瀏覽器帳號的上次 candidate 保存於 localStorage，讀寫被封鎖時仍可在記憶體中操作；登入後仍以伺服器授權清單確認可達性，各協作者的區段仍由 D1 保存。
-
-目前 production gate：
-
-1. 未設定 `ORGANIZER_PUBLICATION_MODE` 仍預設 disabled；該模式不注入 dispatcher，核准／retry 保留 503。production 的 Pages 與獨立 Worker 明確設定 github；Pages 核准／retry 僅提交到期的持久化 job，獨立 Worker 每次只推進一個 bounded transition。Preview Worker 仍 disabled。fake 只在 `PREVIEW_MAIL_SINK=d1` 的隔離測試環境注入，Pages 單次 dispatch 完成八個模擬步驟，不能當作公開結果證據。部署設定見[部署 runbook](../runbooks/deployment.md)。
-2. 僅 `POST /api/integrations/github/webhook` 豁免 Origin 檢查，JSON 與 HMAC 保留；其他 mutating route 不變。非 github 或缺 secret 回 503；已配置時無簽章回 401。合法 delivery 僅喚醒固定兩 repo 中符合已釘住 SHA 的 active job，在同一 D1 transaction 完成 delivery 紀錄；delivery ID 重用但 bytes 或 event 不同回 409，已完成重送回 202 且不再喚醒。未知事件、repo 或 SHA 不推進任何工作，HTTP request 不執行遠端寫入。
-3. `POST /api/admin/integrations/github/probe` 只接受同源 JSON `{}` 且要求有效的管理者 session；伺服器以固定 metadata:read scope 呼叫 GitHub App mint，必須得到精確 `201`，再以 installation token 讀取同一 repository metadata，GET 必須是精確 `200` 且 JSON `full_name` 完全相符才回 `{"ok":true}`。失敗只回固定 503 code；正式啟用仍須在已部署 runtime 實測。
-
-GitHub App token provider 使用 WebCrypto RS256 簽署 App JWT（`iat = now - 60s`、`exp = iat + 600s`），接受 PKCS#8 與 PKCS#1 RSA private key。每個 provider／job 只有一份記憶體 cache；token 剩餘 60 秒內更新，進行中的 mint 共用同一個 pending promise。請求遭遇 `401` 時，每個 request 最多 invalidate 並重試一次，而且只有被拒絕的 token 仍是目前 cache 才能 invalidate；`403` 不刷新 token。缺少 App ID、installation ID 或 private key，以及 import/sign/fetch/JSON 例外，都轉成固定 `PublicationFailure`，不保存或回傳 raw exception、request body、Authorization、key、JWT 或 token。
-
-`app/publication-rollout.ts` 的 ruleset 評估器**不是 gate**：它是無 runtime caller 的維運報告，不阻擋 publication 或模式啟用。報告檢查 main 適用規則、PR、指定 checks、check 的 App 綁定及 App／human bypass；不能把報告通過當作 App 受到權限約束，原因與已完成的治理評估見 [ADR-0066](../adr/0066-the-ruleset-cannot-bound-an-app-that-writes-checks.md)。
+內部的發布工作沿用舊流程留下的多步驟 executor、lease 與 checkpoint；改為單純在核准請求內完成的工作見 [#569](https://github.com/dekkmarsvin/tw_doujin_event/issues/569)。
 
 ### 核准 snapshot 產檔
 
 `app/publication-artifacts.ts` 消費 CREATE snapshot/3，或明確 `operation: AMEND` 的 snapshot/4，以及其核准 hash。資料產生不讀即時 catalog、時鐘或網路：內容時間取 contentUpdatedAt；活動結束取最後日期台灣時間 23:59:59；草稿有活動別稱時 `event.json` 才帶 `aliases`（緊接在 `name` 後），有活動圖片時才在最後帶 `image: { url, width, height }`，沒有時都不出現這些鍵，已核准 snapshot 因此重建出相同位元組；活動與逐日攤位表網址皆取已核准 officialSource.url，統一經 URL canonicalization（合法的大寫 HTTPS scheme 轉小寫），snapshot bytes/hash 不改写。地圖保留每個 day × venue-space 的內容，單一範圍產生 map.json，多範圍產生完整 manifest。現行公開格式要求同活動模板一致、展區由場地唯一持有；不相容 snapshot 明確拒絕，不取第一個場地猜值。
 
-`buildPublicationDataStage` 要求固定 data base commit、活動目錄不存在的觀測，以及每個 selected reference 的既有 bytes 或明確 null。缺失觀測不可當不存在；語意相同的 JSON 保留既有 bytes 並不加入寫入清單，不同或損壞拒絕。唯一例外是場館記錄補上地址：既有記錄沒有 `address`，而核准記錄只多了地址、其 provenance 與僅供地址引用的出處時，寫入核准記錄（`isVenueAddressCompletion`）。其他活動的 pin 仍在自己的 commit 讀舊 bytes，不因此改變。`buildPublicationMainStage` 要求實際 data merge commit／檔案 bytes 與固定 main base 資料；事件內容必須與 snapshot 產物完全相同，reference 可只有 JSON 格式差異，pin 的 hash 一律取實際 bytes。
-
-main 清單保留原 events 順序追加；已存在活動或 pin 拒絕 CREATE。沿用同一份 event-local identity 配號器追加 allocations／evidence，不因同名猜 linkage，不動既有活動 pin；身分群組使用 codes[]，`/5` snapshot 也可將主辦預覽確認的跨日同名群組合併，輸出帶核准官方來源的 `manual-organizer-evidence`；`/3` 仍只使用 stableKey。完整產物再經 publication allowlist。這些純函式不建立或合併 PR；GitHub driver 將其結果寫入固定工作分支。
-
 AMEND snapshot/4 額外保存不可變 `amendment.baselineJson`／`baselineSha256`、明確 `changes[]`，以及選填的正規化 `settings`。產檔以 baseline 草稿重新正規化 `settings`，結果必須與保存內容完全相同，否則以 `snapshot_mismatch` 退件；生效草稿是 baseline 草稿套上 `settings`。`event.json` 必須等於 baseline 活動資料套上宣告值（名稱、別稱、逐日 `dateLabel`，以及依新日期重算的 `dateRangeLabel`／`eventEndsAt`），除 `dataUpdatedAt` 外任何差異都退件。產檔核對 baseline、活動設定及 reference，reference 除場館補上地址外必須與 baseline 相同，重算宣告後必須與衍生匯入列一致；身分由已核准 grouping／宣告決定，不能以匯入列重新配舊 Circle ID。地圖仍逐範圍驗證，內容時間取此修正版的 immutable revision。
-
-AMEND data 產檔要求固定 base 的完整 event-directory leaves，逐檔核對原 pin hash，含 NOTICE 的存在／內容與檔案集合；缺失、額外或漂移拒絕。Main 產檔要求原 published event／pin 完全一致，保留 published-events 原 bytes／順序，僅更新該活動 pin。使用此 main base 的最新 global ledger 配新 ID，容許其他活動在編輯期間取得配號；原活動的身份與退出歷史不能變更。兩階段仍驗實際合併 bytes 與 allowlist，不影響其他活動 pin。
-
-依 ADR-0045 的發布產物補充，snapshot 宣告透過既有 planner 生成 transitions，main 只套用一次，退出歷史保存在 evidence；公開 groups/2 存放結果群組及空 transitions，供既有 `identity:generate --check` 驗證已套用的 registry，避免每次 build 再執行歷史退出。已公開 AMEND 可重新載入為下一次 baseline，source 只保留 job／snapshot 識別，不能遞迴嵌入前次 snapshot；下一次 baseline 的草稿是套上前次設定宣告的生效草稿。
-
-AMEND 送審／核准與原 executor／driver 共用以下固定觀測與恢復路徑，沿用既有 publication mode 與 dispatcher 啟用條件。
-
-### GitHub data／main driver
-
-`github-publication-driver.ts` 只使用伺服器固定的兩個 repository 與 `organizer/{jobId}/{stage}` 分支，接收未重新序列化的核准 snapshot bytes。首次 data 發布前先查本部署的 published event resolver，再查 GitHub 固定 main commit 的 published collection；讀取失敗不是活動不存在的證據。
-
-每次 preparing 先找所有狀態的同分支 PR／branch；已有 commit 時先確認其唯一 parent 是固定 current main 的歷史祖先，再以該 parent 重建預期產物，比對完整 leaf tree（包含保留的舊檔與所有新檔的 Git blob hash），不只比對 PR 本文。不接受分支自行提出、未進入 main 的基準。分支、PR、核准 check 寫入成功但回應遺失時沿用遠端產物；已關閉未合併、換 head、額外檔案或 snapshot 不符時停止，不自動覆寫。每一次 GitHub mutation（含 tree／commit、branch、PR、check、merge）都在發送前持久化 write intent 並重驗 lease。
-
-必要 check 使用同 head SHA、最新 check run、completed + success；skipped 不通過。核准 check 另比對 job 與 approval hash。合併仍帶 expected SHA；若回應遺失，重試讀取同 PR 的已合併 SHA，不再次 merge。Main 產檔再次讀取固定 data merge commit 的 bytes。`Browser acceptance` 列在唯一的 `PUBLICATION_REQUIRED_CHECKS.main` 定義中。
-
-AMEND 沿用同一 executor 的八個步驟，候選 operation、eventId 與 snapshot/4 明確 AMEND 必須一致；CREATE 仍做首次發布碰撞檢查。Driver 每次 preparing 讀固定原目錄／pin，AMEND 不能靠相同 eventId 取得覆寫權。合併前重建原 PR parent 的核准產物、比對完整分支 tree，再查目前 main 的原 pin、活動資料與身份歷史；PR 準備後待寫入檔案有變更時，回不可重試 `amendment_base_conflict`，停止合併以保留介入的發布，交由管理者核對，不能靠反覆按重試覆寫。無關程式／文件前進不阻擋。
-
-AMEND 的分支、PR、核准 check 或 merge 回應遺失，仍以原工作識別與完整 tree 恢復；已合併 PR 不再要求目前 pin 等於舊基準（自己的 merge 已更新它），而是核對原 parent、固定 data merge 與該 PR 的合併 SHA／產物 bytes。原 checkpoint、expected head SHA、lease、sticky write intent 與同 head 必要 checks 全部保留，沒有改用另一个 job 或另一套部署流程。Pages production origin 驗證仍是完成 published 的必要條件。
-
-Deployment seam 缺少實作時仍回 `publication_deployment_unavailable`，不能完成 published；Pages 與 cron 共用的 runtime 使用 [`github-publication-deployment.ts`](https://github.com/dekkmarsvin/tw_doujin_event/blob/2d6985c/app/github-publication-deployment.ts) 的 adapter。只接受 main repository、`deploy-pages.yml`（workflow ID 331570396）、push/main、本 job `main_merge_sha` 的唯一 run。先保存 run ID／attempt，再讀該 attempt 的 jobs；`Deploy to Cloudflare Pages` 成功才進入 verifying，該 attempt 的 `Verify and deploy` 與 `Smoke test production deployment` 均 completed + success 才檢查公開來源。Skipped 不通過，custom domain 結果不影響 blocking gate。
-
-GitHub job 已回報 completed + success，但必要 step 仍為 queued／pending／in_progress 且沒有 conclusion 時，沿用既有 pending 排程重讀同一 attempt，等步驟結果同步，不立即記為部署失敗，也不據此完成 published。已完成的失敗／skipped、缺少或重複的必要 step 仍拒絕；不得以等待中的另一個 step 掩蓋它們。
-
-CI 在 pinned production build 後產生 `deployment-manifest.json`，記錄部署 commit、所有 published event 的 data pin commit 與實際輸出 JSON SHA-256；production smoke 同時核對部署 commit。Runtime 僅查固定 `https://tw-catalog.pages.dev`、不帶認證且不接受 redirect，核對本次 main SHA／data SHA、固定 main commit 的完整公開活動清單、全部列出的活動 JSON bytes（含既有活動、地圖）、Reader HTML 與匿名 session 401，最後重讀 manifest 確認驗證途中未換版。通過後保存 manifest SHA-256 才可 published。這不取代 CH20 真實 Reader UI 驗收。
-
-部署或 workflow smoke 失敗記錄 retryable `publication_deployment_failed`；既有 Owner／Admin retry 交易僅授權原 run 的下一個 attempt，保留 snapshot、data／main SHA、PR 與原 stage。Adapter 重跑原 run，接受 GitHub 空 body 201，回應遺失後先 reconcile 已出現的下一 attempt；未經 retry 的 attempt 改變 fail closed。重跑前在既有 lease／remote intent 下重查 main，若已前進就拒絕部署舊 checkout。只有 origin 檢查失敗則重驗 origin，不重新建立 PR 或主動重部署。模擬 GitHub／本機 D1 證據不能代替真正的發布失敗恢復。
-
-main CI 採保留 pending run 的序列佇列，不主動取消已開始的部署；分類 job 與部署前都拒絕已被 main 取代的 checkout，分類時拒絕的部署 job 為 skipped，同樣是未成功。排隊中的固定 run／attempt 維持 pending。部署 job 未成功且 main 已前進，或必要 origin 驗證失敗後另以 GitHub ancestry 確認公開 manifest commit 位於本 SHA 之後且屬目前 main 歷史，回不可重試 `publication_deployment_superseded`，保留 checkpoint 交由管理者核對，不提供無效的舊版本重試，也不把新版本的成功當成本 job 的 published 證據。較新部署後又有純文件 main 前進也適用。只讀到較舊 cache、其他分支或無法確認新版本時，保留原本 origin 失敗的重驗邊界。
-
-既有純函式邊界保留：
-
-- [`publicationPathAllowed()`](../../app/publication-bundle-assembler.ts) 的路徑 allowlist——data repository 只接受 `events/<eventId>/` 底下的 `event`／`official-booths`／`circle-identity-groups`／`map`／`map-manifest`／`reference-selection`、`maps/<day>/<space>.json` 與 `NOTICE`，加上 `references/**.json`；main repository 只接受 `data/published-events.json`、兩份 identity 檔與該活動的 pin。`.github/**` 與任何跳脫路徑一律拒絕。
-- webhook 的 HMAC 驗證與以 delivery id 去重。
-
-data／main 的 PR、核准 check、allowlist 與 expected SHA merge 由 driver 執行，持久化排程依 [ADR-0062](../adr/0062-publication-wakes-through-webhooks-and-a-dedicated-cron.md)，deployment／origin 由上述 adapter 核對。合併前 PR 作者必須是建立核准 check 的同一個 App（[ADR-0066](../adr/0066-the-ruleset-cannot-bound-an-app-that-writes-checks.md)）。disabled 不自動發布；啟用後僅目前核准版本的 active job 可派送，超時 queued 先轉 failed，failed 舊 job 不自行恢復。失敗候選的內容有誤時，須明確經 UI reopen、重新匯入、validate／submit／approve，不重試錯誤 snapshot。
-
-## 與地圖貢獻流程的邊界
-
-`map_drafts` 由 organizer 與公開[地圖貢獻控制面](https://github.com/dekkmarsvin/tw_doujin_event/blob/ea03bcd723344296514201cb44c832dbdee3a05d/docs/contracts/map-contributions.md)共用，而候選活動的 `event_id` 可能正是某個已發布活動的 id。**唯一能分開兩條管線的是 `candidate_id`**：
-
-- organizer 的地圖草稿 `candidate_id` 非 NULL，且只能經 `/api/organizer/**` 讀寫。
-- 公開地圖貢獻流程的每一句 SQL 都要求 `candidate_id IS NULL`。
-
-少了這個條件，同時具備 organizer 與 `map_contributor` 身分的人可以把候選地圖送進公開審閱並匯出成正式地圖。這是程式邊界，不是慣例；回歸測試涵蓋這個身分組合。
 
 ## 驗收條件
 
@@ -399,29 +312,14 @@ data／main 的 PR、核准 check、allowlist 與 expected SHA merge 由 driver 
 - 匯入 API 拒絕未宣告的活動日、場地或展區，並在錯誤訊息指出來源列號。
 - 預覽裡移除的列不會被匯入，也不會產生待修正項目；被它解除的攤位重複不再回報。
 - 手動補正過的列仍要通過與其他列相同的檢查：未宣告的活動日、場地或展區照樣被匯入 API 拒絕，介面上的修正不是繞過那道檢查的路。
-- `ORGANIZER_PUBLICATION_MODE` 未設定或缺少 dispatcher 時，核准 API 回 503，候選保留 `submitted`，不建立發布工作；非 github 模式的 webhook 回 503。
-- 只有 Owner／Admin 以有效 session、目前版本與非空理由可退回 `failed` 候選；系統先以 global lease 查核固定遠端分支與完整 PR 分頁，任何遠端紀錄或不確定性都拒絕，成功後保留 eventId／歷史並令舊 job 不可重試。
-- 退回期間若 lease 過期或版本 CAS 失敗，不新增 revision、review 或 audit；sticky `remote_write_intent_at` 與任一 confirmed checkpoint 也會阻止退回。
-- 停在 `queued` 超過 15 分鐘的發布工作，在活動列表與活動頁都顯示為失敗且可重試，重試的是原本那一筆 job；沒有任何介面可以手動啟動一筆 `queued` job。
-- 逾時失敗的訊息只有在該 job 一個 checkpoint 都沒有時才說發布沒有開始；已經留下 checkpoint 的工作沿用既有 retryable 措辭，不與四階段清單上的進度互相矛盾。這條對核准流程建立的 job（`preparing_data`）與舊建立路徑（`assemble`）都成立。
+- `ORGANIZER_PUBLICATION_MODE` 未設定或缺少 dispatcher 時，核准 API 回 503，候選保留 `submitted`，不建立發布工作。
+- 只有成員或管理者以有效 session、目前版本與非空理由可退回 `failed` 候選；發布已開始寫入或讀者已看到這次核准時拒絕。
+- 退回期間若版本 CAS 失敗，不新增 revision、review 或 audit。
+- 停在 `queued` 超過 15 分鐘的發布工作，在下一次寫入請求觸發逾時處理後，於活動列表與活動頁顯示為失敗且可重試，重試的是原本那一筆 job；沒有任何介面可以手動啟動一筆 `queued` job。
+- 逾時失敗的訊息只有在該 job 一個 checkpoint 都沒有時才說發布沒有開始；已經留下 checkpoint 的工作沿用既有 retryable 措辭，不與發布結果互相矛盾。這條對核准流程建立的 job（`preparing_data`）與舊建立路徑（`assemble`）都成立。
 - 公開 bundle 不含 organizer 介面與寫入 route，由 `tests/public-artifact.test.mjs` 把關。
 - 新候選活動預設進入引導；跨登入可恢復每位協作者自己的位置；完成 onboarding、切換區段或執行驗證都不會產生候選內容 revision。
 - workspace preference 與完成 onboarding 的最終 SQL 寫入會再次檢查 active grant；權限在請求途中被撤銷時不會留下流程狀態變更，對外仍回 404。
-
-## 獨立共用資料管理
-
-網站管理的「共用資料」入口為 `/admin?section=references`。管理者可在沒有候選活動時讀取完整場館／場地、主辦與分類目錄，新增場館連同第一個場地、在既有場館新增場地、新增主辦與分類目錄，以及補齊既有場館／場地缺少的 canonical 來源或場館地址。分類目錄須屬於既有主辦；場館與場地保留既有識別碼，地址只保存在 canonical reference JSON。
-
-`GET /api/admin/references` 僅回傳操作所需的公開欄位、版本及編輯／刪除限制；版本是 canonical bytes 的 SHA-256，場地另含展區預設。`POST` 依 `kind` 執行建立／補齊，或以 `action: edit | delete` 加上 GET 的 `path`／`version` 修改／刪除。兩者都要求管理者；每次寫入在同一 D1 transaction 內重新確認帳號仍為有效管理者、資料未變、依賴條件仍成立，寫入並留下 audit。地址補齊仍要求資料缺地址，既有來源補齊仍不可覆寫。
-
-分類編輯保留目錄 ID、所屬主辦與舊版，另存遞增版本；版號採數值排序，目錄流水號獨立保存已配置的最大版號，不因刪除或 audit 隱私清除而重用。分類按輸入行序保存，重排保留同名分類 ID 及說明；新名稱取得新 ID。共用資料清單依目錄分組，新版在前、舊版預設摺疊，各版可獨立展開；雙欄內容由左到右逐列排列。公開篩選另有「全部類別」，不屬於可編輯分類。
-
-主辦／場館／場地只有尚未被活動歷史或快照引用的記錄可原地編輯，場館／場地同步更新選單 metadata。已固定的系統 seed 不可一般編輯或刪除。刪除同樣要求未被引用，主辦另須沒有所屬分類，場館另須沒有場地；場地也檢查匯入列與地圖。引用判斷涵蓋已保存的候選 revision 及 submission snapshot，保留歷史可解析性。活動儲存也在 SQL 寫入時核對所選主辦、分類版本與場館／場地仍存在，避免讀取後遭刪除的競態。過期、引用或撤權衝突回傳 409，不留下部分資料或 audit。
-
-編輯採置中 modal，提供儲存與取消，離開未儲存內容時確認放棄；刪除先列出目標及不可復原後果，受引用限制時只顯示原因與取消。寫入成功後清單重新讀取若失敗，顯示已儲存／刪除狀態、鎖住寫入，只允許重試 GET；不得重送已成功 POST。既有候選活動的角色與版本檢查不變，已送審 snapshot 和已發布 pin 不變；新分類版本須由活動明確選取，不會自動套用至既有活動，本次不擴張發布後修正可修改的 reference 範圍。
-
-**實作**：[`app/admin-reference-handlers.ts`](../../app/admin-reference-handlers.ts)、[`app/shared-reference-catalog.ts`](../../app/shared-reference-catalog.ts)、[`app/admin/admin-reference-panel.tsx`](../../app/admin/admin-reference-panel.tsx)、[`db/admin-reference-repository.ts`](../../db/admin-reference-repository.ts)、[`server/admin.ts`](../../server/admin.ts)。
-**驗證**：[`tests/api-admin.test.mjs`](../../tests/api-admin.test.mjs)。
 
 ## 工作區通知信
 
@@ -430,3 +328,160 @@ data／main 的 PR、核准 check、allowlist 與 expected SHA merge 由 driver 
 活動建置申請依本人關係通知核准／拒絕；核准與首次 Owner grant 合併一封。內容（含更正）審核通過／退修、失敗重開，以及 publication failed／published 通知當時有效 Owner，協作者只接自身權限異動。完成既有 production verified gate 才通知已公開；舊核准進度／失敗信可在同版本已公開或版本更替時取消。業務轉換與通知在同一 D1 batch，寄送失敗不撤銷業務結果。
 
 `/organizer?candidate=…&section=review` 優先於上次活動；`application=…` 打開指定申請，`?application` 未指定申請時打開申請面板，空值仍保留到登入信；`notifications=1` 開啟跨工作區共用設定。未登入時參數經白名單帶入登入信，無權限／不存在不默開其他活動。手機可讀指定活動目前狀態、活動申請與通知設定，編輯仍須桌機，同一信件保留目的地。信件指向公開活動時使用 `/events/{eventId}/`。
+
+## 地圖編輯器
+
+**實作**：`app/map-shape-geometry.ts`、`app/map-shape-drawing.tsx`
+**測試**：`tests/map-shape-geometry.test.mjs`
+**實作**：[`app/map-annotations.ts`](../../app/map-annotations.ts)、[`app/map-annotation-drawing.tsx`](../../app/map-annotation-drawing.tsx)
+**測試**：`tests/map-annotations.test.mjs`
+
+主辦單位工作區使用 `MapLayoutEditor`。本契約管畫布編輯行為；草稿的保存、權限、版本與審閱見[主辦單位工作區契約](./organizer-workspace.md#地圖)，操作順序見[地圖 authoring](../runbooks/map-authoring.md)。
+
+**實作**：[`app/map-layout-editor.tsx`](../../app/map-layout-editor.tsx)、[`app/map-layout-editor-geometry.ts`](../../app/map-layout-editor-geometry.ts)、[`app/map-layout-editor-selection.ts`](../../app/map-layout-editor-selection.ts)、[`app/map-segment-edit.ts`](../../app/map-segment-edit.ts)、[`app/map-placement-tool.ts`](../../app/map-placement-tool.ts)、[`app/map-editor-history.ts`](../../app/map-editor-history.ts)、[`app/map-editor-preferences.ts`](../../app/map-editor-preferences.ts)、[`app/map-authoring-state.ts`](../../app/map-authoring-state.ts)、[`app/map-booth-list.tsx`](../../app/map-booth-list.tsx)、[`app/map-booth-coverage.ts`](../../app/map-booth-coverage.ts)、[`app/map-recognition.ts`](../../app/map-recognition.ts)、[`app/map-template-registry.ts`](../../app/map-template-registry.ts)
+**測試**：`tests/map-authoring-state.test.mjs`、`tests/map-editor-preferences.test.mjs`、`tests/map-placement-tool.test.mjs`、`tests/map-segment-edit.test.mjs`、`tests/map-import.test.mjs`、`tests/map-template-shape.test.mjs`
+**實作**：[`app/map-recognition-panel.tsx`](../../app/map-recognition-panel.tsx)、[`app/map-recognition-draft.ts`](../../app/map-recognition-draft.ts)、[`app/map-recognition-review.ts`](../../app/map-recognition-review.ts)、[`app/map-auto-recognition/build-layout.ts`](../../app/map-auto-recognition/build-layout.ts)
+**測試**：`tests/map-recognition-draft.test.mjs`、`tests/map-recognizer-prototype.test.mjs`
+
+### 檢視
+
+- **編輯畫布的 100% 是整張地圖看得完**，不是把地圖拉滿畫布寬度；倍率由畫布實際可用空間與地圖比例算出。地圖以無外框、無捲軸的內嵌畫布呈現，放大後以平移查看，保留倍率重設與聚焦選取；放大上限與平移見[描摹顯示與精準操作](#描摹顯示與精準操作)。畫布高度來自編輯器版面而非固定值，右側屬性欄自行捲動，不把地圖擠成需要捲動才看得完。
+
+### 攤位清單對照
+
+共用編輯器可選填活動日 × 場地的攤位 scope。主辦工作區提供該範圍的清單，依目前 layout 即時計算已畫／待畫數量、可搜尋的待畫代碼與社團群組；只有已有座標的代碼提供定位，選取攤位也顯示對應群組。切換範圍清除清單篩選與選取。清單外代碼沿用 API 判定：候選活動為提醒，已發布活動為錯誤；畫面提示不取代送審驗證。未提供 scope 的嵌入仍保留基本編輯能力。
+
+### 實驗性辨識校對
+
+主辦在既有配置圖上辨識後，預覽與校對進度留在編輯器內，不寫入 `EventMapLayout`。每批只加入明確勾選的項目；以目前地圖重新檢查攤位代碼、攤位幾何、同類設施衝突與整份 layout 有效性，整批拒絕或整批成功，既有人工內容及輔助線保留。每批成功採用各算一步復原。
+
+辨識面板自己的成功採用是唯一的基準更新例外：剩餘結果接到本次產生的同一份 layout，原 proposal 項目鍵不改變，已採用項目保留顯示但不能再次加入。剩餘項目重新計算衝突。手動編輯（含輔助線）、復原／重做、替換 layout、換圖、換活動日／場地／攤位清單、修改辨識範圍或重新辨識，仍使舊結果失效；晚到的 Worker 訊息不能恢復結果。儲存及配置圖讀取期間不能採用。有效結果可跨工具切換及全視窗展開／返回保留，成功通知不跨工具留存。
+
+預覽與清單共用待核對、已勾選、已採用與衝突狀態；未配對另作可並存的屬性。點預覽的排以清單內捲動與焦點定位對應項目，不自動勾選；Enter／Space 有相同行為，清單既有勾選與查看操作保留。
+
+缺漏提醒依內部結構化診斷的攤位代碼，排除目前 layout 實際已有的格。整排已畫不再要求新增；部分已畫只列剩餘代碼，不以排名相同或任一格已存在代替完整覆蓋。排內少格採相同判定。清單格式錯誤、未配對區塊與待命名區域等其他有效提醒保留；未採用的預覽不能代替保存及送審的攤位覆蓋驗證。
+
+### 放置工具
+
+新增工具只切換模式，尚未放置不改草稿；工具顯示按下狀態、畫布游標及操作提示。切換工具或 Escape 取消尚未放置的預覽，`pointercancel` 不建立元素，也不留下復原紀錄。
+
+- 排／排段與單一攤位拖出外框，放開才建立；沿用既有連續描摹與編號。
+- 「攤位」工具組的「新增保留／取消格」先選保留空桌（預設）或取消攤位，再拖框建立；單擊、Escape 及 `pointercancel` 不建立。新格沿用單一矩形的選取、拖移、四角縮放、座標欄位、多選、刪除與復原／重做，可在屬性欄改類型，隨地圖保存重開及複製。標記不改動攤位名單、代碼或覆蓋提醒，原圖 X 的類型由主辦決定，辨識器不自行猜測。
+- 企業攤、舞台與其他區域只能拖出外框建立：每個場館的區域大小不同，沒有值得猜的預設大小，所以單擊不建立任何東西，游標移動時也不跟著預設大小的預覽框。柱子可拖出外框，或單擊以預設大小置中放置。靠近畫布邊緣時限制在畫布內。點擊與拖曳以螢幕 3 px 區分，單方向細線不建立矩形。
+- 出入口是同一個工具：工具啟用時狀態列出現「類型」選單（入口／出口／出入兩用，預設入口），選過的類型保留到下次放置；以單擊位置建立，預設朝北，類型與方向都可在屬性欄更改。三種類型在編輯器、讀者地圖與設施清單畫同一個圖示：入口圓形、出口方形、出入兩用菱形內兩支反向並排的箭頭。
+- 服務設施也以單擊位置建立：工具啟用時狀態列出現「類型」選單，先選九類之一再點畫布，包含售票處與更衣室；選過的類型保留到下次放置。屬性欄可改類型、填選填的名稱（40 字以內，留空就不存名稱），以及 X／Y。
+- 每次設施放置只記一個復原步驟，選取新元素並回到選取模式。
+
+### 排與排段
+
+- **「新增排／排段」在原圖上框出一段攤位**：先填排標籤、代碼前綴、**起始編號與結束編號**（配置圖上印的就是這兩個數字，例如某欄是 01–26 就填 1 與 26，格數由兩者相減得到）、補零位數、方向與**編號起點**（直排：上→下／下→上；橫排：左→右／右→左），然後直接在底圖拖曳框住一段連續攤位。**放開滑鼠就建立**，沒有另外的確認按鈕——框選本身已經說完攤位需要的一切，要檢查的東西不論如何都在畫布上。**座標與每格寬高由框選結果算出**，一般流程不必輸入。
+  - 框選矩形就是這一段的**總外框**：直排 N 格時每格高為框高的 N 分之一、寬即框寬，橫排反之。每格由相鄰切線構成，因此**連續攤位無縫相接**，不會因為中心間距與格子尺寸兩套數值不匹配而出現縫隙或重疊；切線一律由框的起點加上總長的 i/N 算出，長排也不會累積浮點誤差。
+  - 沒填排標籤時不會開始框選，因為放開滑鼠就已經建立，沒有第二次機會補。
+  - 方向取框的長軸；換軸時編號起點回到該軸的第一端。排標籤與代碼前綴是任意字串，因此地支（`子`、`丑`…）或 `商` 這類區段不需特殊處理；前綴留空則沿用排標籤。
+  - **建立後這一段仍被框著，四角把手可以整段重新分割**，並對其他已放好的攤位吸附（按住 Alt 暫停）。這是修正整排大小的方式：不必逐格調整，也不必整排刪掉重放。**點任何一格攤位就改抓它所在的那一段**，因此先前放好的排段隨時可以再調整；一段是指彼此貼齊的連續攤位，走道兩側算兩段。整段外框欄位與改編號見[排段整體調整](#排段整體調整)。
+  - 建立後仍可改**方向**（同一個框沿另一軸重新分割，代碼不變）與**編號起點**（代碼整段反過來，矩形不動），不必復原重畫。
+  - 建立後面板不關閉：排標籤、前綴、補零位數、方向與編號起點都留著，**起始編號與結束編號各自加上剛才的格數**，可以直接框下一段。K51 的 A 排因此是：填 1 與 12 後框第一段；面板自動跳到 13–24，把結束編號改成 32 再框第二段；面板跳到 33–52，把結束編號改成 44 再框第三段。
+- **一個排標籤可以有多個排段**：填入既有排標籤時，這一段會**併入該排**，面板顯示「將加入既有 B 排（目前 N 格）」；填新標籤才建立新排。CWT*K51 的 B 區左右兩欄、被通道切成三段的 A 區、以及一排背對背的兩面攤位，都是同一個排標籤下的數個排段。**排的方向取第一段的方向**，所以同一排的各段方向不一致時，排標籤會落在錯的一軸。同一場館的不同活動日攤位範圍不同（K51 第一天雙欄是 01–26／27–52，第二天是 01–24／25–48），每一天各自框選即可，工具不綁定任何固定格數。
+- **背對背的兩面用相反的編號起點**：同一排上下（或左右）兩面編號方向相反時，兩段用同一個排標籤、不同的起始編號與相反的編號起點即可，不需要另一套規則。編號起點只影響代碼發放的順序，不改變矩形，也不寫進 `EventMapLayout`。
+- 拖曳過程中會即時把框切成 N 格畫在畫布上，放開才寫進 layout；跨排重複的攤位代碼與結束編號小於起始編號都會擋下並說明原因。重複的排標籤不再是錯誤，而是併段。
+- **編輯畫布會畫出排標籤**（A、B、C…W），選取同排的一格或多格後，可在「排標籤位置」指定上／下／左／右側；預設為直排上方、橫排下方。編輯器、複製預覽與 Reader 共用 `rowLabelPlacement()` 及螢幕字級／邊界投影，標籤跟著整排外框走，不是每段一個，U 形與中斷排不猜編號起點。修改位置不改攤位代碼或矩形，可復原並隨草稿保存。文字只沿所選側滑回畫布，不跨到攤位或另一側；此側容不下完整文字或與既有名稱衝突時不畫，屬性欄提示調整位置或放大檢視。
+- **錨點推算（進階設定）**：這是**傾斜校正工具**，只適用**同一條等距直線排段**——原圖有輕微旋轉、掃描歪斜，或很難精確框到頭尾時使用；**不得跨走道或跨平行欄**，那些情況請分開框選。展開「進階設定」後按「開始標記錨點」，於畫布空白處點選三格以上的中心，並在清單填入該格在這一排的編號（可不相鄰、不依序，例如第 1、5、12 格）。工具以最小平方法對兩軸擬合直線，外推出最低到最高編號之間的每一格，並顯示格數、起始編號與**最大偏差**——偏差大代表某個錨點點在別格上，或錨點根本不在同一條線上（例如分屬兩欄），應先修正再推算。三個是最少能互相矛盾的數量，兩個只能決定一條線而無法平均掉點選誤差。推算只給中心與格數，外框仍用進階設定的每格寬高，所以它不保證無縫。
+  - 進階設定同時保留**用起點與終點的中心座標建立**的舊流程，供斜排或刻意留間距的排段使用。
+  - **推算結果一律是草稿**：草稿以虛線畫在畫布上，逐格列出並各自有確認勾選框，**預設全部未確認**。未確認的格以灰色虛線畫出、已確認的以綠色實線畫出，兩者都在畫面上，才能對著原圖判斷該留哪幾格——外推會產生錨點之間本來不存在的格子（例如中間其實是通道），預設勾選會讓確認步驟形同虛設。只有勾選確認的格會寫進 layout，一格都沒確認時「加入確認的 N / M 格」不可按。草稿不存在於 `EventMapLayout` 裡，因此未確認的格子在結構上就不可能進入送審內容——這是位置關係，不是額外的旗標。
+  - 改動排標籤、代碼前綴、每格寬高、補零位數等任一欄位，或新增、移除、改動任一錨點編號，都會**丟棄既有草稿**；改變畫布尺寸時錨點與其他元素一起依比例縮放，草稿同樣丟棄，必須重新推算，避免畫面顯示新值卻寫入舊值。關閉「新增排／排段」面板會一併結束錨點標記，畫布隨即恢復多選與拖曳。
+  - 推算只決定端點與格數，實際產生 slot 仍由 `generateRowSlots` 負責，代碼與唯一性檢查與手動建立完全相同。推算邏輯在 `app/map-layout-editor-geometry.ts`，不依賴任何版型辨識器，可用於沒有辨識器的新版型。
+- inspector 的排清單可改名、改方向或移除整排。
+- **「手動畫攤位」逐格描繪**：輸入排標籤與起始代碼後在畫布拖曳出攤位外框，一次一格，代碼自動遞增，適合間距不規則、等距產生會對不上的段落。標籤欄有既有排標籤的下拉建議；填既有標籤即併入該排。
+
+### 選取、移動與批次操作
+
+- **註記工具**：「新增文字註記」拖曳矩形，點一下不猜尺寸，釋放後以「文字註記」起始文字建立並選取；屬性欄可改純文字（最多 120 字、3 行）、位置與寬高。「新增動線箭頭」依序點選起點、拐點、終點，至少 2 點後完成；待放置折線有方向預覽，取消、工具切換、Escape 不寫入 layout。箭頭可選取、拖曳、微移、縮放、拖動或輸入頂點、插入／移除頂點、Delete 及復原／重做；直線的零寬或零高保持原軸，改另一軸可用頂點編輯。所有座標使用同一畫布，縮放整張畫布同步縮放註記矩形與折線點。
+- 編輯器顯示文字矩形與攤位、折線與箭頭頭部穿過攤位的修正提示。這些碰撞可先保存草稿再修正，送審與發布必須移開，Reader 不靠省略註記避碰。時段只是該地圖的靜態文字，保存重開不解析、不跨日改寫；同場地複製保留文字，主辦核對新日並改複本，來源不變。僅有註記或箭頭的地圖也能保存，不能再視為可裁切重建的空畫布。
+- 復原／重做清掉依元素索引持有的待重繪多邊形及待放置箭頭，避免刪除／還原元素後完成預覽而改到另一個元素。
+
+- 可拖曳或輸入座標調整一般攤位、柱子、出入口與服務設施。**場館外框從外框線拖曳**，避免填滿整張圖時吃掉空白處的點擊。
+- 可新增、命名、分類、縮放或移除企業攤、舞台及其他非一般攤位區。
+- 選取一般攤位、柱子、非一般攤位區或場館外框後，物件四角顯示直接縮放把手。
+- **多選**：Shift 點選加選或取消單一元素；在空白處拖曳框選範圍內的所有元素，按住 Shift 拖曳則併入既有選取。選超過一個元素時，四角把手改為框住整組，縮放會把整組從原本的外接矩形映射到新的外接矩形，內部間距按比例保留。**整組縮放維持長寬比**：長寬各自依自己的邊長換算時，兩排攤位那種細長選取會讓同一個手勢在兩軸產生差好幾倍的倍率，格子忽高忽扁，而且兩軸還會各自先撞到畫布邊界或最小值；改成兩軸共用一個倍率（把位移投影到選取範圍自己的對角線），格子就維持原本的形狀，放大縮小也是線性的。要單獨改一個元素的寬或高，選取單一元素或改用 inspector 的寬／高欄位。
+- **批次操作**：多選後可一起拖曳、以方向鍵微調，或用 inspector 的「自動對齊」與靠左／靠右／靠上／靠下對齊。整組共用同一位移，因此碰到畫布邊界時整組一起停下，不會壓扁彼此間距。一次批次操作是一個復原步驟。
+  - **對齊是往該側靠攏，不是疊在同一條線上**：每個元素往指定的那一邊滑，滑到整組外接矩形的那一側邊界、或撞到已經定位的元素為止。另一軸完全不動，所以直排仍是直排、橫排仍是橫排；改變的是間距收攏，而且**兩個攤位不會疊在一起**。**同不同一條線，以半格為界**：兩個元素在另一軸的重疊超過較小那個的一半才算同一條線，會依序緊貼排好；重疊不到一半的就是並排，彼此擋不住，因此一排攤位按靠上就是單純的靠上對齊。手繪描出來的兩直排常常互咬幾個單位，以前只要咬到一點就被當成同一直排，整塊會被接成一條上下錯開、兩倍長的鏈。原本互相重疊的一組攤位被推開後會比原本的外接矩形長，末端可以超出該矩形，只有畫布邊界會擋下它。
+  - **自動對齊**：一鍵把手繪描出來的一塊整理成格狀——先把每格改成組內最多元素採用的大小（兩種大小一樣多時取較大的，每格以自身中心縮放），再依「畫的時候本來在哪一直排」排成格線：從整組左上角起算，每一直排由上而下一格接一格，直排與直排緊貼排開。分排同樣以半格為界，且是跟左右相鄰那格比而不是跟排頭比，所以描歪的一直排仍算同一排。兩排直排一起選取後按一次就會變成緊密貼合、不重疊的格狀；出入口沒有大小、在格狀裡沒有位置，維持不動，也不會把整塊拉到它那邊（格線的起點只看有大小的元素）。
+- **複製多排**：選取同一排的一格或多格攤位，指定複製份數（1–100）、方向、邊緣間距與排名序列。序列提供 A–Z、十二地支或自訂名單；完整列出將新增的排名與攤數。預設序列不足時直接說明從起始排名起最多可建幾排，不要求填寫排名。保留原排的 U 形、分段、編號尾碼及方向，只平移幾何並替換代碼的原排名前綴。前綴不符時先引導調整排段代碼，不猜測中文遞增或加假後綴。預覽不寫入草稿；排名／代碼重複、攤位重疊或超出畫布時整批拒絕。確認後新增的攤位維持選取，整批是一個復原步驟。取消、Escape、選取或 layout 變動會捨棄預覽。
+- inspector 上方的「畫布寬」「畫布高」改變座標空間，既有排、柱子、非一般攤位區、出入口與服務設施依比例保留。恰在畫布右緣或下緣的出入口與服務設施縮放後仍在邊緣上，不因浮點誤差落到畫布外而無法儲存；原本就在畫布外的點不會被拉回。
+- 服務設施和出入口一樣是點：框選、多選、整組移動、方向鍵微移與 Delete 都包含它，沒有大小所以不參與自動對齊的格線，也不顯示縮放把手。
+- 畫布有焦點時按 `Delete`（或 `Backspace`）移除選取的元素，等同 inspector 的移除按鈕：場館外框不會被移除，排上最後一格被移除時整排一併消失。
+
+### 私人輔助線與吸附
+
+草稿 envelope 可選填 `authoring: { guides: [{ id, axis, position, locked }] }`；`axis` 為 `x`（垂直）或 `y`（水平），位置採地圖座標。舊稿未帶 authoring 時，介面視為零條輔助線，不改寫舊的 snapshot bytes。每稿最多 256 條，ID 唯一且最多 80 字，位置為有限數字且不得超出畫布；未知欄位與 malformed metadata 拒絕保存。
+
+- 水平／垂直工具以畫布單擊新增；輔助線可選取、拖曳、數字微調、鎖定／解鎖、刪除。鎖定禁止移動，仍可作吸附目標。線條為細虛線，命中區大於可見線寬。
+- 新增、移動、鎖定與刪除可復原／重做，和地圖共用同一份歷史。畫布尺寸改動同時縮放輔助線，復原也一併還原。
+- 矩形外緣與出入口、服務設施中心吸附手動線及既有向量元素，8 螢幕 px 內取最小位移，同距離優先手動線。多選移動用整組外框，保留成員相對位置；排段縮放只改所拖角的邊，內部再等分並保持無縫。
+- 顯示輔助線與啟用吸附是分開的控制，Alt 暫停目前手勢的吸附。吸附時顯示命中線及其 X／Y 座標；不從圖片偵測邊線，也不為每個攤位自動建立輔助線。
+
+Organizer 把 authoring 跟隨 map revision 保存、重開，沿用原有角色／狀態與 expected version／revision 檢查；不新增資料表或另一條保存路徑。核准 snapshot 保留私人草稿內容，但 publication／候選匯出僅取 `content.layout`，公開地圖與 Reader 不含輔助線。顯示／吸附開關不推進候選版本。
+
+### 描摹顯示與精準操作
+
+配置圖顯示與否、透明度、描摹模式與微移步進都是個人 UI 偏好：只存在這個瀏覽器（`localStorage` 鍵 `map-editor-display/1`），不進草稿 envelope、不進歷史、不推進候選版本，也不隨草稿送審。讀不到或格式不符的偏好逐欄退回預設（顯示配置圖、透明度 30%、關閉描摹、步進 1），不讓控制項停在沒有對應選項的狀態；瀏覽器不給寫入時只是下次回到預設。
+
+- 配置圖可顯示／隱藏、透明度 0–100% 連續調整並可一鍵重設為 30%。隱藏是改 `visibility` 而非移除，配置圖始終不接受滑鼠事件。沒有配置圖時，這三個控制項為 disabled。
+- 描摹模式把攤位、非一般攤位區、柱子、出入口與服務設施收成外框（去填色），並隱藏格內代碼與排標籤；幾何與命中區不變。
+- 選取以獨立的 selection overlay 呈現，視覺線寬不超過 1.5px；原元件邊線維持原寬，不再改成 4px，也不加陰影。resize 把手的可見方塊縮小，命中區維持較大的透明範圍。
+- 微移步進提供 0.1／0.5／1／5／10，方向鍵移動一個步進，Shift + 方向鍵為 10 倍，步進位於「底圖與畫布」設定中。
+- 編輯倍率最高 800%；畫布上的滑鼠滾輪向前放大、向後縮小，沿用倍率按鈕的步進及視野中心；面板內的滾輪保留原生捲動，拖曳編輯或平移期間不改倍率。放大後 Space + 拖曳或滑鼠中鍵拖曳平移畫布，平移只捲動視野，不修改 layout，也不產生復原步驟。
+
+### 排段整體調整
+
+選取單一攤位後可抓取它所在的排段（彼此貼齊的連續攤位），並以整段外框的 X／Y／寬／高欄位調整；每次修改重新無縫等分該段內部攤位，欄位值限制在畫布內且寬高不得收合為零。修改編號與方向是分開的第二步：讀入現有代碼後才可改代碼前綴、起始／結束編號、補零位數、方向與編號起點，套用時只重寫該段。同一排的其他排段保留自己的代碼、幾何與編號方向；只有整排都在選取範圍內時才改寫該排的 `orientation`。代碼與該段以外的既有代碼衝突時拒絕套用並指出衝突代碼，段內原本的代碼可自由重用。
+
+外框一律是該段攤位目前所佔的範圍：以拖曳、方向鍵微移或任何其他方式移動這些攤位之後，四角把手與四個欄位都對著移動後的位置，再次調整不會把該段退回先前的座標。選取不再剛好是該段的成員時（點選別的元素、加減選、框選或從元素選單切換），排段調整結束，面板與把手一併收起，不留下指向另一段的編輯目標。
+
+### 多排同步上下邊界
+
+選取兩排以上的直排攤位後，按「同步上下邊界」預覽共同的上界、下界與內部分隔線。上下界預設取整個選取的外緣，可直接修改上界 Y／下界 Y。綠色外框只呈現預覽，不寫入 layout、歷史或保存內容；按「套用上下邊界」才提交。取消、Escape、改變選取或編輯／替換 layout 都會捨棄待套用值。預覽不攔截畫布操作，套用後維持原選取。
+
+每一排以共同邊界無縫等分重切，因此各排的分隔線落在同一條線上，不會因為各自四捨五入格高而漂開。**每一格保留原本的 X 與寬度**，排與排之間的走道不變；未選取的元件完全不動。
+
+畫布範圍、最小格高 1 與「下界必須大於上界」在共同邊界層級檢查一次，不逐格各自夾限；空值與非有限數值不能套用。不適用時動作停用並就地說明：混入設施、不足兩排、各排格數不同（列出實際格數）、選取中含橫排攤位、無法辨識直排，或共同高度放不下該格數。依 X／寬度辨識直排，每排至少選兩格；同一 row 的多欄仍各自分組。代碼、row 歸屬、順序與編號方向不受影響，這個動作只改幾何。一次套用是一個歷史步驟，一次復原即可還原整批。
+
+與外部元件碰撞沿用既有的重疊提示與驗證，不另做全圖避碰或自動搬移。
+
+### 逐步復原
+
+工具列的「復原」與「重做」（`Ctrl`／`Cmd` + `Z`，加 `Shift` 或 `Ctrl` + `Y` 重做）可回到任一中間狀態，不必整份還原。快捷鍵在 inspector 有焦點時同樣有效，但文字欄位內保留瀏覽器原生的復原。
+
+- **一次手勢算一步**：一次拖曳或縮放、一段連續同方向的方向鍵微調、同一欄位的連續輸入各自合併成單一步驟；改變方向、換欄位、放開方向鍵或結束拖曳都會結束該步驟，下一次操作另起一步。
+- 復原後再編輯會捨棄可重做的分支。
+- 歷史只保存最近 `LAYOUT_HISTORY_LIMIT`（50）份 layout，**不保存原始圖位元組**。超出上限的最舊步驟會被丟棄。
+- 重新辨識圖片、改用空白地圖或按「還原本次編輯」是整份替換 layout，不是編輯步驟，歷史會從新的 layout 重新開始。
+
+### 編輯工作區
+
+上方依攤位、設施、區域、輔助線、底圖與畫布、辨識分組；攤位清單可收合，屬性隨選取或工具展開。攤位清單與屬性面板浮在地圖左右兩側，各自捲動，不預留側欄空間；開關面板及選取時不改變畫布的尺寸與縮放。底部保留吸附與視域控制，選取模式另列多選、框選與平移的操作提示。鍵盤順序與畫面相同：工具列、攤位清單、畫布，再到畫布下方的控制列。編輯器寬度不足 900px 時，展開按鈕旁提示改用全視窗；全視窗內不顯示。
+
+切換工具分組會取消尚未放置的元素及待套用預覽，不改變已完成的地圖與復原歷史。點選「辨識」直接顯示底圖與辨識操作，不需再展開第二層面板，預覽隨可用高度延伸；離開再返回時保留辨識輸入及尚未失效的結果。
+
+從主辦地圖步驟可展開編輯器至全視窗。展開／返回不重建 layout、選取或復原歷史；返回只收合，真正離開及切換範圍仍須處理未儲存變更。全視窗隔離外層控制項、保留儲存動作與結果，儲存失敗不關閉或丟棄草稿。Escape 優先取消待套用預覽及放置工具，其次收起工具分組，最後返回地圖步驟。返回恢復展開按鈕的焦點。
+
+### 多邊形
+
+設施工具可選場館外框、企業攤、舞台或其他區域，逐點描繪多邊形；完成前只有預覽，取消不建立元素。曲線不靠手點：「最後 3 點連成弧線」把最近點下的起點、弧上一點與終點換成通過三點的圓弧（約每 7.5° 一點，不超過頂點上限）；剛好 3 點時「3 點畫成圓形」換成 48 點的圓。三點共線、弧線／圓形會超出畫布，或圓形小到無法成形時，顯示原因並保留原點。產生的頂點仍是一般頂點，取到 0.1 單位，取整後重疊的相鄰點合併，之後照常編輯；動線箭頭也有同一個弧線按鈕。場館外框替換該張地圖外框，其餘種類建立獨立命名區域。選取後可重新描繪、改回外接矩形、拖動或用座標移動／縮放，並在頂點面板增刪及修改座標，或拖曳畫布頂點。無效頂點編輯會顯示原因且保留原有效形狀。所有已完成操作使用同一復原／重做與保存機制；一般攤位格不提供多邊形工具。
+
+## 共享 reference 選擇
+
+送審 snapshot 保存活動的 reference selection，記錄它使用的主辦、分類目錄、場館與場地；核准發布時依此產生公開的 `reference-records.json`。
+
+### `reference-selection/1`
+
+selection 保存語意，不保存定位：
+
+- `eventId`；
+- organizer 集合；
+- category catalog 的 `id`、`organizerId`、`revision` 與 path；
+- venue 與其 venue-space 集合的 stable ID 與 path。
+
+所有 path 以 `references/` 開頭。selection 不含版本或 hash——那些由活動資料 bucket 的版本承擔。
+
+分類目錄 selection 同時保存 `id`、`organizerId`、`revision` 與 path，避免不同版本被誤認為同一份資料；organizers 與 venues 使用陣列，因此可完整表示 lead／co-organizer／partner 與多場館 assignment。
