@@ -11,7 +11,6 @@
 - 個人設定只剩通知語言（社團信件的語言），沒有頻率或關閉選項。
 - 信件連結使用 `NOTIFICATION_ORIGIN`（production 為 `https://map.kotoban.top`）；preview 未設定時用請求的 origin。
 - 待審信寄給已登入過、有帳號的網站管理者；新加入名單但還沒登入過的管理者收不到加入前的待審信。
-- 沒有排程：核准請求若在發布途中中斷，只有之後的寫入請求會接手；15 分鐘內都沒有寫入時，該發布會轉為可重試的失敗，請在工作區按「重試發布」。
 - 從舊 Worker 切換（#546 5c）：合併前先刪除 production 與 preview 的 `tw-catalog-publication-dispatch` Worker（`npx wrangler delete --name tw-catalog-publication-dispatch` 與 `--name tw-catalog-publication-dispatch-preview`），避免新舊兩邊搶同一筆通知。舊待審摘要裡還沒寄出的項目不再寄送。
 
 ## 這個專案需要什麼
@@ -75,9 +74,9 @@ production 的六個 runtime secret 以 `wrangler pages secret put` 設定。**�
 
 新環境與既有設定遷移順序見[網站營運設定遷移](#網站營運設定遷移477)。申請模式不依賴前端 build 或重新部署；關閉仍保留已有申請、審核與工作區。
 
-`ORGANIZER_PUBLICATION_MODE=r2` 時，核准在同一個請求內寫入活動資料 bucket，見[核准即發布](#核准即發布)。未設定時預設 disabled，核准與重試回 503；編輯、匯入、地圖、驗證、預覽與送審仍可使用。設定同時寫在根目錄 `wrangler.jsonc` 與 `workers/publication-dispatch/wrangler.jsonc`，不以 dashboard 臨時改值代替。
+`ORGANIZER_PUBLICATION_MODE=r2` 時，核准在同一個請求內寫入活動資料 bucket，見[核准即發布](#核准即發布)。未設定時預設 disabled，核准回 503；編輯、匯入、地圖、驗證、預覽與送審仍可使用。設定寫在根目錄 `wrangler.jsonc`，不以 dashboard 臨時改值代替。
 
-核准請求若在發布途中中斷，之後任何寫入 API 請求都會在回應後接手完成（`functions/_after-write.ts`）；原本每分鐘執行的 `tw-catalog-publication-dispatch` Worker 已在 #546 移除。
+核准請求若在發布途中中斷，候選停在「已核准，等待發布」，再按一次核准即可；已寫入的版本會以 approval hash 認出，不重複發布。
 
 `tw-catalog-retention-purge` Worker 開啟 Workers Logs 與 Workers Traces（`head_sampling_rate: 1`、`invocation_logs: true`、`persist: true`），因為它只有 cron 入口，沒有使用者會替它回報失敗；`preview_urls: false` 也納入設定。
 
@@ -222,7 +221,7 @@ npx wrangler pages deployment tail https://<deployment-id>.tw-catalog.pages.dev 
 
 ### 核准即發布
 
-`ORGANIZER_PUBLICATION_MODE=r2` 時，管理者核准後在同一個請求內：產生公開檔案、更新社團配號表、寫入新版本，最後改寫 `index.json`（帶 ETag 條件，另一筆發布剛完成時要求重試）。失敗不會改動讀者看到的內容；可重試的失敗用既有的「重試」按鈕，同一筆核准重送不會重複發布。更正沿用名單異動宣告，基準改從 bucket 讀取並與公開的 `circles.json` 核對。publication Worker 在 `r2` 模式下不推進任何發布，只保留通知排程。
+`ORGANIZER_PUBLICATION_MODE=r2` 時，管理者核准後在同一個請求內：產生公開檔案、更新社團配號表、寫入新版本，最後改寫 `index.json`（帶 ETag 條件，另一筆發布剛完成時要求重試）。失敗不會改動讀者看到的內容；可重試的失敗停在已核准，再按一次核准，同一筆核准重送不會重複發布。更正沿用名單異動宣告，基準改從 bucket 讀取並與公開的 `circles.json` 核對。
 
 ### 新環境的空白資料
 

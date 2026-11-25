@@ -126,25 +126,62 @@ test("a publication that fails before the index is written changes nothing reade
   const failing = (prefix) => new Proxy(bucket, { get: (target, key) => key === "put"
     ? async (name, ...rest) => { if (name.startsWith(prefix)) throw new Error("R2 unavailable"); return target.put(name, ...rest); }
     : typeof target[key] === "function" ? target[key].bind(target) : target[key] });
-  const retry = (cookie = owner) => api.call("POST", `/api/organizer/publications/${state.jobId}/retry`, { cookie, body: {} });
+  const approve = (cookie = admin) => review(state.candidateId, state.submittedVersion, cookie);
+  const status = async () => (await ok(await api.call("GET", events(""), { cookie: owner }))).event.status;
+  const sendBack = () => api.call("POST", `/api/admin/organizer/events/${state.candidateId}/review`,
+    { cookie: admin, body: { expectedVersion: state.submittedVersion, decision: "changes_requested" } });
+
+  // A snapshot row whose digest is intact but describes another candidate is
+  // not this candidate's submission.
+  const row = await api.database.prepare("SELECT id, snapshot_json, sha256 FROM organizer_submission_snapshots WHERE candidate_id = ?1 AND candidate_version = ?2")
+    .bind(state.candidateId, state.submittedVersion).first();
+  const foreign = JSON.stringify({ ...JSON.parse(row.snapshot_json), candidateId: "another-candidate" });
+  const digest = Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(foreign))).toString("hex");
+  const setSnapshot = (json, sha256) => api.database.prepare("UPDATE organizer_submission_snapshots SET snapshot_json = ?1, sha256 = ?2 WHERE id = ?3").bind(json, sha256, row.id).run();
+  await setSnapshot(foreign, digest);
+  assert.equal((await ok(await approve(), 409)).code, "snapshot_mismatch");
+  await setSnapshot(row.snapshot_json, row.sha256);
+  assert.equal(await (await bucket.get("index.json")).text(), indexBefore);
+
+  // Another publication took the event id meanwhile: the content is refused,
+  // its picture stays private, and the version returns to review.
+  const taken = JSON.parse(indexBefore);
+  taken.events.push({ ...taken.events[0], eventId: EVENT_ID });
+  await bucket.put("index.json", JSON.stringify(taken));
+  assert.equal((await ok(await approve(), 409)).code, "event_id_collision");
+  await bucket.put("index.json", indexBefore);
+  assert.equal(await status(), "submitted");
+  assert.equal(await api.thumbnails.head(`event-images/${state.image.sha256}.png`), null, "a refused approval publishes no picture");
+
+  // A submitted picture that has gone missing will not come back by retrying:
+  // the version returns to review, where it can be sent back for a new upload.
+  const staged = `organizer-event-images/${state.candidateId}/${state.image.sha256}.png`;
+  const picture = await (await api.env.MAP_CONTRIBUTIONS.get(staged)).arrayBuffer();
+  await api.env.MAP_CONTRIBUTIONS.delete(staged);
+  assert.equal((await ok(await approve(), 409)).code, "event_image_unavailable");
+  await api.env.MAP_CONTRIBUTIONS.put(staged, picture, { httpMetadata: { contentType: "image/png" } });
+  assert.equal(await status(), "submitted");
+  assert.equal(await (await bucket.get("index.json")).text(), indexBefore);
   // First an event file fails, then, with every file written, the history copy
-  // right before the index. Neither may move the pointer.
-  for (const [prefix, attempt] of [[`events/${EVENT_ID}/`, () => review(state.candidateId, state.submittedVersion)], ["history/", retry]]) {
+  // right before the index. Neither may move the pointer; approving again is the retry.
+  for (const prefix of [`events/${EVENT_ID}/`, "history/"]) {
     api.env.EVENT_DATA = failing(prefix);
     try {
-      const failed = await ok(await attempt());
-      assert.equal(failed.status, "failed", prefix);
-      state.jobId ??= failed.publicationJobId;
+      const failed = await ok(await approve(), 503);
+      assert.equal(failed.retryable, true, prefix);
     } finally {
       api.env.EVENT_DATA = bucket;
     }
     assert.equal(await (await bucket.get("index.json")).text(), indexBefore, `the pointer did not move when ${prefix} failed`);
     assert.equal(await publishedEvent(), undefined);
     assert.equal(await api.readerFile(EVENT_ID, "event.json"), null);
+    assert.equal(await status(), "approved", "the approval waits for its retry");
+    assert.equal((await sendBack()).status, 409, "an approval being published cannot be sent back");
   }
 
-  assert.equal((await retry(stranger)).status, 404);
-  assert.equal((await ok(await retry())).status, "published");
+  assert.equal((await approve(owner)).status, 403);
+  assert.equal((await ok(await approve())).status, "published");
+  assert.equal((await ok(await approve())).status, "published", "approving again after a lost response changes nothing");
   assert.equal((await publishedEvent()).definition.name, "PF45 x RF14");
   assert.equal((await api.readerFile(EVENT_ID, "event.json")).name, "PF45 x RF14");
   assert.ok((await api.readerFile("sample", "event.json")), "the other events stay published");

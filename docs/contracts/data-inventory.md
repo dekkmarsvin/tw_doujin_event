@@ -163,13 +163,12 @@
 | `organizer_import_sources` | 匯入來源 metadata：**主辦私人試算表的檔名與工作表名**、原始檔 SHA-256、來源說明與欄位 mapping |
 | `organizer_import_rows` | 主辦確認過的正規化攤位列：活動日、場地、展區、攤位代碼、**社團名稱**、stable key 與 identity group |
 | `organizer_submission_snapshots` | 送審當下固定的完整內容與其 SHA-256（approval hash），含匯入來源的**試算表檔名與工作表名**。immutable |
-| `organizer_amendments` | 修正候選對應的來源候選／版本／published job、固定公開基準 JSON 及 SHA-256；包含已公開活動、名單、身分及地圖，不保存原私人試算表檔名或递迴嵌入歷史 snapshot |
+| `organizer_amendments` | 修正候選對應的來源候選／版本／核准 snapshot（存在沿用舊名的 `source_job_id` 欄；舊修正存的是當時的發布工作 ID）、固定公開基準 JSON 及 SHA-256；包含已公開活動、名單、身分及地圖，不保存原私人試算表檔名或递迴嵌入歷史 snapshot |
 | `organizer_amendment_changes` | 每次明確修正宣告的不可變 JSON、candidate version、對應 revision ID 與時間；社團名稱與攤位變動隨候選保存，不直接公開此控制面紀錄 |
 | `organizer_venues` | 主辦工作區建立的場館：名稱、正規化名稱鍵、來源 URL、建立者與時間 |
 | `organizer_venue_spaces` | 場館內的場地：所屬場館、名稱、正規化名稱鍵、來源 URL、預設展區模式、建立者與時間 |
 | `organizer_reference_records` | 主辦／分類／場館／場地的 canonical 公開來源記錄、固定擷取時間與建立者；建立目錄不等於公開发布，完整選定 bytes 封入送審 snapshot |
-| `organizer_publication_jobs` | 發布工作的狀態、步驟、checkpoint 欄位、錯誤訊息、failure_code、retryable 與 sticky `remote_write_intent_at`；重試保留原 job 與核准 snapshot，退回修改後舊 job 標為不可重試歷史。發布在核准請求內寫入活動資料 bucket，PR／SHA／workflow 欄位在 #546 之後只寫入固定的佔位值 |
-| `organizer_publication_lease` | 全域同時只允許一個發布工作前進的租約 |
+| `organizer_publication_jobs`、`organizer_publication_lease` | 舊發布流程的工作與租約。#569 之後不再寫入，待部署後以 migration 移除 |
 
 **目的**：讓受邀或申請獲准的活動整理者在不接觸 repository 的前提下準備一場可送審的活動。**原始試算表 bytes 不在本站**——它只在瀏覽器裡解析與雜湊，API 只接受正規化後的資料列。
 **保存期**：候選活動與其 workspace state 不設期限；workspace preference 保存至帳號刪除。 **到期處置**：帳號刪除時先撤銷再刪除該帳號的成員 grant，刪除 workspace preference，清空 onboarding 完成者；邀請列保留，比對到的身分塗銷；其他 actor 與 email 依既有塗銷規則去識別化。匯入的攤位資料是主辦提供的活動資料，不隨個別帳號刪除；匯入來源的檔名與工作表名描述的是活動資料，保留不清空，只把上傳者去識別化；送審 snapshot 也保留同樣內容，它是核准記錄，不改寫（內容雜湊就是 approval hash，改寫會讓之後的核准、重試與修正無法核對）。
@@ -221,7 +220,7 @@
 - `auth.link_requested` 的 `subject_id` 是以 `HASH_PEPPER` 為金鑰、帶 `audit-email-v1` domain separation 的 HMAC；不存明文，也不是可直接字典比對的無金鑰 SHA-256。
 - `shredded_at` 非 NULL 代表該列已塗銷，不應再當成原始稽核內容解讀。
 
-發布的 `published`／`failed` 結果目前在 `organizer_publication_jobs`，不是額外的 audit action；重試會清空該 job 的錯誤與 failure code，不能把它當作每次失敗的永久歷史。一般 handler 的事後 `writeAudit` 不保證與業務寫入同一交易，部分 repository 路徑才使用同一 batch。
+發布成功記為候選的 published 狀態與 `organizer_event.approved` 稽核；失敗不留紀錄，候選停在已核准或回到送審。一般 handler 的事後 `writeAudit` 不保證與業務寫入同一交易，部分 repository 路徑才使用同一 batch。
 
 **保存期**：action 與時間不設期限，**永不刪列**；`ip_hash` 只保留 90 天。 **到期處置**：帳號刪除時，該帳號做的動作清空 actor、IP 與自由內容；以該帳號為主體的列改為固定值；以 keyed email digest 為主體的列（例如 `auth.link_requested`）保留 digest，清空 detail 與 IP，早期未加金鑰的 SHA-256 列則改為固定值；三者都寫入 `shredded_at`。仍保留「何時發生哪個動作」。別人所做、只在 detail 以 keyed digest 提到該帳號的列（例如成員邀請）保留。
 

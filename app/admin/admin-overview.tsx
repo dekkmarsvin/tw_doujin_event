@@ -6,7 +6,7 @@ import { adminHref } from "./admin-navigation";
 import { ADMIN_REFRESH_INTERVAL, useAdminReviewQueue } from "./use-admin-review-queue";
 import { useVisibleRefresh } from "./use-visible-refresh";
 import { useAdminSiteStatus } from "./use-admin-site-status";
-import { adminDate, publicationProgress, ServiceResults } from "./admin-service-status";
+import { adminDate, ServiceResults } from "./admin-service-status";
 import { groupAdminEvents, activityTime, candidateCalendar, candidateHref, editionStandings, type EditionStanding } from "./admin-event-groups";
 import { STATUS_LABEL } from "../organizer/organizer-shared";
 import type { ReviewQueue } from "../circle-editor-client";
@@ -47,16 +47,7 @@ function AdminDashboard({ queueState, mode }: { queueState?: ReturnType<typeof u
   const counts = queue?.claimCounts ?? [];
   const { data } = operations;
   const knownEvents = eventsByProximity(PUBLISHED_EVENTS, today);
-  const submitted = candidates?.filter(item => item.status === "submitted").sort((a, b) => (a.createdAt ?? a.updatedAt) - (b.createdAt ?? b.updatedAt));
-  const publicationJobs = <section className={styles.card} aria-labelledby="publication-jobs-heading"><h3 id="publication-jobs-heading">發布作業</h3>
-    {!data ? <p>{operations.error ? "無法取得發布作業。" : "載入中…"}</p> : <>
-      <ul className={ui.rows}>{data.publicationActivities.map(job => <li key={job.id}><div><strong>{job.eventName}</strong><small>第 {job.edition} 版 · {publicationProgress(job, data.settings.publicationEnabled)}</small><small>更新於 {adminDate(job.updatedAt)}</small></div>
-        <a href={candidateHref(job.candidateId, true)}>{job.status === "failed" ? "查看處理方式" : "查看進度"}</a></li>)}</ul>
-      {data.publicationActivities.length === 0 && <p>目前沒有待處理的發布作業。</p>}
-    </>}
-    {mode === "list" && operations.error && <><p className={styles.error} role="alert">發布作業更新失敗：{operations.error}</p>
-      {operations.updatedAt && <p className={ui.status}>發布作業更新於 {adminDate(operations.updatedAt)}</p>}</>}
-  </section>;
+  const submitted = candidates?.filter(item => item.status === "submitted" || item.status === "approved").sort((a, b) => (a.createdAt ?? a.updatedAt) - (b.createdAt ?? b.updatedAt));
   return <>
     {/* Under 活動管理 the selected tab already names this view; only the overview titles itself. */}
     {overview && <div className={ui.title}><h2 id="overview-heading">管理總覽</h2></div>}
@@ -68,19 +59,17 @@ function AdminDashboard({ queueState, mode }: { queueState?: ReturnType<typeof u
     <div className={mode === "list" ? ui.eventDashboard : ui.dashboard} id={overview ? "overview" : undefined}>
       <div>
         {mode === "list" ? <>
-          {publicationJobs}
           {queueState?.loadError && <><p className={styles.error} role="alert">待審摘要更新失敗：{queueState.loadError}</p>
             {queueState.updatedAt && <p className={ui.status}>待審摘要更新於 {adminDate(queueState.updatedAt)}</p>}</>}
           {error && <><p className={styles.error} role="alert">活動內容更新失敗：{error}</p>{updatedAt && <p className={ui.status}>活動內容更新於 {adminDate(updatedAt)}</p>}</>}
-          <AdminEventList candidates={candidates} readFailed={!!error} queue={queue} today={today}
-            failures={new Map((data?.publicationActivities ?? []).filter(job => job.status === "failed").map(job => [job.candidateId, publicationProgress(job, true)] as const))} />
+          <AdminEventList candidates={candidates} readFailed={!!error} queue={queue} today={today} />
         </> : <section className={styles.card} aria-labelledby="tasks-heading"><h3 id="tasks-heading">需要處理</h3>
           {queueState?.loadError && <><p className={styles.error} role="alert">待審摘要更新失敗：{queueState.loadError}</p>
             {queueState.updatedAt && <p className={ui.status}>待審摘要更新於 {adminDate(queueState.updatedAt)}</p>}</>}
           <ul className={ui.rows}>
             {overview && queue && queue.organizer.applications > 0 && <li><div><strong>活動申請</strong><small>{queue.organizer.applications} 件待審</small></div><a href="/organizer?application">前往審核</a></li>}
-            {submitted?.map(item => <li key={item.id}><div><strong>{item.tentativeName}</strong><small>活動內容待審{item.edition ? ` · 第 ${item.edition} 版` : ""}</small></div>
-              <a href={candidateHref(item.id, true)}>前往審核</a></li>)}
+            {submitted?.map(item => <li key={item.id}><div><strong>{item.tentativeName}</strong><small>{item.status === "approved" ? "發布未完成" : "活動內容待審"}{item.edition ? ` · 第 ${item.edition} 版` : ""}</small></div>
+              <a href={candidateHref(item.id, true)}>{item.status === "approved" ? "前往發布" : "前往審核"}</a></li>)}
             {overview && counts.filter(item => item.pending > 0).map(item => <li key={`claim:${item.eventId}`}><div><strong>{getPublishedEvent(item.eventId)?.name ?? item.eventId}</strong><small>社團認領 {item.pending} 件</small></div>
               <a href={adminHref("circles", { view: "claims", event: item.eventId })}>審核認領</a></li>)}
           </ul>
@@ -89,7 +78,6 @@ function AdminDashboard({ queueState, mode }: { queueState?: ReturnType<typeof u
           {submitted?.length === 0 && !error && <p>目前沒有待審活動內容。</p>}
           {!overview && <p><a href="/organizer?application">活動申請審核</a> · <a href="/organizer">前往主辦工作區</a></p>}
         </section>}
-        {mode !== "list" && publicationJobs}
         {overview && <section className={styles.card} aria-labelledby="published-heading"><h3 id="published-heading">已公開活動</h3>
           <ul className={ui.rows}>{knownEvents.map(({ event, label }) => <li key={event.id}><div><strong>{event.name}</strong><small>{label} · 已公開</small></div>
             <a href={`/events/${encodeURIComponent(event.id)}/`}>查看公開頁</a></li>)}</ul>
@@ -118,7 +106,7 @@ function AdminDashboard({ queueState, mode }: { queueState?: ReturnType<typeof u
   </>;
 }
 
-function AdminEventList({ candidates, readFailed, queue, today, failures }: { candidates: OrganizerEventSummary[] | null; readFailed: boolean; queue: ReviewQueue | null | undefined; today: string; failures: Map<string, string> }) {
+function AdminEventList({ candidates, readFailed, queue, today }: { candidates: OrganizerEventSummary[] | null; readFailed: boolean; queue: ReviewQueue | null | undefined; today: string }) {
   const groups = groupAdminEvents(candidates ?? [], PUBLISHED_EVENTS, today);
   // Groups arrive current first; ended ones sit under a divider once something precedes them.
   const firstEnded = groups.findIndex(group => activityTime(group.calendar, today) === "已結束");
@@ -129,7 +117,7 @@ function AdminEventList({ candidates, readFailed, queue, today, failures }: { ca
       const live = group.editions.find(item => standings.get(item.id) === "live");
       const shown = group.editions.filter(item => standings.get(item.id) !== "earlier");
       const earlier = group.editions.filter(item => standings.get(item.id) === "earlier");
-      const edition = (item: OrganizerEventSummary) => <EditionItem key={item.id} item={item} groupName={group.name} standing={standings.get(item.id)!} failure={failures.get(item.id)} />;
+      const edition = (item: OrganizerEventSummary) => <EditionItem key={item.id} item={item} groupName={group.name} standing={standings.get(item.id)!} />;
       return <Fragment key={group.id}>{index === firstEnded && index > 0 && <p className={ui.groupDivider}>已結束</p>}<article className={`${styles.card} ${ui.eventRow}`} aria-label={group.name}>
       <header><h3>{group.name}</h3><p>{group.calendar.label}{activityTime(group.calendar, today) !== group.calendar.label && ` · ${activityTime(group.calendar, today)}`}</p>{group.published?.venue && <p>{group.published.venue}</p>}</header>
       <div className={ui.eventVersions}>
@@ -154,7 +142,7 @@ function AdminEventList({ candidates, readFailed, queue, today, failures }: { ca
 
 const STANDING_LABEL: Partial<Record<EditionStanding, string>> = { live: "公開中", earlier: "舊版" };
 
-function EditionItem({ item, groupName, standing, failure }: { item: OrganizerEventSummary; groupName: string; standing: EditionStanding; failure?: string }) {
+function EditionItem({ item, groupName, standing }: { item: OrganizerEventSummary; groupName: string; standing: EditionStanding }) {
   const label = item.edition ? `第 ${item.edition} 版` : "版次未提供";
   // Abandoned keeps its own words; superseded published editions read as 舊版.
   const status = (item.status === "abandoned" ? undefined : STANDING_LABEL[standing]) ?? STATUS_LABEL[item.status];
@@ -162,7 +150,6 @@ function EditionItem({ item, groupName, standing, failure }: { item: OrganizerEv
     {standing === "earlier" ? <strong>{label} · {status}</strong> : <strong>{label} <span className={ui.editionStatus}>{status}</span></strong>}
     {item.tentativeName !== groupName && <span>{item.tentativeName}</span>}
     {standing !== "earlier" && <span>{candidateCalendar(item).label}</span>}
-    {standing === "failed" && failure && <span>{failure}</span>}
     <div className={ui.detailActions}>{standing === "failed" ? <><a href={candidateHref(item.id, true)}>查看處理方式</a><a href={candidateHref(item.id)}>開啟工作區</a></>
       : <><a href={candidateHref(item.id)}>開啟工作區</a>{standing !== "earlier" && <a href={candidateHref(item.id, true)}>審核與發布</a>}</>}</div>
   </li>;

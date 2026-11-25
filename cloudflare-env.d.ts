@@ -116,7 +116,7 @@ interface PortalEnv {
   LOCAL_PORTAL_DISPOSABLE?: string;
   /** Defaults disabled. `r2` publishes approvals to EVENT_DATA (#546); fake is accepted
    * only with the isolated preview mail sink. */
-  ORGANIZER_PUBLICATION_MODE?: "disabled" | "fake" | "r2";
+  ORGANIZER_PUBLICATION_MODE?: "disabled" | "r2";
 }
 
 interface EventContext<Env, Params extends string, Data> {

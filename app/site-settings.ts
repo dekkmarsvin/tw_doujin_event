@@ -1,5 +1,4 @@
 import { isEmailShaped, normalizeEmail } from "./portal-crypto";
-import type { OrganizerCandidateStatus } from "./organizer-event";
 
 export type OrganizerApplicationMode = "closed" | "invite_only" | "public";
 export type SiteSettingsInput = {
@@ -20,24 +19,9 @@ export type SiteSettings = SiteSettingsInput & {
 };
 export type ServiceCheck = { status: "available" | "unavailable" | "unknown"; source: string; reason: string };
 export type ServiceChecks = { requestedAt: number; checkedAt: number | null; mail: ServiceCheck | null; publication: ServiceCheck | null };
-export type PublicationActivity = {
-  id: string;
-  candidateId: string;
-  eventId: string | null;
-  eventName: string;
-  edition: number;
-  candidateVersion: number;
-  currentVersion: number;
-  candidateStatus: OrganizerCandidateStatus;
-  status: "queued" | "publishing" | "failed";
-  step: string;
-  updatedAt: number;
-  retryable: boolean;
-};
 export type AdminSiteSettings = {
   settings: SiteSettings;
-  publicationMode: "disabled" | "fake" | "r2";
-  publicationActivities: PublicationActivity[];
+  publicationMode: "disabled" | "r2";
   services: ServiceChecks | null;
 };
 

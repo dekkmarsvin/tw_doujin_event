@@ -80,12 +80,6 @@ export const STEP_LABEL: Record<OrganizerValidationIssue["step"], string> = {
   map: "地圖",
   preview: "預覽",
 };
-export const PUBLICATION_STATUS_LABEL: Record<string, string> = {
-  queued: "等待發布",
-  publishing: "發布中",
-  published: "已發布",
-  failed: "發布失敗",
-};
 
 /** What picking this template actually does, in the two terms the organizer
  * feels: whether an uploaded floor plan can be recognized, and what the saved

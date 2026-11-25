@@ -16,7 +16,6 @@ import {
   evaluateOrganizerWorkspaceReadiness, isOrganizerGuidedTask, isOrganizerWorkspaceSection, organizerWorkspaceSectionOrDefault, organizerOnboardingIssues,
 } from "../app/organizer-workspace";
 import { projectReferenceCatalog, validateOrganizerReferences } from "../app/organizer-reference-catalog";
-import { publicationHasStarted } from "../app/organizer-publication";
 import { validateOrganizerVenueCatalogAssignments } from "../app/organizer-venue-catalog";
 import type { Auth } from "./auth";
 import type { PortalDependencies } from "../app/circle-portal-handlers";
@@ -67,7 +66,7 @@ export function createOrganizerAccess(dependencies: Pick<PortalDependencies, "re
 export type OrganizerAccess = ReturnType<typeof createOrganizerAccess>;
 
 export function createOrganizer(dependencies: PortalDependencies, auth: Auth, admin: Admin) {
-  const { dispatchOrganizerPublication, repository, sendMail, mailRecipientAllowed, config } = dependencies;
+  const { publishApprovedEvent, repository, sendMail, mailRecipientAllowed, config } = dependencies;
   const { isAdmin, clientIpHash, currentSession } = auth;
   const { requireAdmin, moderation: { decideReviewClaim, applyTakedown, searchTakedownCircles } } = admin;
   const { dataUpdatedAt, eventEndsAt } = createEventScope(config);
@@ -372,9 +371,8 @@ export function createOrganizer(dependencies: PortalDependencies, auth: Auth, ad
     if (!candidate) return json({ error: "找不到活動。" }, 404);
     const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
     if (!draft) return json({ error: "活動資料格式無效，請聯絡網站管理者。" }, 500);
-    const [revisions, publication, workspace, workspaceValidation] = await Promise.all([
+    const [revisions, workspace, workspaceValidation] = await Promise.all([
       repository.listOrganizerCandidateRevisions(candidateId),
-      repository.getLatestOrganizerPublicationJob(candidateId),
       repository.getOrganizerWorkspace(candidateId, access.current.accountId),
       validateOrganizerWorkspace(candidateId, draft),
     ]);
@@ -437,20 +435,9 @@ export function createOrganizer(dependencies: PortalDependencies, auth: Auth, ad
           stableKey: row.stable_key, identityGroup: row.identity_group,
         })),
       } : null,
-      publicationAvailable: config.organizerPublicationMode !== undefined && config.organizerPublicationMode !== "disabled" && Boolean(dispatchOrganizerPublication),
+      publicationAvailable: Boolean(publishApprovedEvent),
       claimReviewAvailable: Boolean(candidate.event_id && (config.publishedEvent
         ? await config.publishedEvent(candidate.event_id) : candidate.event_id === config.eventId)),
-      publication: publication ? {
-        id: publication.id,
-        status: publication.status,
-        step: publication.step,
-        error: publication.error,
-        failureCode: publication.failure_code,
-        retryable: Boolean(publication.retryable),
-        started: publicationHasStarted(publication),
-        candidateVersion: publication.candidate_version,
-        updatedAt: publication.updated_at,
-      } : null,
       workspace: {
         mode: workspace.state.onboarding_completed_at === null ? "guided" : "binder",
         onboardingCompletedAt: workspace.state.onboarding_completed_at,

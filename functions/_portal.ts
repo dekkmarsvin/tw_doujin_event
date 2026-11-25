@@ -15,10 +15,8 @@ import { createIdentityRepository, type IdentityRepository } from "../db/identit
 import { parseEventDefinition, type EventDefinition } from "../app/event-catalog";
 import type { HostedThumbnailStore } from "../app/hosted-thumbnails";
 import type { MapContributionFileStore } from "../app/map-contribution-files";
-import { createPublicationDispatcher } from "../app/publication-dispatch";
 import { readEntryJson, readEventIndex, readEventJson } from "./_event-data";
-import { createR2AmendmentBaselineLoader } from "../app/event-data-publisher";
-import { readEventIndexObject } from "../app/event-data-store";
+import { createR2AmendmentBaselineLoader, publishApprovedSnapshot } from "../app/event-data-publisher";
 
 /**
  * Wires the framework-agnostic portal handlers to the Pages runtime: D1, the
@@ -314,10 +312,6 @@ function portalDependencies(context: { request: Request; env: PortalEnv }): Port
       return { dataUpdatedAt: event.dataUpdatedAt, eventEndsAt: event.eventEndsAt };
     } catch { return null; }
   };
-  const dispatchOrganizerPublication = createPublicationDispatcher({
-    repository, mode: env.ORGANIZER_PUBLICATION_MODE ?? "disabled", allowFake: env.PREVIEW_MAIL_SINK === "d1", eventData: env.EVENT_DATA,
-    eventExists: async (id) => Boolean(await publishedEvent(id)),
-  });
   const thumbnailOrigin = env.THUMBNAIL_PUBLIC_ORIGIN;
   const thumbnailStore: HostedThumbnailStore | undefined = thumbnailOrigin ? {
     url: (key) => `${thumbnailOrigin.replace(/\/$/, "")}/${key}`,
@@ -348,15 +342,9 @@ function portalDependencies(context: { request: Request; env: PortalEnv }): Port
     delete: (keys) => env.MAP_CONTRIBUTIONS!.delete(keys),
     list: (prefix) => listBucketKeys(env.MAP_CONTRIBUTIONS!, prefix),
   } : undefined;
-  // A failed job may be reopened only while readers do not see its approval.
-  const publicationAuditor = async (jobId: string) => {
-    const job = await repository.getOrganizerPublicationJob(jobId);
-    if (!job) throw new Error("Publication job not found.");
-    const current = await readEventIndexObject(env.EVENT_DATA);
-    return { clear: !current?.index.events.some((entry) => entry.source?.approvalHash === job.approval_hash) };
-  };
   return {
     loadPublishedAmendmentBaseline: env.ORGANIZER_PUBLICATION_MODE === "r2" ? createR2AmendmentBaselineLoader(env.EVENT_DATA) : undefined,
+    publishApprovedEvent: env.ORGANIZER_PUBLICATION_MODE === "r2" ? (source, beforeWrite) => publishApprovedSnapshot(env.EVENT_DATA, source, Date.now, beforeWrite) : undefined,
     repository,
     sendMail: async (message) => {
       const event = { event: "portal.mail", mailType: message.purpose };
@@ -396,8 +384,6 @@ function portalDependencies(context: { request: Request; env: PortalEnv }): Port
     turnstileSitekey: () => requireSecret(env, "TURNSTILE_SITEKEY"),
     thumbnailStore,
     mapContributionStore,
-    publicationAuditor,
-    dispatchOrganizerPublication,
     projectCircle: async (circleId, fields, updatedAt = new Date().toISOString()) => {
       // Runs the same projection the reader runs, against the same snapshot, so
       // the preview shows the published result rather than an approximation.
@@ -424,7 +410,7 @@ function portalDependencies(context: { request: Request; env: PortalEnv }): Port
       dataUpdatedAt: async () => (await catalog(env, request, eventId)).event.dataUpdatedAt,
       eventEndsAt: async () => (await catalog(env, request, eventId)).event.eventEndsAt,
       now: () => Date.now(),
-      organizerPublicationMode: env.ORGANIZER_PUBLICATION_MODE ?? "disabled",
+      organizerPublicationMode: env.ORGANIZER_PUBLICATION_MODE === "r2" ? "r2" : "disabled",
       // Published means "this deployment actually serves the event's data", so
       // the set is read from what was deployed rather than from a second list
       // that could drift away from it. Ill-formed ids are rejected without a

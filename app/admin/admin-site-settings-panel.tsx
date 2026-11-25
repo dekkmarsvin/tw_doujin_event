@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { saveAdminSiteSettings } from "../circle-editor-client";
 import { CLAIM_REVIEW_NOTICE_MAX, CONTACT_URL_MAX, type AdminSiteSettings, type SiteSettingsInput } from "../site-settings";
 import { useAdminSiteStatus } from "./use-admin-site-status";
-import { adminDate as date, publicationProgress, ServiceStatus } from "./admin-service-status";
+import { adminDate as date, ServiceStatus } from "./admin-service-status";
 import styles from "../circle-portal/portal.module.css";
 import settingsStyles from "./admin-site-settings-panel.module.css";
 
@@ -71,10 +71,6 @@ export function AdminSiteSettingsPanel() {
           <input id="site-publication" type="checkbox" role="switch" disabled={data.publicationMode === "disabled"} checked={form.publicationEnabled} onChange={event => patch({ publicationEnabled: event.target.checked })} /></label>
         {data.publicationMode === "disabled" && <p>此環境未啟用發布能力。</p>}
         <ServiceStatus label="發布服務" result={data.services?.publication ?? null} pending={checking} requested={!!data.services} />
-        {data.publicationActivities.length ? <div className={settingsStyles.activities}><h4>目前發布作業</h4><ul>{data.publicationActivities.map(job => <li key={job.id}>
-          <a href={`/organizer?candidate=${encodeURIComponent(job.candidateId)}&section=review`}>{job.eventName}</a>
-          <span>第 {job.edition} 版 · {publicationProgress(job, data.settings.publicationEnabled)}</span>
-        </li>)}</ul></div> : <p className={settingsStyles.empty}>目前沒有待處理的發布作業。</p>}
       </section>
     </fieldset>
     <div className={settingsStyles.actions}>
