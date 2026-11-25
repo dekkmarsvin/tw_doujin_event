@@ -5,8 +5,7 @@ import { notificationParameters } from "../app/notification-navigation";
 import { loginLinkLetter } from "../app/mail-letter";
 import type { PortalMail } from "../app/portal-mail";
 import { hmacSign, hmacVerify, isEmailShaped, normalizeEmail, peppered, randomToken, sha256Hex } from "../app/portal-crypto";
-import { catalogKeysOf, circleObjectPrefix, deleteObjectKeys, type HostedThumbnailStore } from "../app/hosted-thumbnails";
-import type { CircleOverrideFields } from "../app/circle-overrides";
+import { circleObjectPrefix, deleteObjectKeys, type HostedThumbnailStore } from "../app/hosted-thumbnails";
 import type { IdentityRepository } from "../db/identity-repository";
 import { json, readCookie, readJson } from "./http";
 
@@ -272,12 +271,13 @@ export function createAuth({
         `events/${encodeURIComponent(claim.event_id)}/circles/${encodeURIComponent(claim.circle_id)}/`,
       )))).flat();
       // A revoked owner's never-saved drafts go with it (#573); the pictures
-      // its kept content points at stay for the circle's next owner.
+      // its kept content points at stay for the circle's next owner. Objects
+      // are named by their content hash, so a name the kept fields mention is
+      // in use whatever origin the URL was written with.
       for (const scope of revokedScopes) {
         const kept = await repository.getOverride(scope.event_id, scope.circle_id);
-        const referenced = new Set([kept?.hosted_thumbnail_key,
-          ...catalogKeysOf(thumbnailStore, kept ? JSON.parse(kept.fields_json) as CircleOverrideFields : null, scope.event_id, scope.circle_id)]);
-        allKeys.push(...(await thumbnailStore.list(circleObjectPrefix(scope.event_id, scope.circle_id))).filter((key) => !referenced.has(key)));
+        const inUse = (key: string) => key === kept?.hosted_thumbnail_key || !!kept?.fields_json.includes(key.slice(key.lastIndexOf("/") + 1));
+        allKeys.push(...(await thumbnailStore.list(circleObjectPrefix(scope.event_id, scope.circle_id))).filter((key) => !inUse(key)));
       }
       await deleteObjectKeys(thumbnailStore, [...new Set(allKeys)]);
     }

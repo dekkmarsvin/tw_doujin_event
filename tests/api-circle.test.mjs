@@ -132,7 +132,7 @@ test("deleting the account takes its circle's content and pictures down and free
 test("deleting an account leaves the pictures of a circle someone else owns", async () => {
   const email = "third@example.test";
   const third = await api.signIn(email);
-  const thirdClaim = await api.call("POST", "/api/claims", { cookie: third, body: { circleId: SOUTH, evidenceNote: "我是南星工房的成員" } });
+  const thirdClaim = await api.call("POST", "/api/claims", { cookie: third, body: { circleId: SOUTH, evidenceUrl: "https://personal.example/me", evidenceNote: "我是南星工房的成員" } });
   assert.equal(thirdClaim.status, 201, await thirdClaim.clone().text());
   const refused = (await thirdClaim.json()).id;
   await approve(strangerSouthClaim);
@@ -150,6 +150,9 @@ test("deleting an account leaves the pictures of a circle someone else owns", as
   assert.equal(kept.status, "rejected");
   assert.match(kept.account_id, /^\[shredded\]:/);
   assert.equal(kept.evidence_note, null);
+  const decision = await api.database.prepare("SELECT detail_json FROM audit_log WHERE subject_type = 'claim' AND subject_id = ? AND action = 'claim.admin_reject'")
+    .bind(refused).first();
+  assert.doesNotMatch(decision.detail_json, /personal\.example/, "the reviewer's record keeps no claimant evidence");
 });
 
 test("content its circle chose to hide after the event leaves readers when the event ends", async () => {

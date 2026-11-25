@@ -522,6 +522,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       // the account replaced and the claimant's evidence cleared. A pending,
       // withdrawn or current claim goes, so the circle is free to claim. Each
       // kept row gets its own placeholder: the account is part of a unique key.
+      database.prepare(`UPDATE audit_log SET detail_json = json_remove(detail_json, '$.evidenceUrl')
+         WHERE subject_type = 'claim' AND detail_json IS NOT NULL
+           AND subject_id IN (SELECT id FROM circle_claims WHERE account_id = ?1)`).bind(input.accountId),
       database.prepare(`DELETE FROM circle_claims WHERE account_id = ?1 AND status NOT IN ('rejected', 'revoked')`).bind(input.accountId),
       database.prepare(`UPDATE circle_claims SET account_id = '[shredded]:' || id, evidence_url = NULL, evidence_note = NULL,
          challenge_token_hash = NULL, challenge_expires_at = NULL WHERE account_id = ?1`).bind(input.accountId),
@@ -535,14 +538,15 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       database.prepare(
         `UPDATE audit_log SET subject_id = '[shredded]', detail_json = NULL, ip_hash = NULL,
            shredded_at = COALESCE(shredded_at, ?1)
-         WHERE (subject_type = 'account' AND subject_id = ?2) OR (subject_type = 'admin' AND subject_id = ?3)`,
-      ).bind(input.now, input.accountId, input.email),
+         WHERE (subject_type = 'account' AND subject_id = ?2) OR (subject_type = 'admin' AND subject_id = ?3)
+            OR (subject_type = 'email' AND subject_id = ?4)`,
+      ).bind(input.now, input.accountId, input.email, input.legacyEmailAuditDigest),
       // A keyed email digest only the site can match stays as evidence of
       // what was requested (#573); what else the row carried does not.
       database.prepare(
         `UPDATE audit_log SET detail_json = NULL, ip_hash = NULL, shredded_at = COALESCE(shredded_at, ?1)
-         WHERE subject_type = 'email' AND subject_id IN (?2, ?3)`,
-      ).bind(input.now, input.emailAuditDigest, input.legacyEmailAuditDigest),
+         WHERE subject_type = 'email' AND subject_id = ?2`,
+      ).bind(input.now, input.emailAuditDigest),
       database.prepare(`DELETE FROM accounts WHERE id = ?1`).bind(input.accountId),
       database.prepare(
         `INSERT INTO audit_log (id, at, actor_account_id, actor_role, action, subject_type, subject_id, detail_json, ip_hash, shredded_at)

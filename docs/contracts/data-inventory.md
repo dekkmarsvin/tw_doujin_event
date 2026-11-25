@@ -116,7 +116,7 @@
 | `challenge_token_hash`、`challenge_expires_at`、`challenge_attempts` | 驗證碼狀態，24 小時 |
 | `status`、`verified_at`、`reviewed_by`、`reviewed_at` | 審核結果；`reviewed_by` 是審核者（網站管理者或活動成員）的**明文 email**，該帳號刪除時塗銷 |
 
-**目的**：證明某帳號是某社團本人。 **保存期**：不設期限。 **到期處置**：審核中、已撤回與目前通過的認領隨帳號刪除，partial unique index 的擁有者名額同步釋放；已婉拒或已撤銷的認領保留結果與審核者，`account_id` 改為每列不同的 `[shredded]:<id>`，佐證網址、說明與驗證碼清空。已轉移給別人的社團，現任內容與其代管圖片都不會因前任刪帳號而移除。
+**目的**：證明某帳號是某社團本人。 **保存期**：不設期限。 **到期處置**：審核中、已撤回與目前通過的認領隨帳號刪除，partial unique index 的擁有者名額同步釋放；已婉拒或已撤銷的認領保留結果與審核者，`account_id` 改為每列不同的 `[shredded]:<id>`，佐證網址、說明與驗證碼清空，審核者裁決稽核中複製的佐證網址也一併移除。已轉移給別人的社團，現任內容與其代管圖片都不會因前任刪帳號而移除。
 
 ### `circle_overrides` — 社團自填的補充資料
 
@@ -223,7 +223,7 @@
 
 發布的 `published`／`failed` 結果目前在 `organizer_publication_jobs`，不是額外的 audit action；重試會清空該 job 的錯誤與 failure code，不能把它當作每次失敗的永久歷史。一般 handler 的事後 `writeAudit` 不保證與業務寫入同一交易，部分 repository 路徑才使用同一 batch。
 
-**保存期**：action 與時間不設期限，**永不刪列**；`ip_hash` 只保留 90 天。 **到期處置**：帳號刪除時，該帳號做的動作清空 actor、IP 與自由內容；以該帳號為主體的列改為固定值；以 keyed email digest 為主體的列（例如 `auth.link_requested`）保留 digest，清空 detail 與 IP；三者都寫入 `shredded_at`。仍保留「何時發生哪個動作」。別人所做、只在 detail 以 keyed digest 提到該帳號的列（例如成員邀請）保留。
+**保存期**：action 與時間不設期限，**永不刪列**；`ip_hash` 只保留 90 天。 **到期處置**：帳號刪除時，該帳號做的動作清空 actor、IP 與自由內容；以該帳號為主體的列改為固定值；以 keyed email digest 為主體的列（例如 `auth.link_requested`）保留 digest，清空 detail 與 IP，早期未加金鑰的 SHA-256 列則改為固定值；三者都寫入 `shredded_at`。仍保留「何時發生哪個動作」。別人所做、只在 detail 以 keyed digest 提到該帳號的列（例如成員邀請）保留。
 
 ### 通知待寄表
 
