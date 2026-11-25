@@ -3,14 +3,14 @@
 **實作**：`app/map-shape-geometry.ts`、`app/map-shape-drawing.tsx`
 **測試**：`tests/map-shape-geometry.test.mjs`
 **實作**：[`app/map-annotations.ts`](../../app/map-annotations.ts)、[`app/map-annotation-drawing.tsx`](../../app/map-annotation-drawing.tsx)
-**測試**：`tests/map-annotations.test.mjs`、`tests/browser/map-authoring-annotations.mjs`、`tests/browser/map-roster-coverage.mjs`
+**測試**：`tests/map-annotations.test.mjs`
 
 主辦單位工作區使用 `MapLayoutEditor`。本契約管畫布編輯行為；草稿的保存、權限、版本與審閱見[主辦單位工作區契約](./organizer-workspace.md#地圖)，操作順序見[地圖 authoring](../runbooks/map-authoring.md)。
 
 **實作**：[`app/map-layout-editor.tsx`](../../app/map-layout-editor.tsx)、[`app/map-layout-editor-geometry.ts`](../../app/map-layout-editor-geometry.ts)、[`app/map-layout-editor-selection.ts`](../../app/map-layout-editor-selection.ts)、[`app/map-segment-edit.ts`](../../app/map-segment-edit.ts)、[`app/map-placement-tool.ts`](../../app/map-placement-tool.ts)、[`app/map-editor-history.ts`](../../app/map-editor-history.ts)、[`app/map-editor-preferences.ts`](../../app/map-editor-preferences.ts)、[`app/map-authoring-state.ts`](../../app/map-authoring-state.ts)、[`app/map-booth-list.tsx`](../../app/map-booth-list.tsx)、[`app/map-booth-coverage.ts`](../../app/map-booth-coverage.ts)、[`app/map-recognition.ts`](../../app/map-recognition.ts)、[`app/map-template-registry.ts`](../../app/map-template-registry.ts)
 **測試**：`tests/map-authoring-state.test.mjs`、`tests/map-editor-preferences.test.mjs`、`tests/map-placement-tool.test.mjs`、`tests/map-segment-edit.test.mjs`、`tests/map-import.test.mjs`、`tests/map-template-shape.test.mjs`
 **實作**：[`app/map-recognition-panel.tsx`](../../app/map-recognition-panel.tsx)、[`app/map-recognition-draft.ts`](../../app/map-recognition-draft.ts)、[`app/map-recognition-review.ts`](../../app/map-recognition-review.ts)、[`app/map-auto-recognition/build-layout.ts`](../../app/map-auto-recognition/build-layout.ts)
-**測試**：`tests/map-recognition-draft.test.mjs`、`tests/map-recognizer-prototype.test.mjs`、[`tests/browser/map-recognition.mjs`](../../tests/browser/map-recognition.mjs)
+**測試**：`tests/map-recognition-draft.test.mjs`、`tests/map-recognizer-prototype.test.mjs`
 
 ## 檢視
 

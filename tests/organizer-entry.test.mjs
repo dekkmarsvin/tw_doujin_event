@@ -35,7 +35,7 @@ test("an explicitly cleared selection survives a later list refresh", async () =
 
 test("leaving permits saving an incomplete draft", async () => {
   const app = await organizerSource();
-  // portal-organizer-references checks primary validation; this guard keeps
-  // the secondary save independent until that incomplete-draft path is driven.
+  // This guard keeps the secondary save independent of the primary task's
+  // validation: an incomplete draft can still be saved on leaving.
   assert.ok(app.includes("void save(onSecondarySaved)"), "leaving does not require the task");
 });

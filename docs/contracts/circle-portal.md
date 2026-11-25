@@ -17,7 +17,7 @@
 **部署與密鑰**：[部署 runbook](../runbooks/deployment.md)
 **通知**：`app/notification-delivery.ts`、`app/account-notifications.ts`、`app/review-notifications.ts`、`app/portal-mail.ts`、`app/account-notification-settings.tsx`、`db/account-notification-repository.ts`、`functions/_after-write.ts`；測試 `tests/notification-delivery.test.mjs`
 **實作**：`app/portal-sign-in.tsx`、`app/portal-sign-in.module.css`
-**測試**：[tests/browser/portal-claim-entry.mjs](../../tests/browser/portal-claim-entry.mjs)、[tests/browser/portal-organizer-entry.mjs](../../tests/browser/portal-organizer-entry.mjs)
+**測試**：[tests/browser/portal-circle-claim.mjs](../../tests/browser/portal-circle-claim.mjs)、[tests/browser/portal-organizer-entry.mjs](../../tests/browser/portal-organizer-entry.mjs)
 
 > **活動範圍**：`/circle` 是跨活動共用入口，寫入面與公開讀取面都支援多活動；帳號跨活動、認領逐活動，`env.EVENT_ID` 只是請求沒有指名活動時的預設值（[ADR-0043](../adr/0043-the-circle-portal-is-event-agnostic.md)）。
 
