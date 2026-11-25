@@ -69,12 +69,17 @@ async function correctedDateFixture() {
   await database.batch(rows.map(([circle, event, choice, expires]) => database.prepare(`INSERT INTO circle_overrides
       (id,event_id,circle_id,fields_json,updated_by,created_at,updated_at,retention_choice,retention_expires_at)
       VALUES (?1,?2,?3,'{}',?4,?5,?5,?6,?7)`).bind(`override-${circle}`, event, circle, ownerId, NOW, choice, expires)));
-  const publish = (actorAccountId = adminId, approvalHash = hash) => repository.publishOrganizerCandidate({ candidateId: id, expectedVersion: 1,
-    actorAccountId, snapshotId: snapshot.snapshotId, approvalHash, eventEndsAt: "2026-11-21T23:59:59+08:00", now: NOW + 4 });
+  const claim = (actorAccountId = adminId, approvalHash = hash) => repository.claimOrganizerApproval({ candidateId: id, expectedVersion: 1,
+    actorAccountId, snapshotId: snapshot.snapshotId, approvalHash, now: NOW + 4 });
+  const publish = async () => {
+    await claim();
+    return repository.publishOrganizerCandidate({ candidateId: id, expectedVersion: 1,
+      actorAccountId: adminId, snapshotId: snapshot.snapshotId, approvalHash: hash, eventEndsAt: "2026-11-21T23:59:59+08:00", now: NOW + 5 });
+  };
   const deadlines = async () => Object.fromEntries((await database.prepare("SELECT circle_id, retention_expires_at FROM circle_overrides").all()).results
     .map((row) => [row.circle_id, row.retention_expires_at]));
   const recounted = circleRetentionExpiresAt("purge", Date.parse("2026-11-21T23:59:59+08:00"));
-  return { id, publish, deadlines, recounted };
+  return { id, claim, publish, deadlines, recounted };
 }
 
 // ADR-0068: deadlines count from the event's end, so a corrected date moves
@@ -97,19 +102,22 @@ test("a completion that fails to commit leaves the candidate submitted, and appr
     BEGIN SELECT RAISE(ABORT, 'injected retention failure'); END`).run();
   try { await assert.rejects(publish()); }
   finally { await database.prepare("DROP TRIGGER IF EXISTS fail_retention_recount").run(); }
-  assert.equal((await repository.getOrganizerCandidate(id)).status, "submitted");
+  assert.equal((await repository.getOrganizerCandidate(id)).status, "approved", "the claim stands for the retry");
   assert.deepEqual(await deadlines(), before, "no part of the completion landed");
   assert.deepEqual(await publish(), { ok: true, alreadyPublished: false });
   assert.deepEqual(await deadlines(), { early: recounted, late: recounted, kept: null, unanswered: null, other: 1 });
 });
 
-test("only an admin publishing the submitted snapshot can complete the approval", async () => {
-  const { id, publish, deadlines } = await correctedDateFixture();
-  const before = await deadlines();
-  assert.equal((await publish(ownerId)).ok, false, "an owner cannot approve their own submission here");
-  assert.equal((await publish(adminId, "f".repeat(64))).ok, false, "a different approval hash is not the submitted snapshot");
+test("only an active admin approving the submitted snapshot can claim it, and a claimed version cannot be sent back", async () => {
+  const { id, claim } = await correctedDateFixture();
+  assert.equal(await claim(ownerId), false, "an owner cannot approve");
+  assert.equal(await claim(adminId, "f".repeat(64)), false, "a different approval hash is not the submitted snapshot");
   assert.equal((await repository.getOrganizerCandidate(id)).status, "submitted");
-  assert.deepEqual(await deadlines(), before);
+  assert.equal(await claim(), true);
+  assert.equal((await repository.reviewOrganizerCandidate({ candidateId: id, expectedVersion: 1, actorAccountId: adminId, now: NOW + 5 })).ok, false);
+  await repository.releaseOrganizerApproval({ candidateId: id, expectedVersion: 1, now: NOW + 6 });
+  assert.equal((await repository.reviewOrganizerCandidate({ candidateId: id, expectedVersion: 1, actorAccountId: adminId, now: NOW + 7 })).ok, true,
+    "a refused publication returns to review");
 });
 
 test("an admin creates an empty event entry and its invited owner gains only that event", async () => {

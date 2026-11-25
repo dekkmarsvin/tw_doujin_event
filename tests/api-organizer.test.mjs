@@ -127,6 +127,31 @@ test("a publication that fails before the index is written changes nothing reade
     ? async (name, ...rest) => { if (name.startsWith(prefix)) throw new Error("R2 unavailable"); return target.put(name, ...rest); }
     : typeof target[key] === "function" ? target[key].bind(target) : target[key] });
   const approve = (cookie = admin) => review(state.candidateId, state.submittedVersion, cookie);
+  const status = async () => (await ok(await api.call("GET", events(""), { cookie: owner }))).event.status;
+  const sendBack = () => api.call("POST", `/api/admin/organizer/events/${state.candidateId}/review`,
+    { cookie: admin, body: { expectedVersion: state.submittedVersion, decision: "changes_requested" } });
+
+  // A snapshot row whose digest is intact but describes another candidate is
+  // not this candidate's submission.
+  const row = await api.database.prepare("SELECT id, snapshot_json, sha256 FROM organizer_submission_snapshots WHERE candidate_id = ?1 AND candidate_version = ?2")
+    .bind(state.candidateId, state.submittedVersion).first();
+  const foreign = JSON.stringify({ ...JSON.parse(row.snapshot_json), candidateId: "another-candidate" });
+  const digest = Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(foreign))).toString("hex");
+  const setSnapshot = (json, sha256) => api.database.prepare("UPDATE organizer_submission_snapshots SET snapshot_json = ?1, sha256 = ?2 WHERE id = ?3").bind(json, sha256, row.id).run();
+  await setSnapshot(foreign, digest);
+  assert.equal((await ok(await approve(), 409)).code, "snapshot_mismatch");
+  await setSnapshot(row.snapshot_json, row.sha256);
+  assert.equal(await (await bucket.get("index.json")).text(), indexBefore);
+
+  // Another publication took the event id meanwhile: the content is refused,
+  // its picture stays private, and the version returns to review.
+  const taken = JSON.parse(indexBefore);
+  taken.events.push({ ...taken.events[0], eventId: EVENT_ID });
+  await bucket.put("index.json", JSON.stringify(taken));
+  assert.equal((await ok(await approve(), 409)).code, "event_id_collision");
+  await bucket.put("index.json", indexBefore);
+  assert.equal(await status(), "submitted");
+  assert.equal(await api.thumbnails.head(`event-images/${state.image.sha256}.png`), null, "a refused approval publishes no picture");
   // First an event file fails, then, with every file written, the history copy
   // right before the index. Neither may move the pointer; approving again is the retry.
   for (const prefix of [`events/${EVENT_ID}/`, "history/"]) {
@@ -140,7 +165,8 @@ test("a publication that fails before the index is written changes nothing reade
     assert.equal(await (await bucket.get("index.json")).text(), indexBefore, `the pointer did not move when ${prefix} failed`);
     assert.equal(await publishedEvent(), undefined);
     assert.equal(await api.readerFile(EVENT_ID, "event.json"), null);
-    assert.equal((await ok(await api.call("GET", events(""), { cookie: owner }))).event.status, "submitted", "the submission waits for the retry");
+    assert.equal(await status(), "approved", "the approval waits for its retry");
+    assert.equal((await sendBack()).status, 409, "an approval being published cannot be sent back");
   }
 
   assert.equal((await approve(owner)).status, 403);

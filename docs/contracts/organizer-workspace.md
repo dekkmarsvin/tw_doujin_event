@@ -86,7 +86,7 @@ R2 清除暫時失敗時，資料維持撤下，搜尋顯示圖片待清除並�
 - 「查看全部項目」不完成 onboarding；它只暫時打開五個區段。每位協作者的上次引導任務與建置冊區段由 `PATCH …/workspace` 分別保存，跨登入恢復且不互相覆蓋。
 - workspace 偏好與 onboarding 狀態不屬於候選內容：更新它們不增加 `current_version`，也不建立活動 revision。ADR-0047 上線前已存在、沒有 workspace state 的候選一律從建置冊開啟。
 - 表單或地圖有未儲存變更時，切換活動、引導任務或建置冊區段（含準備進度項目與「下一步」、「查看全部項目」／「回到基本設定」）會提供「儲存並切換／放棄／取消」；取消保留目前內容，沒有未儲存變更時直接切換。重新整理或關閉瀏覽器頁面則使用瀏覽器既有的未儲存變更確認。對話框沿用全站 shared modal focus lifecycle。Revision 一旦儲存成功，畫面會先同步新版本再執行引導或離開動作；後續動作失敗不會讓下一次儲存沿用舊版本。「儲存並離開」後保持未選取活動，不會因清單刷新自動重開第一筆。
-- 建置冊直接開放活動、場館與場地、攤位匯入、地圖、檢查與發布五區。檢查與發布在同一面板依序提供檢查、預覽、送審、審閱與發布結果；草稿或要求修改狀態下，每次進入該區會自動執行一次檢查，不需先按「執行檢查」。先前保存為 `validate` 的區段偏好以 `review` 恢復。Readiness 顯示完成區段數、具名阻擋項與建議下一步，不顯示百分比；檢查與發布只在 published 完成，其列依階段顯示「檢查通過」（目前版本已通過檢查；能否送審仍由角色與發布啟用決定，由面板說明）、「審閱中」，讓通過檢查在側欄可見；`blocked` 只代表缺少技術前置資料，區段本身仍可開啟查看。活動或場館表單有未儲存變更時，Readiness 以目前表單內容即時顯示「尚未儲存」，不沿用上一版結果。
+- 建置冊直接開放活動、場館與場地、攤位匯入、地圖、檢查與發布五區。檢查與發布在同一面板依序提供檢查、預覽、送審、審閱與發布結果；草稿或要求修改狀態下，每次進入該區會自動執行一次檢查，不需先按「執行檢查」。先前保存為 `validate` 的區段偏好以 `review` 恢復。Readiness 顯示完成區段數、具名阻擋項與建議下一步，不顯示百分比；檢查與發布只在 published 完成，其列依階段顯示「檢查通過」（目前版本已通過檢查；能否送審仍由角色與發布啟用決定，由面板說明）、「審閱中」或「等待發布」，讓通過檢查在側欄可見；`blocked` 只代表缺少技術前置資料，區段本身仍可開啟查看。活動或場館表單有未儲存變更時，Readiness 以目前表單內容即時顯示「尚未儲存」，不沿用上一版結果。
 - 五區共用 [`app/organizer-workspace.ts`](../../app/organizer-workspace.ts) 的 prerequisite evaluator。活動與場館來自草稿 validation；匯入要求至少一列且沒有 import error；地圖要求匯入已完成、完整 day × venue-space coverage，且每份已保存地圖必須通過與正式 validation 相同的攤位覆蓋、未知攤位、重疊與幾何規則（未知攤位在候選活動是 warning，不擋住地圖區；理由見下方[地圖](#地圖)）；驗證只在沒有 error 且 `last_validated_version` 等於目前 candidate version 時完成，未完成時以 `validation_required` 阻擋項列在檢查與發布；只有 published 才把檢查與發布區段標為完成。
 
 ## 管理者建立與邀請
@@ -105,12 +105,12 @@ R2 清除暫時失敗時，資料維持撤下，搜尋顯示圖片待清除並�
 ## 候選活動的狀態
 
 ```text
-draft → submitted → published
+draft → submitted → approved → published
           ↓
    changes_requested
 ```
 
-核准並發布在同一個請求內完成，送審版本直接變為 published；發布失敗時候選維持 submitted，再次核准即重試。`approved`、`publishing`、`failed` 只出現在舊流程留下的紀錄。修正候選另有 `abandoned`（已終止，公開內容不變）。
+核准並發布在同一個請求內完成：先把送審版本標為 `approved`，寫入活動資料後再改為 published。`approved` 期間不能要求修改，發布暫時失敗或請求中斷時停在這裡，再次核准即重試。`publishing`、`failed` 只出現在舊流程留下的紀錄。修正候選另有 `abandoned`（已終止，公開內容不變）。
 
 - `draft` 與 `changes_requested` 可編輯；其餘狀態一律不可寫入。
 - 每一次寫入都要帶 `expectedVersion`，成功後 `current_version` 遞增並留下一筆 immutable revision。版本落後回 409 並指出目前版本，不靜默覆寫。
@@ -290,8 +290,9 @@ AMEND 沿用驗證、Reader 預覽、Owner／Admin 送審及 Admin 核准。送�
 
 核心實作：[`server/organizer-publication.ts`](../../server/organizer-publication.ts)、[`app/event-data-publisher.ts`](../../app/event-data-publisher.ts)、[`app/publication-artifacts.ts`](../../app/publication-artifacts.ts)。部署設定與回滾見[部署 runbook](../runbooks/deployment.md#核准即發布)。
 
-- 依 ADR-0057，UI 動作為「核准並發布」。發布啟用（`ORGANIZER_PUBLICATION_MODE=r2` 且[網站營運設定](./admin.md#網站營運設定)的發布開關開啟）時，核准請求先寫入活動資料：產生公開檔、更新社團配號表、寫入新版本，最後以 ETag 條件改寫 `index.json`；成功後同一 D1 交易記錄核准、將候選改為 published 並寄出結果通知。未啟用或發布開關暫停時核准回 503，候選保留送審狀態。
-- **寫入失敗不切換 `index.json`**，讀者看到的內容不變，候選維持 submitted。可重試的失敗（儲存暫時無法寫入、另一筆發布剛完成造成的 ETag 衝突）回 503，再按一次核准即重試；內容本身無法發布（例如首次發布的活動代號已公開、修正基準已變更）回 409，由管理者退回修改。
+- 依 ADR-0057，UI 動作為「核准並發布」。發布啟用（`ORGANIZER_PUBLICATION_MODE=r2` 且[網站營運設定](./admin.md#網站營運設定)的發布開關開啟）時，核准請求先確認管理者仍有效、送審版本未變，把候選標為 `approved`；再寫入活動資料：產生公開檔、更新社團配號表、公開活動圖片、寫入新版本，最後以 ETag 條件改寫 `index.json`；成功後同一 D1 交易記錄核准、將候選改為 published 並寄出結果通知。未啟用或發布開關暫停時核准回 503，候選保留送審狀態。
+- **寫入失敗不切換 `index.json`**，讀者看到的內容不變。可重試的失敗（儲存暫時無法寫入、另一筆發布剛完成造成的 ETag 衝突）回 503，候選停在 `approved`，再按一次核准即重試；內容本身無法發布（例如首次發布的活動代號已公開、修正基準已變更）回 409，候選回到 submitted，活動圖片不公開，由管理者退回修改。
+- 送審 snapshot 必須是這個候選這一版的內容：雜湊、候選 ID、版本、活動代號與 CREATE／AMEND 任一不符都拒絕核准。
 - 同一版本再次核准不重複發布：`index.json` 已指向這次核准時直接完成 D1 紀錄，候選已 published 時直接回成功。這也涵蓋寫入成功但 D1 交易失敗、或回應遺失的情況。
 - 沒有發布工作、背景接手或輪詢；核准回應就是發布結果。
 
@@ -310,7 +311,8 @@ AMEND snapshot/4 額外保存不可變 `amendment.baselineJson`／`baselineSha25
 - 預覽裡移除的列不會被匯入，也不會產生待修正項目；被它解除的攤位重複不再回報。
 - 手動補正過的列仍要通過與其他列相同的檢查：未宣告的活動日、場地或展區照樣被匯入 API 拒絕，介面上的修正不是繞過那道檢查的路。
 - `ORGANIZER_PUBLICATION_MODE` 未設定時，核准 API 回 503，候選保留 `submitted`。
-- 發布寫入失敗時 `index.json` 不變、候選保留 `submitted`；再次核准成功後才記錄核准與 published，只留一筆核准紀錄。
+- 發布寫入失敗時 `index.json` 不變；可重試的失敗停在 `approved` 且不能要求修改，內容被拒時回到 `submitted`。再次核准成功後才記錄核准與 published，只留一筆核准紀錄。
+- 核准途中被要求修改或管理者資格被移除時，核准在寫入活動資料前就停止。
 - 公開 bundle 不含 organizer 介面與寫入 route，由 `tests/public-artifact.test.mjs` 把關。
 - 新候選活動預設進入引導；跨登入可恢復每位協作者自己的位置；完成 onboarding、切換區段或執行驗證都不會產生候選內容 revision。
 - workspace preference 與完成 onboarding 的最終 SQL 寫入會再次檢查 active grant；權限在請求途中被撤銷時不會留下流程狀態變更，對外仍回 404。

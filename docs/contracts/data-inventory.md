@@ -220,7 +220,7 @@
 - `auth.link_requested` 的 `subject_id` 是以 `HASH_PEPPER` 為金鑰、帶 `audit-email-v1` domain separation 的 HMAC；不存明文，也不是可直接字典比對的無金鑰 SHA-256。
 - `shredded_at` 非 NULL 代表該列已塗銷，不應再當成原始稽核內容解讀。
 
-發布成功記為候選的 published 狀態與 `organizer_event.approved` 稽核；失敗不留紀錄，候選維持送審。一般 handler 的事後 `writeAudit` 不保證與業務寫入同一交易，部分 repository 路徑才使用同一 batch。
+發布成功記為候選的 published 狀態與 `organizer_event.approved` 稽核；失敗不留紀錄，候選停在已核准或回到送審。一般 handler 的事後 `writeAudit` 不保證與業務寫入同一交易，部分 repository 路徑才使用同一 batch。
 
 **保存期**：action 與時間不設期限，**永不刪列**；`ip_hash` 只保留 90 天。 **到期處置**：帳號刪除時，該帳號做的動作清空 actor、IP 與自由內容；以該帳號為主體的列改為固定值；以 keyed email digest 為主體的列（例如 `auth.link_requested`）保留 digest，清空 detail 與 IP，早期未加金鑰的 SHA-256 列則改為固定值；三者都寫入 `shredded_at`。仍保留「何時發生哪個動作」。別人所做、只在 detail 以 keyed digest 提到該帳號的列（例如成員邀請）保留。
 

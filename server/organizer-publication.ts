@@ -216,50 +216,66 @@ export function createOrganizerPublication(dependencies: PortalDependencies, aut
       if (await sha256Hex(snapshot.snapshot_json) !== snapshot.sha256) {
         return json({ error: "送審內容與記錄不一致，無法核准。", code: "snapshot_mismatch" }, 409);
       }
-      if (candidate.publication_operation === "AMEND") {
-        try {
-          const artifacts = await buildApprovedPublicationArtifacts({ snapshotJson: snapshot.snapshot_json, approvalHash: snapshot.sha256 });
+      // The snapshot must describe this candidate's version, whatever its digest says.
+      try {
+        const artifacts = await buildApprovedPublicationArtifacts({ snapshotJson: snapshot.snapshot_json, approvalHash: snapshot.sha256 });
+        if (artifacts.operation !== (candidate.publication_operation === "AMEND" ? "AMEND" : "CREATE") || artifacts.snapshot.candidateId !== candidateId
+          || artifacts.snapshot.candidateVersion !== expectedVersion || artifacts.event.id !== candidate.event_id) {
+          return json({ error: "送審內容與記錄不一致，無法核准。", code: "snapshot_mismatch" }, 409);
+        }
+        if (candidate.publication_operation === "AMEND") {
           const amendment = await readAmendment(candidateId);
           const approved = artifacts.snapshot.amendment;
-          if (artifacts.operation !== "AMEND" || artifacts.snapshot.candidateId !== candidateId
-            || artifacts.snapshot.candidateVersion !== expectedVersion || artifacts.event.id !== candidate.event_id
-            || !amendment || amendment.stored.current_version !== expectedVersion
+          if (!amendment || amendment.stored.current_version !== expectedVersion
             || approved?.baselineJson !== amendment.stored.baseline_json || approved.baselineSha256 !== amendment.stored.baseline_sha256
             || JSON.stringify(approved.changes) !== amendment.stored.changes_json
             || JSON.stringify(approved.settings ?? null) !== JSON.stringify(amendment.settings)) {
             return json({ error: "修正送審內容與固定基準不一致，無法核准。", code: "snapshot_mismatch" }, 409);
           }
-        } catch (error) {
-          if (!(error instanceof PublicationFailure)) throw error;
-          return json({ error: error.message, code: error.code }, 409);
         }
+      } catch (error) {
+        if (!(error instanceof PublicationFailure)) throw error;
+        return json({ error: error.message, code: error.code }, 409);
       }
       if (candidate.status === "published" && candidate.published_version === expectedVersion) {
         return json({ ok: true, status: "published", revisionHash: snapshot.sha256, selfApproval: candidate.submitted_by === gate.session.accountId });
       }
-      if (candidate.status !== "submitted" || candidate.current_version !== expectedVersion) return json({ error: "版本或狀態已變更。" }, 409);
+      if ((candidate.status !== "submitted" && candidate.status !== "approved") || candidate.current_version !== expectedVersion) {
+        return json({ error: "版本或狀態已變更。" }, 409);
+      }
       {
         const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
         if (!draft) return json({ error: "活動資料格式無效，請聯絡網站管理者。" }, 500);
         const { issues } = await validateOrganizerWorkspace(candidateId, draft);
         if (issues.some((issue) => issue.severity === "error")) return json({ error: "這個活動仍有待修正項目。", issues }, 422);
       }
-      // Public before the publication names it, and before any state moves:
-      // a failed copy leaves the submission exactly where it was.
-      const approvedDraft = approvedEventDraft(JSON.parse(snapshot.snapshot_json) as Parameters<typeof approvedEventDraft>[0]);
-      if (approvedDraft?.event.image && !await publishEventImage(candidateId, approvedDraft.event.image)) {
-        return json({ error: "活動圖片暫時無法公開，送審內容已保留，請稍後再核准。", code: "event_image_unavailable" }, 503);
+      // Claimed before anything is public: a version sent back or an admin
+      // removed meanwhile stops here, and nobody can send this one back while
+      // it is being written (#569).
+      if (!await repository.claimOrganizerApproval({ candidateId, expectedVersion: expectedVersion as number, actorAccountId: gate.session.accountId,
+        snapshotId: snapshot.id, approvalHash: snapshot.sha256, now: config.now() })) {
+        return json({ error: "版本或狀態已變更。" }, 409);
       }
-      // Readers' data first, index last (#569): a failed write leaves the index
-      // and this submission as they were, and approving again is the retry. A
-      // write that landed before D1 did is recognised by its approval hash.
+      const approvedDraft = approvedEventDraft(JSON.parse(snapshot.snapshot_json) as Parameters<typeof approvedEventDraft>[0]);
+      // Readers' data first, index last: a failed write leaves the index as it
+      // was, and approving again is the retry. A write that landed before D1
+      // did is recognised by its approval hash. The picture is made public
+      // only once the publisher has accepted the content.
       try {
-        await publishApprovedEvent({ snapshotJson: snapshot.snapshot_json, approvalHash: snapshot.sha256, candidateId, candidateVersion: expectedVersion as number });
+        await publishApprovedEvent({ snapshotJson: snapshot.snapshot_json, approvalHash: snapshot.sha256, candidateId, candidateVersion: expectedVersion as number },
+          async () => {
+            if (approvedDraft?.event.image && !await publishEventImage(candidateId, approvedDraft.event.image)) {
+              throw new PublicationFailure("event_image_unavailable", "活動圖片暫時無法公開，請稍後再核准一次。", true);
+            }
+          });
       } catch (error) {
         // A storage error is not a verdict on the content: approving again may succeed.
         const failure = error instanceof PublicationFailure ? error
-          : new PublicationFailure("infrastructure_error", "活動資料暫時無法寫入，送審內容已保留，請稍後再核准一次。", true);
+          : new PublicationFailure("infrastructure_error", "活動資料暫時無法寫入，請稍後再核准一次。", true);
         if (failure !== error) console.error(JSON.stringify({ event: "publication.write_failed", candidateId, message: error instanceof Error ? error.message : String(error) }));
+        // Content that cannot be published goes back to review; a retryable
+        // failure stays approved so only approving again can move it.
+        if (!failure.retryable) await repository.releaseOrganizerApproval({ candidateId, expectedVersion: expectedVersion as number, now: config.now() });
         return json({ error: failure.message, code: failure.code, retryable: failure.retryable }, failure.retryable ? 503 : 409);
       }
       const eventEndsAt = approvedDraft ? eventDateFields(approvedDraft.event.days.map((day) => day.date).sort()).eventEndsAt : undefined;

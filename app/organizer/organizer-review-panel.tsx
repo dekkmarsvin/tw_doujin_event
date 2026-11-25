@@ -49,7 +49,8 @@ function AdminReviewSection(props: SectionProps) {
   const { detail } = props;
   const { act, notice, pending: busy } = useSectionAction(props);
   const pending = busy || props.blocked === true;
-  return <div className={styles.subpanel}><h4>網站管理者審閱</h4><p>核准後會立即公開這一版送審內容。</p><p className={styles.warning}>若送審內容是你自己提交的，系統會另外記錄自我核准。</p><textarea aria-label="審閱說明" disabled={pending} placeholder="審閱說明" value={note} onChange={(event) => setNote(event.target.value)} /><div className={styles.row}><button type="button" className={styles.ghost} disabled={pending} onClick={() => act(reviewOrganizerEvent(detail.event.id, detail.event.version, "changes_requested", note), "已要求修改。")}>要求修改</button><button type="button" disabled={pending || !detail.publicationAvailable} onClick={() => act(reviewOrganizerEvent(detail.event.id, detail.event.version, "approve", note), "已核准並發布。")}>核准並發布</button></div><ActionNotice notice={notice} /></div>;
+  const retry = detail.event.status === "approved";
+  return <div className={styles.subpanel}><h4>網站管理者審閱</h4><p>{retry ? "這一版已核准，但發布沒有完成。再按一次「核准並發布」即可完成。" : "核准後會立即公開這一版送審內容。"}</p><p className={styles.warning}>若送審內容是你自己提交的，系統會另外記錄自我核准。</p><textarea aria-label="審閱說明" disabled={pending} placeholder="審閱說明" value={note} onChange={(event) => setNote(event.target.value)} /><div className={styles.row}>{!retry && <button type="button" className={styles.ghost} disabled={pending} onClick={() => act(reviewOrganizerEvent(detail.event.id, detail.event.version, "changes_requested", note), "已要求修改。")}>要求修改</button>}<button type="button" disabled={pending || !detail.publicationAvailable} onClick={() => act(reviewOrganizerEvent(detail.event.id, detail.event.version, "approve", note), "已核准並發布。")}>核准並發布</button></div><ActionNotice notice={notice} /></div>;
 }
 
 export function ReviewPanel({ session, detail, onChanged, onSection }: {
@@ -71,7 +72,7 @@ export function ReviewPanel({ session, detail, onChanged, onSection }: {
     <div className={styles.statusBoard}><span>目前狀態</span><strong>{STATUS_LABEL[detail.event.status]}</strong><span>活動代碼</span><strong>{detail.draft.event.id ?? "尚未設定"}</strong></div>
     <CheckSection detail={detail} onChanged={onChanged} onSection={onSection} />
     {submittable && <SubmitSection {...section} blocked={!owner && !session.isAdmin} />}
-    {session.isAdmin && detail.event.status === "submitted" && <AdminReviewSection {...section} />}
+    {session.isAdmin && (detail.event.status === "submitted" || detail.event.status === "approved") && <AdminReviewSection {...section} />}
     {!detail.publicationAvailable && detail.event.status !== "published" && <p className={styles.warning}>發布尚未啟用，{detail.event.operation === "AMEND" ? "本次修正" : "活動"}尚未公開。內容會保留，請聯絡網站管理者協助發布。</p>}
     {detail.event.status === "abandoned" && <p>這次修正已終止，公開內容沒有改變。要再修正，請從活動清單的已發布版本開始。</p>}
   </section>;

@@ -49,7 +49,8 @@ export type PortalDependencies = {
   loadPublishedAmendmentBaseline?: (source: AmendmentPublishedSource) => Promise<OrganizerAmendmentBaseline>;
   /** Writes an approved snapshot to the event data bucket, `index.json`
    * last (#569). Present only where publishing is enabled. */
-  publishApprovedEvent?: (source: { snapshotJson: string; approvalHash: string; candidateId: string; candidateVersion: number }) => Promise<unknown>;
+  publishApprovedEvent?: (source: { snapshotJson: string; approvalHash: string; candidateId: string; candidateVersion: number },
+    beforeWrite: () => Promise<void>) => Promise<unknown>;
   repository: IdentityRepository;
   sendMail: (message: PortalMail) => Promise<void>;
   /**

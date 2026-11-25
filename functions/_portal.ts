@@ -344,7 +344,7 @@ function portalDependencies(context: { request: Request; env: PortalEnv }): Port
   } : undefined;
   return {
     loadPublishedAmendmentBaseline: env.ORGANIZER_PUBLICATION_MODE === "r2" ? createR2AmendmentBaselineLoader(env.EVENT_DATA) : undefined,
-    publishApprovedEvent: env.ORGANIZER_PUBLICATION_MODE === "r2" ? (source) => publishApprovedSnapshot(env.EVENT_DATA, source) : undefined,
+    publishApprovedEvent: env.ORGANIZER_PUBLICATION_MODE === "r2" ? (source, beforeWrite) => publishApprovedSnapshot(env.EVENT_DATA, source, Date.now, beforeWrite) : undefined,
     repository,
     sendMail: async (message) => {
       const event = { event: "portal.mail", mailType: message.purpose };

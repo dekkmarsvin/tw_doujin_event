@@ -2261,11 +2261,41 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   }
 
   /**
+   * An active admin takes the submitted snapshot for publication (#569). From
+   * `approved` nobody can send the version back or approve another, so what
+   * the event data bucket is about to serve stays the decided version. An
+   * `approved` candidate whose request stopped is taken again, as a retry.
+   */
+  async function claimOrganizerApproval(input: {
+    candidateId: string; expectedVersion: number; actorAccountId: string; snapshotId: string; approvalHash: string; now: number;
+  }) {
+    await ensureTables();
+    const result = await database.prepare(
+      `UPDATE organizer_event_candidates SET status = 'approved', updated_at = ?1, last_updated_by = ?3, last_updated_role = 'admin',
+         approved_by = ?3, approved_at = ?1
+       WHERE id = ?2 AND current_version = ?4 AND status IN ('submitted', 'approved') AND ${adminActive}
+         AND EXISTS (SELECT 1 FROM organizer_submission_snapshots s
+           WHERE s.id = ?5 AND s.candidate_id = ?2 AND s.candidate_version = ?4 AND s.sha256 = ?6)`,
+    ).bind(input.now, input.candidateId, input.actorAccountId, input.expectedVersion, input.snapshotId, input.approvalHash).run();
+    return result.meta.changes === 1;
+  }
+
+  /** A publication refused for its content returns the version to review, where it can be sent back for changes. */
+  async function releaseOrganizerApproval(input: { candidateId: string; expectedVersion: number; now: number }) {
+    await ensureTables();
+    await database.prepare(
+      `UPDATE organizer_event_candidates SET status = 'submitted', updated_at = ?1, approved_by = NULL, approved_at = NULL
+       WHERE id = ?2 AND current_version = ?3 AND status = 'approved'`,
+    ).bind(input.now, input.candidateId, input.expectedVersion).run();
+  }
+
+  /**
    * Records an approval whose files the event data bucket already serves
    * (#569): the review, the candidate published at this version, its owners'
    * notices and, from the published end date, recounted retention deadlines,
-   * in one batch. Calling it again for the version already published is a
-   * no-op, so an approval repeated after a lost response settles cleanly.
+   * in one batch. The admin was checked when the approval was claimed. Calling
+   * it again for the version already published is a no-op, so an approval
+   * repeated after a lost response settles cleanly.
    */
   async function publishOrganizerCandidate(input: {
     candidateId: string; expectedVersion: number; actorAccountId: string; note?: string;
@@ -2277,7 +2307,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     if (candidate.status === "published" && candidate.published_version === input.expectedVersion) {
       return { ok: true as const, alreadyPublished: true as const };
     }
-    if (candidate.current_version !== input.expectedVersion || candidate.status !== "submitted") {
+    if (candidate.current_version !== input.expectedVersion || candidate.status !== "approved") {
       return { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version, status: candidate.status };
     }
     const transitionToken = crypto.randomUUID();
@@ -2286,7 +2316,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       database.prepare(
         `INSERT INTO organizer_event_reviews (id, candidate_id, version, from_status, to_status, actor_account_id, note, at)
          SELECT ?1, id, current_version, 'submitted', 'approved', ?3, ?4, ?5 FROM organizer_event_candidates
-         WHERE id = ?6 AND current_version = ?7 AND status = 'submitted' AND ${adminActive}
+         WHERE id = ?6 AND current_version = ?7 AND status = 'approved'
            AND EXISTS (SELECT 1 FROM organizer_submission_snapshots s
              WHERE s.id = ?8 AND s.candidate_id = ?6 AND s.candidate_version = ?7 AND s.sha256 = ?9)`,
       ).bind(transitionToken, null, input.actorAccountId, input.note ?? null, input.now, input.candidateId, input.expectedVersion,
@@ -2294,7 +2324,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       database.prepare(
         `UPDATE organizer_event_candidates SET status = 'published', updated_at = ?1, last_updated_by = ?2, last_updated_role = 'admin',
            approved_by = ?2, approved_at = ?1, published_version = current_version, published_at = ?1
-         WHERE id = ?3 AND current_version = ?4 AND status = 'submitted'
+         WHERE id = ?3 AND current_version = ?4 AND status = 'approved'
            AND EXISTS (SELECT 1 FROM organizer_event_reviews r WHERE r.id = ?5 AND r.candidate_id = ?3)`,
       ).bind(input.now, input.actorAccountId, input.candidateId, input.expectedVersion, transitionToken),
       ...notify({ kind: "review.approved", occurrence: transitionToken, now: input.now },
@@ -2419,7 +2449,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     manageOrganizerOwner,
     listOrganizerMapDrafts, getOrganizerMapDraft, createOrganizerMapDraft, saveOrganizerMapDraft,
     getOrganizerImport, replaceOrganizerImport,
-    saveOrganizerCandidate, submitOrganizerCandidate, reviewOrganizerCandidate, publishOrganizerCandidate,
+    saveOrganizerCandidate, submitOrganizerCandidate, reviewOrganizerCandidate, claimOrganizerApproval, releaseOrganizerApproval, publishOrganizerCandidate,
     storeOrganizerSubmissionSnapshot, getOrganizerSubmissionSnapshot,
     storePreviewMail, latestPreviewMail, clearPreviewData,
   };
