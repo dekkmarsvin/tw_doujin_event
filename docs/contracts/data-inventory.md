@@ -168,7 +168,6 @@
 | `organizer_venues` | 主辦工作區建立的場館：名稱、正規化名稱鍵、來源 URL、建立者與時間 |
 | `organizer_venue_spaces` | 場館內的場地：所屬場館、名稱、正規化名稱鍵、來源 URL、預設展區模式、建立者與時間 |
 | `organizer_reference_records` | 主辦／分類／場館／場地的 canonical 公開來源記錄、固定擷取時間與建立者；建立目錄不等於公開发布，完整選定 bytes 封入送審 snapshot |
-| `organizer_publication_jobs`、`organizer_publication_lease` | 舊發布流程的工作與租約。#569 之後不再寫入，待部署後以 migration 移除 |
 
 **目的**：讓受邀或申請獲准的活動整理者在不接觸 repository 的前提下準備一場可送審的活動。**原始試算表 bytes 不在本站**——它只在瀏覽器裡解析與雜湊，API 只接受正規化後的資料列。
 **保存期**：候選活動與其 workspace state 不設期限；workspace preference 保存至帳號刪除。 **到期處置**：帳號刪除時先撤銷再刪除該帳號的成員 grant，刪除 workspace preference，清空 onboarding 完成者；邀請列保留，比對到的身分塗銷；其他 actor 與 email 依既有塗銷規則去識別化。匯入的攤位資料是主辦提供的活動資料，不隨個別帳號刪除；匯入來源的檔名與工作表名描述的是活動資料，保留不清空，只把上傳者去識別化；送審 snapshot 也保留同樣內容，它是核准記錄，不改寫（內容雜湊就是 approval hash，改寫會讓之後的核准、重試與修正無法核對）。
