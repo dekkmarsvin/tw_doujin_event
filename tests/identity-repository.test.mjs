@@ -303,6 +303,10 @@ test("account deletion releases claims, removes owned overlays and shreds person
     at: NOW, actorAccountId: accountId, actorRole: "circle", action: "claim.created",
     subjectType: "email", subjectId: emailAuditDigest, detail: { evidenceUrl: "https://personal.example/evidence" }, ipHash: "ip-delete",
   });
+  await repository.writeAudit({
+    at: NOW, actorAccountId: null, actorRole: "system", action: "auth.link_requested",
+    subjectType: "email", subjectId: "legacy-email-digest", detail: null, ipHash: null,
+  });
 
   assert.equal(await repository.beginAccountDeletion({
     accountId, email, now: NOW + 4_000, retrySessionId: "delete-account-session",
@@ -327,7 +331,9 @@ test("account deletion releases claims, removes owned overlays and shreds person
 
   const shredded = await database.prepare(`SELECT * FROM audit_log WHERE action = 'claim.created' AND shredded_at IS NOT NULL`).first();
   assert.equal(shredded.actor_account_id, null);
-  assert.equal(shredded.subject_id, "[shredded]");
+  assert.equal(shredded.subject_id, emailAuditDigest, "the keyed digest stays as evidence (#573)");
+  const legacy = await database.prepare(`SELECT subject_id FROM audit_log WHERE action = 'auth.link_requested' AND shredded_at IS NOT NULL`).first();
+  assert.equal(legacy.subject_id, "[shredded]", "an unkeyed digest anyone could match does not stay");
   assert.equal(shredded.detail_json, null);
   assert.equal(shredded.ip_hash, null);
   assert.equal((await database.prepare(`SELECT COUNT(*) AS total FROM audit_log WHERE action = 'account.deleted' AND shredded_at IS NOT NULL`).first()).total, 1);

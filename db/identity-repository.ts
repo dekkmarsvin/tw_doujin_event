@@ -508,7 +508,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       // The private workbook's file and sheet names identify the person who
       // uploaded it as much as the actor column does, so they go in the same
       // statement — a later one would no longer find the row by created_by.
-      database.prepare(`UPDATE organizer_import_sources SET created_by = '[shredded]', file_name = '[shredded]', worksheet = NULL WHERE created_by = ?1`).bind(input.accountId),
+      // The workbook names describe the organizer's data, and the approved
+      // snapshot keeps them anyway (#573); only the uploader goes.
+      database.prepare(`UPDATE organizer_import_sources SET created_by = '[shredded]' WHERE created_by = ?1`).bind(input.accountId),
       database.prepare(`UPDATE organizer_submission_snapshots SET created_by = '[shredded]' WHERE created_by = ?1`).bind(input.accountId),
       database.prepare(`DELETE FROM organizer_event_grants WHERE account_id = ?1`).bind(input.accountId),
       // Links this account minted for other inboxes outlive it; the invitee
@@ -516,7 +518,16 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       database.prepare(`UPDATE login_tokens SET minted_by = '[shredded]' WHERE minted_by = ?1`).bind(input.accountId),
       database.prepare(`DELETE FROM login_tokens WHERE email = ?1`).bind(input.email),
       database.prepare(`DELETE FROM sessions WHERE account_id = ?1`).bind(input.accountId),
-      database.prepare(`DELETE FROM circle_claims WHERE account_id = ?1`).bind(input.accountId),
+      // A decided claim is a record of who reviewed what (#573): it stays with
+      // the account replaced and the claimant's evidence cleared. A pending,
+      // withdrawn or current claim goes, so the circle is free to claim. Each
+      // kept row gets its own placeholder: the account is part of a unique key.
+      database.prepare(`UPDATE audit_log SET detail_json = json_remove(detail_json, '$.evidenceUrl')
+         WHERE subject_type = 'claim' AND detail_json IS NOT NULL
+           AND subject_id IN (SELECT id FROM circle_claims WHERE account_id = ?1)`).bind(input.accountId),
+      database.prepare(`DELETE FROM circle_claims WHERE account_id = ?1 AND status NOT IN ('rejected', 'revoked')`).bind(input.accountId),
+      database.prepare(`UPDATE circle_claims SET account_id = '[shredded]:' || id, evidence_url = NULL, evidence_note = NULL,
+         challenge_token_hash = NULL, challenge_expires_at = NULL WHERE account_id = ?1`).bind(input.accountId),
       database.prepare(`UPDATE circle_claims SET reviewed_by = '[shredded]' WHERE reviewed_by = ?1`).bind(input.email),
       database.prepare(`UPDATE circle_overrides SET takendown_by = '[shredded]' WHERE takendown_by = ?1`).bind(input.email),
       database.prepare(`UPDATE admins SET added_by = '[shredded]' WHERE added_by = ?1`).bind(input.email),
@@ -527,10 +538,15 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       database.prepare(
         `UPDATE audit_log SET subject_id = '[shredded]', detail_json = NULL, ip_hash = NULL,
            shredded_at = COALESCE(shredded_at, ?1)
-         WHERE (subject_type = 'account' AND subject_id = ?2)
-            OR (subject_type = 'email' AND subject_id IN (?3, ?4))
-            OR (subject_type = 'admin' AND subject_id = ?5)`,
-      ).bind(input.now, input.accountId, input.emailAuditDigest, input.legacyEmailAuditDigest, input.email),
+         WHERE (subject_type = 'account' AND subject_id = ?2) OR (subject_type = 'admin' AND subject_id = ?3)
+            OR (subject_type = 'email' AND subject_id = ?4)`,
+      ).bind(input.now, input.accountId, input.email, input.legacyEmailAuditDigest),
+      // A keyed email digest only the site can match stays as evidence of
+      // what was requested (#573); what else the row carried does not.
+      database.prepare(
+        `UPDATE audit_log SET detail_json = NULL, ip_hash = NULL, shredded_at = COALESCE(shredded_at, ?1)
+         WHERE subject_type = 'email' AND subject_id = ?2`,
+      ).bind(input.now, input.emailAuditDigest),
       database.prepare(`DELETE FROM accounts WHERE id = ?1`).bind(input.accountId),
       database.prepare(
         `INSERT INTO audit_log (id, at, actor_account_id, actor_role, action, subject_type, subject_id, detail_json, ip_hash, shredded_at)
@@ -726,6 +742,20 @@ export function createIdentityRepository(database: D1Database, options: { bootst
    * removes. Only an owner can upload, and a circle's prefix holds whatever its
    * current owner — or, after a revocation, its kept content — points at; a
    * claim that is pending, rejected, revoked or withdrawn grants nothing over it. */
+  /** Circles this account owned until a revocation and that nobody owns now:
+   * their prefix holds the kept content's pictures and, besides those, only
+   * drafts nobody ever saved (#573). */
+  async function listRevokedUnownedScopesForAccount(accountId: string) {
+    await ensureTables();
+    const result = await database.prepare(
+      `SELECT DISTINCT c.event_id, c.circle_id FROM circle_claims c
+       WHERE c.account_id = ?1 AND c.status = 'revoked'
+         AND NOT EXISTS (SELECT 1 FROM circle_claims v WHERE v.event_id = c.event_id AND v.circle_id = c.circle_id AND v.status = 'verified')
+       ORDER BY c.event_id, c.circle_id`,
+    ).bind(accountId).all<{ event_id: string; circle_id: string }>();
+    return result.results;
+  }
+
   async function listClaimScopesForAccount(accountId: string) {
     await ensureTables();
     const result = await database.prepare(
@@ -3014,7 +3044,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     upsertAccount, getAccountForAdmin, createSession, getSession, revokeSession, disableAccount, beginAccountDeletion, isAccountWritable, deleteAccount,
     listSoleOwnerOrganizerCandidates,
     listHostedThumbnailKeysForAccount, listHostedThumbnailKeys, 
-    createClaim, getClaim, withdrawClaim, listClaimsForAccount, listAccountClaimsForAdmin, searchClaimAccountsForAdmin, listClaimScopesForAccount, listClaimsByStatus, listPendingEventClaims, listAdminReviewSummary, listPendingAdminClaims,
+    createClaim, getClaim, withdrawClaim, listClaimsForAccount, listAccountClaimsForAdmin, searchClaimAccountsForAdmin, listClaimScopesForAccount, listRevokedUnownedScopesForAccount, listClaimsByStatus, listPendingEventClaims, listAdminReviewSummary, listPendingAdminClaims,
     hasVerifiedClaim, verifiedClaimId, ownsCircle, markClaimVerified, setClaimStatus, recordChallengeAttempt,
     getOverride, listCircleClaimsForAdmin, listCircleModerationHistory,
     putOverride, deleteOverride, takedownOverride, listLiveOverrides, getPublicOverride, setPostEventHidden,
