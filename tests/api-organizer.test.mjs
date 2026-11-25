@@ -126,25 +126,26 @@ test("a publication that fails before the index is written changes nothing reade
   const failing = (prefix) => new Proxy(bucket, { get: (target, key) => key === "put"
     ? async (name, ...rest) => { if (name.startsWith(prefix)) throw new Error("R2 unavailable"); return target.put(name, ...rest); }
     : typeof target[key] === "function" ? target[key].bind(target) : target[key] });
-  const retry = (cookie = owner) => api.call("POST", `/api/organizer/publications/${state.jobId}/retry`, { cookie, body: {} });
+  const approve = (cookie = admin) => review(state.candidateId, state.submittedVersion, cookie);
   // First an event file fails, then, with every file written, the history copy
-  // right before the index. Neither may move the pointer.
-  for (const [prefix, attempt] of [[`events/${EVENT_ID}/`, () => review(state.candidateId, state.submittedVersion)], ["history/", retry]]) {
+  // right before the index. Neither may move the pointer; approving again is the retry.
+  for (const prefix of [`events/${EVENT_ID}/`, "history/"]) {
     api.env.EVENT_DATA = failing(prefix);
     try {
-      const failed = await ok(await attempt());
-      assert.equal(failed.status, "failed", prefix);
-      state.jobId ??= failed.publicationJobId;
+      const failed = await ok(await approve(), 503);
+      assert.equal(failed.retryable, true, prefix);
     } finally {
       api.env.EVENT_DATA = bucket;
     }
     assert.equal(await (await bucket.get("index.json")).text(), indexBefore, `the pointer did not move when ${prefix} failed`);
     assert.equal(await publishedEvent(), undefined);
     assert.equal(await api.readerFile(EVENT_ID, "event.json"), null);
+    assert.equal((await ok(await api.call("GET", events(""), { cookie: owner }))).event.status, "submitted", "the submission waits for the retry");
   }
 
-  assert.equal((await retry(stranger)).status, 404);
-  assert.equal((await ok(await retry())).status, "published");
+  assert.equal((await approve(owner)).status, 403);
+  assert.equal((await ok(await approve())).status, "published");
+  assert.equal((await ok(await approve())).status, "published", "approving again after a lost response changes nothing");
   assert.equal((await publishedEvent()).definition.name, "PF45 x RF14");
   assert.equal((await api.readerFile(EVENT_ID, "event.json")).name, "PF45 x RF14");
   assert.ok((await api.readerFile("sample", "event.json")), "the other events stay published");

@@ -51,7 +51,7 @@ export function useAdminSiteStatus(onLoaded?: (answer: AdminSiteSettings) => voi
       }
       void readAdminSiteSettings().then(answer => {
         if (!active) return;
-        setData(current => current ? { ...current, services: answer.services, publicationActivities: answer.publicationActivities } : current);
+        setData(current => current ? { ...current, services: answer.services } : current);
         if (answer.services?.requestedAt !== requestedAt || answer.services.checkedAt !== null) setChecking(false);
       }).catch(failure => {
         if (active) { setChecking(false); setError(failure instanceof Error ? failure.message : "無法取得檢查結果。"); }

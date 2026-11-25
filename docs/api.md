@@ -128,12 +128,12 @@
 
 | 方法 | 路徑 | 權限 | 呼叫端 | #546 |
 |---|---|---|---|---|
-| POST | `/api/admin/organizer/events/:candidateId/review` | 管理者 | 主辦 `reviewOrganizerEvent` | 修改（階段 4a 起）：核准時在同一個請求內產生公開檔、寫入 R2 新版本與社團配號表，最後改寫 `index.json`。成功回應即代表已公開；失敗不改動公開內容，可重試 |
+| POST | `/api/admin/organizer/events/:candidateId/review` | 管理者 | 主辦 `reviewOrganizerEvent` | 修改（階段 4a 起）：核准時在同一個請求內產生公開檔、寫入 R2 新版本與社團配號表，最後改寫 `index.json`，再記錄核准。成功回應即代表已公開；失敗不改動公開內容，候選維持送審，再次核准即重試（#569） |
 | POST | `/api/organizer/events/:candidateId/amendments` | 活動成員 | 主辦 `startOrganizerAmendment` | 修改（階段 4a 起）：保留名單異動宣告，基準改從 R2 讀取並與公開的 `circles.json` 核對 |
 | GET／PUT | `/api/organizer/events/:candidateId/amendment` | 活動成員 | 主辦 `readOrganizerAmendment`、`saveOrganizerAmendment` | 保留：維護者 2026-11-22 決定保留宣告，以免社團 ID 變動使讀者收藏失效 |
-| POST | `/api/organizer/publications/:jobId/retry` | 活動成員 | 主辦 `retryOrganizerPublication` | 保留：R2 發布仍可能遇到可重試的失敗（例如另一筆發布剛完成） |
+| POST | `/api/organizer/publications/:jobId/retry` | 活動成員 | — | 已刪除（#569）：再次核准即重試 |
 | POST | `/api/admin/organizer/publications/:jobId/retry` | 管理者 | 前端未使用 | 已刪除（階段 4b） |
-| POST | `/api/organizer/events/:candidateId/reopen` | 活動成員 | 主辦 `reopenOrganizerEvent` | 保留：核對 R2 尚未公開這筆核准後，把失敗的候選退回修改 |
+| POST | `/api/organizer/events/:candidateId/reopen` | 活動成員 | — | 已刪除（#569）：發布失敗時候選維持送審，管理者可直接退回修改 |
 | POST | `/api/admin/organizer/events/:candidateId/abandon` | 管理者 | 主辦 `abandonOrganizerAmendment` | 已刪除（階段 4b） |
 
 ## 地圖貢獻（階段 5a 已刪除）

@@ -7,8 +7,10 @@ import { sha256Hex } from "./portal-crypto";
 import { assertBaselineProvenance, type OrganizerBaselineAdoption } from "./organizer-baseline-adoption";
 
 export type AmendmentPublishedSource = {
-  candidateId: string; candidateVersion: number; jobId: string; snapshotId: string; approvalHash: string;
-  snapshotJson: string; dataCommit: string; mainCommit: string; publishedAt: number;
+  candidateId: string; candidateVersion: number; snapshotId: string; approvalHash: string;
+  snapshotJson: string; publishedAt: number;
+  /** Git-era sources (`/1`, `/2` baselines) also name their job and commits. */
+  jobId?: string; dataCommit?: string; mainCommit?: string;
 };
 type Artifacts = Awaited<ReturnType<typeof buildApprovedPublicationArtifacts>>;
 export type OrganizerAmendmentBaseline = {

@@ -1,13 +1,13 @@
 # 主辦單位工作區契約
 
-> **角色（#546 階段 5b）**：Owner／Editor 已合併為單一「活動成員」，資料庫仍以 `owner` 保存。每位成員都能編輯、送審、管理成員、撤銷認領、重試發布與開始修正；網站管理者負責核准。
+> **角色（#546 階段 5b）**：Owner／Editor 已合併為單一「活動成員」，資料庫仍以 `owner` 保存。每位成員都能編輯、送審、管理成員、撤銷認領與開始修正；網站管理者負責核准並發布。
 
 **實作**：`app/organizer-status-summary.ts`、`app/organizer/organizer-workspace-header.tsx`、`app/organizer/use-organizer-pending-claims.ts`、`app/organizer/organizer-takedown-panel.tsx`
 
 主辦單位在獨立入口 `/organizer` 建立候選活動、匯入攤位資料、畫地圖、驗證、預覽並送審。它產生的是**候選內容**，不是公開資料：公開資料只來自核准後寫入活動資料 bucket 的版本。
 
-**實作**：[`app/organizer-event-groups.ts`](../../app/organizer-event-groups.ts)、[`app/admin-reference-edit.ts`](../../app/admin-reference-edit.ts)、[`app/organizer/`](../../app/organizer)、[`app/organizer-client.ts`](../../app/organizer-client.ts)、[`app/organizer-event.ts`](../../app/organizer-event.ts)、[`app/event-aliases.ts`](../../app/event-aliases.ts)、[`app/event-image.ts`](../../app/event-image.ts)、[`app/organizer-workspace.ts`](../../app/organizer-workspace.ts)、[`app/organizer-import.ts`](../../app/organizer-import.ts)、[`app/organizer-circle-groups.mjs`](../../app/organizer-circle-groups.mjs)、[`app/organizer-workbook.ts`](../../app/organizer-workbook.ts)、[`app/organizer-publication.ts`](../../app/organizer-publication.ts)、[`app/organizer-publication-presentation.ts`](../../app/organizer-publication-presentation.ts)、[`app/event-authoring-scope.ts`](../../app/event-authoring-scope.ts)、[`app/publication-bundle-assembler.ts`](../../app/publication-bundle-assembler.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`server/organizer.ts`](../../server/organizer.ts)、[`server/organizer-content.ts`](../../server/organizer-content.ts)、[`server/organizer-publication.ts`](../../server/organizer-publication.ts)、[`app/organizer-amendment.mjs`](../../app/organizer-amendment.mjs)、[`app/organizer-amendment-baseline.ts`](../../app/organizer-amendment-baseline.ts)、[`app/organizer-baseline-adoption.ts`](../../app/organizer-baseline-adoption.ts)、[`app/organizer-amendment-settings.ts`](../../app/organizer-amendment-settings.ts)、[`app/publication-artifacts.ts`](../../app/publication-artifacts.ts)、[`app/publication-dispatch.ts`](../../app/publication-dispatch.ts)、[`app/publication-scheduler.ts`](../../app/publication-scheduler.ts)、[`db/organizer-amendment-repository.ts`](../../db/organizer-amendment-repository.ts)、[`db/organizer-application-repository.ts`](../../db/organizer-application-repository.ts)
-**測試**：`tests/organizer-event-groups.test.mjs`、`tests/api-organizer.test.mjs`、`tests/organizer-workspace.test.mjs`、`tests/event-image.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-reopen.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/browser/catalog-browse.mjs`、`tests/organizer-import.test.mjs`、`tests/organizer-circle-groups.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/multi-space-event-map.test.mjs`、`tests/organizer-amendment.test.mjs`、`tests/organizer-amendment-repository.test.mjs`、`tests/organizer-publication-presentation.test.mjs`、`tests/publication-artifacts.test.mjs`、`tests/publication-amendment-artifacts.test.mjs`、`tests/organizer-event-aliases.test.mjs`、`tests/organizer-amendment-settings.test.mjs`
+**實作**：[`app/organizer-event-groups.ts`](../../app/organizer-event-groups.ts)、[`app/admin-reference-edit.ts`](../../app/admin-reference-edit.ts)、[`app/organizer/`](../../app/organizer)、[`app/organizer-client.ts`](../../app/organizer-client.ts)、[`app/organizer-event.ts`](../../app/organizer-event.ts)、[`app/event-aliases.ts`](../../app/event-aliases.ts)、[`app/event-image.ts`](../../app/event-image.ts)、[`app/organizer-workspace.ts`](../../app/organizer-workspace.ts)、[`app/organizer-import.ts`](../../app/organizer-import.ts)、[`app/organizer-circle-groups.mjs`](../../app/organizer-circle-groups.mjs)、[`app/organizer-workbook.ts`](../../app/organizer-workbook.ts)、[`app/organizer-publication.ts`](../../app/organizer-publication.ts)、[`app/event-authoring-scope.ts`](../../app/event-authoring-scope.ts)、[`app/publication-bundle-assembler.ts`](../../app/publication-bundle-assembler.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`server/organizer.ts`](../../server/organizer.ts)、[`server/organizer-content.ts`](../../server/organizer-content.ts)、[`server/organizer-publication.ts`](../../server/organizer-publication.ts)、[`app/organizer-amendment.mjs`](../../app/organizer-amendment.mjs)、[`app/organizer-amendment-baseline.ts`](../../app/organizer-amendment-baseline.ts)、[`app/organizer-baseline-adoption.ts`](../../app/organizer-baseline-adoption.ts)、[`app/organizer-amendment-settings.ts`](../../app/organizer-amendment-settings.ts)、[`app/publication-artifacts.ts`](../../app/publication-artifacts.ts)、[`db/organizer-amendment-repository.ts`](../../db/organizer-amendment-repository.ts)、[`db/organizer-application-repository.ts`](../../db/organizer-application-repository.ts)
+**測試**：`tests/organizer-event-groups.test.mjs`、`tests/api-organizer.test.mjs`、`tests/organizer-workspace.test.mjs`、`tests/event-image.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/browser/catalog-browse.mjs`、`tests/organizer-import.test.mjs`、`tests/organizer-circle-groups.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/multi-space-event-map.test.mjs`、`tests/organizer-amendment.test.mjs`、`tests/organizer-amendment-repository.test.mjs`、`tests/publication-artifacts.test.mjs`、`tests/publication-amendment-artifacts.test.mjs`、`tests/organizer-event-aliases.test.mjs`、`tests/organizer-amendment-settings.test.mjs`
 **決策**：[ADR-0047](../adr/0047-organizer-onboarding-opens-into-a-resumable-workspace.md)、[ADR-0046](../adr/0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md)、[ADR-0058](../adr/0058-publication-is-enforced-by-the-app-not-the-ruleset.md)、[ADR-0038](../adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md)、[ADR-0039](../adr/0039-one-data-repo-for-events-and-references.md)、[ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md)、[ADR-0068](../adr/0068-published-event-settings-are-declared-amendments.md)、[ADR-0070](../adr/0070-event-images-are-published-by-approval-under-their-hash.md)
 
 首次發布與發布後更正均已接上 Web UI 與自動發布。真實執行證據見 [CH20 首次發布／恢復](https://github.com/dekkmarsvin/tw_doujin_event/issues/212)及[地圖更正](https://github.com/dekkmarsvin/tw_doujin_event/issues/190)，其中記錄的人工補救不因功能已上線而抹除。部署模式與缺少 dispatcher 時的處置見[發布邊界](#發布邊界)。
@@ -86,7 +86,7 @@ R2 清除暫時失敗時，資料維持撤下，搜尋顯示圖片待清除並�
 - 「查看全部項目」不完成 onboarding；它只暫時打開五個區段。每位協作者的上次引導任務與建置冊區段由 `PATCH …/workspace` 分別保存，跨登入恢復且不互相覆蓋。
 - workspace 偏好與 onboarding 狀態不屬於候選內容：更新它們不增加 `current_version`，也不建立活動 revision。ADR-0047 上線前已存在、沒有 workspace state 的候選一律從建置冊開啟。
 - 表單或地圖有未儲存變更時，切換活動、引導任務或建置冊區段（含準備進度項目與「下一步」、「查看全部項目」／「回到基本設定」）會提供「儲存並切換／放棄／取消」；取消保留目前內容，沒有未儲存變更時直接切換。重新整理或關閉瀏覽器頁面則使用瀏覽器既有的未儲存變更確認。對話框沿用全站 shared modal focus lifecycle。Revision 一旦儲存成功，畫面會先同步新版本再執行引導或離開動作；後續動作失敗不會讓下一次儲存沿用舊版本。「儲存並離開」後保持未選取活動，不會因清單刷新自動重開第一筆。
-- 建置冊直接開放活動、場館與場地、攤位匯入、地圖、檢查與發布五區。檢查與發布在同一面板依序提供檢查、預覽、送審、審閱與發布進度；草稿或要求修改狀態下，每次進入該區會自動執行一次檢查，不需先按「執行檢查」。先前保存為 `validate` 的區段偏好以 `review` 恢復。Readiness 顯示完成區段數、具名阻擋項與建議下一步，不顯示百分比；檢查與發布只在 published 完成，其列依階段顯示「檢查通過」（目前版本已通過檢查；能否送審仍由角色與發布啟用決定，由面板說明）、「審閱中」、「等待發布」或「發布中」，讓通過檢查在側欄可見；`blocked` 只代表缺少技術前置資料，區段本身仍可開啟查看。活動或場館表單有未儲存變更時，Readiness 以目前表單內容即時顯示「尚未儲存」，不沿用上一版結果。
+- 建置冊直接開放活動、場館與場地、攤位匯入、地圖、檢查與發布五區。檢查與發布在同一面板依序提供檢查、預覽、送審、審閱與發布結果；草稿或要求修改狀態下，每次進入該區會自動執行一次檢查，不需先按「執行檢查」。先前保存為 `validate` 的區段偏好以 `review` 恢復。Readiness 顯示完成區段數、具名阻擋項與建議下一步，不顯示百分比；檢查與發布只在 published 完成，其列依階段顯示「檢查通過」（目前版本已通過檢查；能否送審仍由角色與發布啟用決定，由面板說明）、「審閱中」，讓通過檢查在側欄可見；`blocked` 只代表缺少技術前置資料，區段本身仍可開啟查看。活動或場館表單有未儲存變更時，Readiness 以目前表單內容即時顯示「尚未儲存」，不沿用上一版結果。
 - 五區共用 [`app/organizer-workspace.ts`](../../app/organizer-workspace.ts) 的 prerequisite evaluator。活動與場館來自草稿 validation；匯入要求至少一列且沒有 import error；地圖要求匯入已完成、完整 day × venue-space coverage，且每份已保存地圖必須通過與正式 validation 相同的攤位覆蓋、未知攤位、重疊與幾何規則（未知攤位在候選活動是 warning，不擋住地圖區；理由見下方[地圖](#地圖)）；驗證只在沒有 error 且 `last_validated_version` 等於目前 candidate version 時完成，未完成時以 `validation_required` 阻擋項列在檢查與發布；只有 published 才把檢查與發布區段標為完成。
 
 ## 管理者建立與邀請
@@ -105,14 +105,16 @@ R2 清除暫時失敗時，資料維持撤下，搜尋顯示圖片待清除並�
 ## 候選活動的狀態
 
 ```text
-draft → submitted → approved → publishing → published
-          ↓                       ↓
-   changes_requested            failed
+draft → submitted → published
+          ↓
+   changes_requested
 ```
+
+核准並發布在同一個請求內完成，送審版本直接變為 published；發布失敗時候選維持 submitted，再次核准即重試。`approved`、`publishing`、`failed` 只出現在舊流程留下的紀錄。修正候選另有 `abandoned`（已終止，公開內容不變）。
 
 - `draft` 與 `changes_requested` 可編輯；其餘狀態一律不可寫入。
 - 每一次寫入都要帶 `expectedVersion`，成功後 `current_version` 遞增並留下一筆 immutable revision。版本落後回 409 並指出目前版本，不靜默覆寫。
-- `eventId` 在 CREATE 的**首次送審時鎖定**，之後不得改成別的值；未送審前可以修改。它在 CREATE 候選之間唯一（partial unique index）；明確 AMEND 候選沿用來源 eventId 並在建立時鎖定，同事件最多一份尚未 published 的 AMEND。首次發布的核准 handler 與 executor 仍以 `event_id_collision` 拒絕同名 published event，不 silent overwrite 或自動轉換。兩條地圖管線仍靠 `candidate_id` 分離。
+- `eventId` 在 CREATE 的**首次送審時鎖定**，之後不得改成別的值；未送審前可以修改。它在 CREATE 候選之間唯一（partial unique index）；明確 AMEND 候選沿用來源 eventId 並在建立時鎖定，同事件最多一份尚未 published 的 AMEND。首次發布仍以 `event_id_collision` 拒絕同名 published event，不 silent overwrite 或自動轉換。兩條地圖管線仍靠 `candidate_id` 分離。
 
 ## 草稿內容
 
@@ -134,7 +136,7 @@ draft → submitted → approved → publishing → published
 - `GET /api/organizer/events/:candidateId/image?sha256=&contentType=` 供候選的成員／Admin 預覽暫存圖片，回應 `private, no-store`、`nosniff` 與 sandbox CSP；已公開的圖片直接讀公開網址。
 - 儲存草稿或修正宣告時，若圖片與上次儲存不同，伺服器重新讀取暫存位元組並重新檢查，雜湊、類型與尺寸都必須相符，否則 422；相同時不讀 bucket。
 - 送審成功後刪除此候選送審內容沒有使用的暫存。只在送審後清理：草稿可編輯時，協作者的儲存隨時可能指向任何一張暫存。清理失敗不影響送審。
-- 核准時、建立發布工作之前，把核准內容的圖片複製到公開 bucket 的 `event-images/<sha256>.<ext>`；已存在則略過。只有對「目前待審版本」的核准才複製；已退回修改或版本不符的過時核准不會公開圖片。暫存位元組缺少或不符時回 503 `event_image_unavailable`，候選狀態不變，可再次核准。
+- 核准時、寫入活動資料之前，把核准內容的圖片複製到公開 bucket 的 `event-images/<sha256>.<ext>`；已存在則略過。只有對「目前待審版本」的核准才複製；已退回修改或版本不符的過時核准不會公開圖片。暫存位元組缺少或不符時回 503 `event_image_unavailable`，候選狀態不變，可再次核准。
 
 新增活動日時，第一日的日期留空；之後以最後一個有效日期加一天，若已有列但皆無有效日期才回退為作者當地的今天。新活動日的 id 取最小尚未使用的序號。這是可覆寫的預設值，不是驗證規則。
 
@@ -286,17 +288,12 @@ AMEND 沿用驗證、Reader 預覽、Owner／Admin 送審及 Admin 核准。送�
 
 ## 發布邊界
 
-核心實作：[`server/organizer-publication.ts`](../../server/organizer-publication.ts)、[`app/organizer-publication.ts`](../../app/organizer-publication.ts)、[`app/publication-dispatch.ts`](../../app/publication-dispatch.ts)、[`app/event-data-publisher.ts`](../../app/event-data-publisher.ts)、[`app/publication-artifacts.ts`](../../app/publication-artifacts.ts)、[`app/organizer-publication-presentation.ts`](../../app/organizer-publication-presentation.ts)。部署設定與回滾見[部署 runbook](../runbooks/deployment.md#核准即發布)。
+核心實作：[`server/organizer-publication.ts`](../../server/organizer-publication.ts)、[`app/event-data-publisher.ts`](../../app/event-data-publisher.ts)、[`app/publication-artifacts.ts`](../../app/publication-artifacts.ts)。部署設定與回滾見[部署 runbook](../runbooks/deployment.md#核准即發布)。
 
-- 依 ADR-0057，UI 動作為「核准並發布」。發布啟用（`ORGANIZER_PUBLICATION_MODE=r2` 且[網站營運設定](./admin.md#網站營運設定)的發布開關開啟）時，同一 D1 交易記錄核准、建立唯一的發布工作並將候選改為發布中，再於同一請求內完成發布：產生公開檔、更新社團配號表、寫入新版本，最後以 ETag 條件改寫 `index.json`。未啟用時核准回 503，候選保留送審狀態。
-- **寫入失敗不切換 `index.json`**，讀者看到的內容不變；發布工作記為失敗，可重試的失敗可再試。另一筆發布剛完成造成的 ETag 衝突同樣要求重試。
-- 同版本核准重送沿用同一筆發布工作，不重複發布；`index.json` 已指向這次核准時視為已發布。
-- `POST /api/organizer/publications/:jobId/retry` 只恢復同一筆失敗且可重試的發布工作，不建立另一筆。
-- `POST /api/organizer/events/:candidateId/reopen` 以目前版本與必填理由把發布失敗的候選退回修改；只有發布尚未開始寫入活動資料、且讀者尚未看到這次核准（`index.json` 沒有指向它）時才允許；已開始寫入的失敗只能重試，工作區會說明原因。成功遞增候選版本並新增含理由的退回修改紀錄，舊發布工作不能再重試。
-- 請求中斷留下的發布工作由之後的寫入請求接手；處理方式見部署 runbook。
-- 工作區只顯示單一發布結果與可理解的失敗原因。發布進行中每五秒重新讀取工作與活動列表狀態，不重疊請求；讀取失敗立即標示目前為上次讀取的進度，401 停止輪詢並提供重新登入入口，其他錯誤連續三次後停止，提供手動重新讀取。
-
-內部的發布工作沿用舊流程留下的多步驟 executor、lease 與 checkpoint；改為單純在核准請求內完成的工作見 [#569](https://github.com/dekkmarsvin/tw_doujin_event/issues/569)。
+- 依 ADR-0057，UI 動作為「核准並發布」。發布啟用（`ORGANIZER_PUBLICATION_MODE=r2` 且[網站營運設定](./admin.md#網站營運設定)的發布開關開啟）時，核准請求先寫入活動資料：產生公開檔、更新社團配號表、寫入新版本，最後以 ETag 條件改寫 `index.json`；成功後同一 D1 交易記錄核准、將候選改為 published 並寄出結果通知。未啟用或發布開關暫停時核准回 503，候選保留送審狀態。
+- **寫入失敗不切換 `index.json`**，讀者看到的內容不變，候選維持 submitted。可重試的失敗（儲存暫時無法寫入、另一筆發布剛完成造成的 ETag 衝突）回 503，再按一次核准即重試；內容本身無法發布（例如首次發布的活動代號已公開、修正基準已變更）回 409，由管理者退回修改。
+- 同一版本再次核准不重複發布：`index.json` 已指向這次核准時直接完成 D1 紀錄，候選已 published 時直接回成功。這也涵蓋寫入成功但 D1 交易失敗、或回應遺失的情況。
+- 沒有發布工作、背景接手或輪詢；核准回應就是發布結果。
 
 ### 核准 snapshot 產檔
 
@@ -312,11 +309,8 @@ AMEND snapshot/4 額外保存不可變 `amendment.baselineJson`／`baselineSha25
 - 匯入 API 拒絕未宣告的活動日、場地或展區，並在錯誤訊息指出來源列號。
 - 預覽裡移除的列不會被匯入，也不會產生待修正項目；被它解除的攤位重複不再回報。
 - 手動補正過的列仍要通過與其他列相同的檢查：未宣告的活動日、場地或展區照樣被匯入 API 拒絕，介面上的修正不是繞過那道檢查的路。
-- `ORGANIZER_PUBLICATION_MODE` 未設定或缺少 dispatcher 時，核准 API 回 503，候選保留 `submitted`，不建立發布工作。
-- 只有成員或管理者以有效 session、目前版本與非空理由可退回 `failed` 候選；發布已開始寫入或讀者已看到這次核准時拒絕。
-- 退回期間若版本 CAS 失敗，不新增 revision、review 或 audit。
-- 停在 `queued` 超過 15 分鐘的發布工作，在下一次寫入請求觸發逾時處理後，於活動列表與活動頁顯示為失敗且可重試，重試的是原本那一筆 job；沒有任何介面可以手動啟動一筆 `queued` job。
-- 逾時失敗的訊息只有在該 job 一個 checkpoint 都沒有時才說發布沒有開始；已經留下 checkpoint 的工作沿用既有 retryable 措辭，不與發布結果互相矛盾。這條對核准流程建立的 job（`preparing_data`）與舊建立路徑（`assemble`）都成立。
+- `ORGANIZER_PUBLICATION_MODE` 未設定時，核准 API 回 503，候選保留 `submitted`。
+- 發布寫入失敗時 `index.json` 不變、候選保留 `submitted`；再次核准成功後才記錄核准與 published，只留一筆核准紀錄。
 - 公開 bundle 不含 organizer 介面與寫入 route，由 `tests/public-artifact.test.mjs` 把關。
 - 新候選活動預設進入引導；跨登入可恢復每位協作者自己的位置；完成 onboarding、切換區段或執行驗證都不會產生候選內容 revision。
 - workspace preference 與完成 onboarding 的最終 SQL 寫入會再次檢查 active grant；權限在請求途中被撤銷時不會留下流程狀態變更，對外仍回 404。

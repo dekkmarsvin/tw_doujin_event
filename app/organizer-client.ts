@@ -91,17 +91,6 @@ export type OrganizerEventDetail = {
     };
     rows: OrganizerNormalizedImportRow[];
   };
-  publication: null | {
-    id: string;
-    status: string;
-    step: string;
-    error: string | null;
-    failureCode: string | null;
-    retryable: boolean;
-    started: boolean;
-    candidateVersion: number;
-    updatedAt: number;
-  };
   workspace: {
     mode: "guided" | "binder";
     onboardingCompletedAt: number | null;
@@ -390,21 +379,6 @@ export function reviewOrganizerEvent(candidateId: string, expectedVersion: numbe
   return organizerCall<{ ok: true; status: OrganizerCandidateStatus; selfApproval: boolean }>(`/api/admin/organizer/events/${encodeURIComponent(candidateId)}/review`, {
     method: "POST",
     body: JSON.stringify({ expectedVersion, decision, note }),
-  });
-}
-
-export function retryOrganizerPublication(jobId: string) {
-  return organizerCall<{ ok: true; status: string; step: string }>(`/api/organizer/publications/${encodeURIComponent(jobId)}/retry`, {
-    method: "POST",
-  });
-}
-
-export function reopenOrganizerEvent(candidateId: string, expectedVersion: number, reason: string) {
-  return organizerCall<{
-    ok: true; status: "changes_requested"; version: number; previousPublicationJobId: string;
-  }>(`/api/organizer/events/${encodeURIComponent(candidateId)}/reopen`, {
-    method: "POST",
-    body: JSON.stringify({ expectedVersion, reason }),
   });
 }
 

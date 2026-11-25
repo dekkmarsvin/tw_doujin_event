@@ -1,5 +1,4 @@
-import type { PublicationActivity, ServiceChecks, SiteSettings, SiteSettingsInput } from "../app/site-settings";
-import { organizerCandidateEdition } from "./account-notification-repository";
+import type { ServiceChecks, SiteSettings, SiteSettingsInput } from "../app/site-settings";
 
 type SettingsRow = {
   organizer_application_mode: SiteSettings["organizerApplicationMode"]; organizer_allowed_emails_json: string;
@@ -57,25 +56,8 @@ export function createSiteSettingsRepository(database: D1Database, ensureTables:
           organizerAllowedEmailCount: s.organizerAllowedEmails.length, accountNotificationsEnabled: s.accountNotificationsEnabled,
           adminReviewNotificationsEnabled: s.adminReviewNotificationsEnabled, publicationEnabled: s.publicationEnabled,
           contactUrl: s.contactUrl, claimReviewNotice: s.claimReviewNotice })),
-      // An intentional pause must not turn a queued job into a timeout on resume.
-      // Keep its identity/checkpoints, and restart only its existing queue wait window.
-      database.prepare(`UPDATE organizer_publication_jobs SET updated_at = ?1
-        WHERE status = 'queued' AND ?2 = 1 AND changes() = 1`)
-        .bind(input.now, Number(!previous.publicationEnabled && s.publicationEnabled)),
     ]);
     return results[0].meta.changes === 1 ? getSiteSettings() : null;
-  }
-  async function listActivePublicationActivities() {
-    await ensureTables();
-    const rows = (await database.prepare(`SELECT j.id, j.candidate_id AS candidateId, c.event_id AS eventId,
-        c.tentative_name AS eventName, ${organizerCandidateEdition} AS edition,
-        j.candidate_version AS candidateVersion, c.current_version AS currentVersion, c.status AS candidateStatus,
-        j.status, j.step, j.updated_at AS updatedAt, j.retryable
-      FROM organizer_publication_jobs j JOIN organizer_event_candidates c ON c.id = j.candidate_id
-      WHERE j.status IN ('queued', 'publishing', 'failed') AND c.current_version = j.candidate_version
-        AND c.status <> 'abandoned'
-      ORDER BY j.created_at, j.id`).all<Omit<PublicationActivity, "retryable"> & { retryable: number }>()).results;
-    return rows.map(row => ({ ...row, retryable: !!row.retryable }));
   }
   async function getServiceChecks(): Promise<ServiceChecks | null> {
     await ensureTables();
@@ -96,5 +78,5 @@ export function createSiteSettingsRepository(database: D1Database, ensureTables:
     await database.prepare(`UPDATE site_service_check SET checked_at = ?2, result_json = ?3
       WHERE id = 'global' AND requested_at = ?1 AND checked_at IS NULL`).bind(requestedAt, now, JSON.stringify(result)).run();
   }
-  return { getSiteSettings, updateSiteSettings, listActivePublicationActivities, getServiceChecks, requestServiceCheck, completeServiceCheck };
+  return { getSiteSettings, updateSiteSettings, getServiceChecks, requestServiceCheck, completeServiceCheck };
 }

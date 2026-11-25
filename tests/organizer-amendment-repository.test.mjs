@@ -16,14 +16,13 @@ after(async () => { await mf.dispose(); await vite.close(); });
 before(() => repository.ensureTables());
 const now = 1789440000000;
 const hash = "a".repeat(64);
-const commit = "b".repeat(40);
 const draftJson = JSON.stringify({ schema: "organizer-event-draft/1", event: { id: "event-alpha", name: "活動", days: [] }, venue: { assignments: [] }, officialSource: { label: "官方", url: "https://organizer.invalid" } });
 const rows = [{ sourceRow: 1, dayId: "1", venueSpaceId: "hall", areaId: "A", codes: ["A01", "A02"], circleName: "甲社", stableKey: null, identityGroup: null }];
 const owner = { accountId: "owner", role: "owner", admin: false, now };
 const editor = { accountId: "editor", role: "owner", admin: false, now };
 const admin = { accountId: "admin", role: "admin", admin: true, now };
 const createInput = (extra = {}) => ({ id: "amendment", sourceCandidateId: "source", sourceVersion: 1,
-  sourceJobId: "published-job", sourceSnapshotId: "published-snapshot", sourceApprovalHash: hash, sourceMainCommit: commit,
+  sourceSnapshotId: "published-snapshot", sourceApprovalHash: hash,
   eventId: "event-alpha", draftJson, baselineJson: '{"fixed":"baseline"}', baselineSha256: hash,
   rows, maps: [{ periodKey: "1", venueSpaceId: "hall", content: { schema: "map-contribution-draft/1", layout: { copied: true } } }], actor: owner, ...extra });
 const saveInput = (extra = {}) => ({ candidateId: "amendment", expectedVersion: 1, baselineSha256: hash,
@@ -39,8 +38,6 @@ beforeEach(async () => {
     VALUES (?1,'source',?2,?3,'admin',?4)`).bind(crypto.randomUUID(), actor.accountId, actor.role, now).run();
   await db.prepare(`INSERT INTO organizer_submission_snapshots (id,candidate_id,candidate_version,snapshot_json,sha256,created_by,created_at)
     VALUES ('published-snapshot','source',1,'{}',?1,'owner',?2)`).bind(hash, now).run();
-  await db.prepare(`INSERT INTO organizer_publication_jobs (id,candidate_id,candidate_version,snapshot_id,approval_hash,status,step,main_merge_sha,created_at,updated_at)
-    VALUES ('published-job','source',1,'published-snapshot',?1,'published','completed',?2,?3,?3)`).bind(hash, commit, now).run();
 });
 const count = async (table, where = "1=1") => (await db.prepare(`SELECT count(*) AS count FROM ${table} WHERE ${where}`).first()).count;
 
@@ -75,7 +72,7 @@ test("Editor cannot create; Admin may create without granting themselves event o
 });
 
 test("stale source, approval mismatch and revoked Owner cannot create partial candidates", async () => {
-  for (const extra of [{ sourceVersion: 2 }, { sourceApprovalHash: "d".repeat(64) }, { sourceMainCommit: "e".repeat(40) }, { eventId: "another-event" }]) {
+  for (const extra of [{ sourceVersion: 2 }, { sourceApprovalHash: "d".repeat(64) }, { sourceSnapshotId: "another-snapshot" }, { eventId: "another-event" }]) {
     assert.deepEqual(await repository.createOrganizerAmendment(createInput(extra)), { ok: false });
   }
   await db.prepare("UPDATE organizer_event_grants SET revoked_at = ?1 WHERE candidate_id = 'source' AND account_id = 'owner'").bind(now).run();
@@ -157,7 +154,7 @@ test("ordinary candidate saves and imports cannot bypass the amendment-only path
   await repository.createOrganizerAmendment(createInput());
   assert.equal((await repository.saveOrganizerCandidate({ candidateId: "amendment", actorAccountId: "owner", expectedVersion: 1, eventId: "event-alpha", draftJson, now })).ok, false);
   assert.equal((await repository.replaceOrganizerImport({ candidateId: "amendment", actorAccountId: "owner", expectedVersion: 1, source: {}, rows, now })).ok, false);
-  assert.equal((await repository.reviewOrganizerCandidate({ candidateId: "amendment", actorAccountId: "admin", expectedVersion: 1, decision: "approve", now })).ok, false);
+  assert.equal((await repository.publishOrganizerCandidate({ candidateId: "amendment", actorAccountId: "admin", expectedVersion: 1, snapshotId: "published-snapshot", approvalHash: hash, now })).ok, false);
   assert.equal((await repository.getOrganizerCandidate("amendment")).current_version, 1);
   assert.equal((await repository.getOrganizerAmendment("amendment")).changes_json, "[]");
 });

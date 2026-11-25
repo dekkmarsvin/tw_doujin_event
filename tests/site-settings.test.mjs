@@ -12,7 +12,6 @@ const { SESSION_COOKIE } = await load("/app/circle-portal-handlers.ts");
 const { createAuth } = await load("/server/auth.ts");
 const { createAdmin } = await load("/server/admin.ts");
 const { hmacSign } = await load("/app/portal-crypto.ts");
-const { runPublicationTick } = await load("/app/publication-scheduler.ts");
 const { runRequestedServiceCheck, checkMailService, checkPublicationService } = await load("/app/site-service-check.ts");
 const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: "export default {fetch(){return new Response('ok')}}", d1Databases: { DB: "site-settings" } }));
 const db = await mf.getD1Database("DB");
@@ -109,71 +108,6 @@ test("Worker does not seed settings; Pages defaults are conservative and never o
   const settings = await pages.getSiteSettings();
   await createIdentityRepository(db).getSiteSettings();
   assert.deepEqual(await worker.getSiteSettings(), settings);
-});
-
-test("publication pause preserves queued work and resume restarts the existing timeout window", async () => {
-  await repo.createOrganizerCandidate({ id: "candidate", tentativeName: "排程活動", ownerEmail: "owner@example.test", createdByAccountId: admin,
-    draftJson: "{}", now });
-  await db.prepare(`INSERT INTO organizer_publication_jobs (id, candidate_id, candidate_version, snapshot_id, approval_hash, created_at, updated_at)
-    VALUES ('job', 'candidate', 1, 'snapshot', 'hash', ?1, ?1)`).bind(now - 3600000).run();
-  const before = await repo.getOrganizerPublicationJob("job");
-  await save({ publicationEnabled: false });
-  const driver = { eventExists: () => { throw new Error("must not execute"); }, run: () => { throw new Error("must not execute"); } };
-  assert.deepEqual(await runPublicationTick({ repository: repo, driver, now: () => now }), { expired: [], results: [] });
-  assert.deepEqual(await repo.getOrganizerPublicationJob("job"), before);
-  const listed = (await (await handlers.adminGetSiteSettings(request())).json()).publicationActivities;
-  assert.equal(listed[0].eventName, "排程活動"); assert.equal(listed[0].status, "queued");
-  await save({ publicationEnabled: true });
-  const resumed = await repo.getOrganizerPublicationJob("job");
-  assert.equal(resumed.updated_at, now);
-  for (const key of ["id", "step", "snapshot_id", "approval_hash", "status"]) assert.equal(resumed[key], before[key]);
-  assert.deepEqual(await repo.expireStalledOrganizerPublicationJobs({ now, timeoutMs: 900000 }), { expired: [] });
-});
-
-test("publication summaries retain current failures independently of retry, pause or newer activity editions", async () => {
-  assert.equal((await save({ publicationEnabled: false })).status, 200);
-  const fixtures = [
-    { id: "current-failed", eventId: "same-event", version: 17, status: "failed", jobStatus: "failed", retryable: 1 },
-    { id: "newer-edition", eventId: "same-event", version: 99, status: "draft", operation: "AMEND" },
-    { id: "hard-failed", version: 1, status: "failed", jobStatus: "failed", retryable: 0 },
-    { id: "historical", version: 2, status: "changes_requested", jobStatus: "failed", jobVersion: 1, retryable: 0 },
-    { id: "terminated", version: 1, status: "abandoned", jobStatus: "failed", retryable: 0 },
-    { id: "completed", version: 1, status: "published", jobStatus: "published", retryable: 0 },
-    { id: "waiting", version: 1, status: "publishing", jobStatus: "queued", retryable: 1 },
-    { id: "running", version: 1, status: "publishing", jobStatus: "publishing", retryable: 1 },
-  ];
-  for (const [index, candidate] of fixtures.entries()) {
-    await repo.createOrganizerCandidate({ id: candidate.id, tentativeName: candidate.id, ownerEmail: "owner@example.test",
-      createdByAccountId: admin, draftJson: '{}', now: now + index });
-    await db.prepare(`UPDATE organizer_event_candidates SET event_id = ?2, current_version = ?3,
-      status = ?4, publication_operation = ?5 WHERE id = ?1`)
-      .bind(candidate.id, candidate.eventId ?? null, candidate.version, candidate.status, candidate.operation ?? "CREATE").run();
-    if (candidate.jobStatus) await db.prepare(`INSERT INTO organizer_publication_jobs
-      (id, candidate_id, candidate_version, snapshot_id, approval_hash, status, step, retryable, error, created_at, updated_at)
-      VALUES (?1, ?2, ?3, 'private-snapshot', 'private-hash', ?4, 'waiting_data_checks', ?5, 'private-error', ?6, ?7)`)
-      .bind(`job-${candidate.id}`, candidate.id, candidate.jobVersion ?? candidate.version, candidate.jobStatus,
-        candidate.retryable, now - 86400000 + index, now - 3600000 + index).run();
-  }
-  const before = (await db.prepare("SELECT id, status, updated_at, retryable FROM organizer_publication_jobs ORDER BY id").all()).results;
-  const settings = await repo.getSiteSettings();
-  assert.equal(settings.publicationEnabled, false);
-  const response = await handlers.adminGetSiteSettings(request());
-  const data = await response.json();
-  const rows = data.publicationActivities;
-  assert.deepEqual(rows.map(row => row.id), ["job-current-failed", "job-hard-failed", "job-waiting", "job-running"]);
-  const current = rows.find(row => row.candidateId === "current-failed");
-  assert.equal(current.eventId, "same-event");
-  assert.equal(current.edition, 1, "a newer edition does not resolve the earlier candidate's failure");
-  assert.equal(current.candidateVersion, 17);
-  assert.equal(current.currentVersion, 17);
-  assert.equal(current.candidateStatus, "failed");
-  assert.equal(current.updatedAt, now - 3600000);
-  assert.equal(current.retryable, true);
-  assert.equal(rows.find(row => row.candidateId === "hard-failed").retryable, false);
-  assert.equal(rows.find(row => row.candidateId === "waiting").status, "queued", "a list read does not expire old waiting work");
-  assert.equal(rows.find(row => row.candidateId === "running").status, "publishing");
-  assert.doesNotMatch(JSON.stringify(rows), /private-snapshot|private-hash|private-error/);
-  assert.deepEqual((await db.prepare("SELECT id, status, updated_at, retryable FROM organizer_publication_jobs ORDER BY id").all()).results, before);
 });
 
 test("service checks use Worker credentials, return safe sources and never send a message", async () => {

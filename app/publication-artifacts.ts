@@ -122,7 +122,7 @@ export async function buildApprovedPublicationArtifacts(source: ApprovedArtifact
       const gitPinned = baseline.schema !== "organizer-amendment-baseline/3";
       if (!["organizer-amendment-baseline/1", "organizer-amendment-baseline/2", "organizer-amendment-baseline/3"].includes(baseline.schema) || !Array.isArray(approved.changes)
         || baseline.source.candidateId === snapshot.candidateId || !Number.isSafeInteger(baseline.source.candidateVersion) || baseline.source.candidateVersion < 1
-        || (gitPinned && (!COMMIT.test(baseline.source.dataCommit) || !COMMIT.test(baseline.source.mainCommit) || !COMMIT.test(baseline.mainCommit ?? "")
+        || (gitPinned && (!COMMIT.test(baseline.source.dataCommit ?? "") || !COMMIT.test(baseline.source.mainCommit ?? "") || !COMMIT.test(baseline.mainCommit ?? "")
           || baseline.pin?.eventId !== snapshot.eventId || !sameJson(parseEventDataPin(baseline.pin), baseline.pin)))
         || baseline.event.id !== snapshot.eventId
         || !sameJson(snapshotDraft, baseline.draft) || !referencesMatchBaseline(baseline.references, snapshot.references)) fail("修正 snapshot 與固定基準的活動、reference 或版本不符。", "snapshot_mismatch");

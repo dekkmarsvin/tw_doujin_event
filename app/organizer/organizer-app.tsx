@@ -113,7 +113,6 @@ function MobileNotificationResult() {
   return <section className={styles.centerCard}>
     {error ? <p role="alert">{error}</p> : detail ? <><h2>{detail.event.tentativeName}</h2>
       <p>目前狀態：{STATUS_LABEL[detail.event.status]}</p>
-      {detail.publication && <p>發布狀態：{detail.publication.status === "published" ? "已公開" : detail.publication.status === "failed" ? "發布未完成" : "正在處理"}</p>}
       <p>{new URLSearchParams(window.location.search).get("section") === "members"
         ? "成員管理請改用桌機。請在桌機開啟同一個連結，接續這個工作區。"
         : "活動資料與地圖編輯請改用桌機。請在桌機開啟同一個連結，接續這個工作區。"}</p></> : <p role="status">載入結果…</p>}
@@ -166,8 +165,6 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   });
   const currentSelection = useRef(selectedId);
   useEffect(() => { currentSelection.current = selectedId; }, [selectedId]);
-  const [publicationReadError, setPublicationReadError] = useState<{ candidateId: string; needsLogin: boolean } | null>(null);
-  const [pollGeneration, setPollGeneration] = useState(0);
   const [detail, setDetail] = useState<OrganizerEventDetail | null>(null);
   const [fieldRequest, setFieldRequest] = useState<FieldRequest | null>(null);
   const [section, setSection] = useState<OrganizerWorkspaceSection>("event");
@@ -225,8 +222,6 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   ) => {
     const next = await readOrganizerEvent(candidateId);
     if (!isCurrent()) return null;
-    setPublicationReadError(null);
-    setPollGeneration((value) => value + 1);
     setDetail(next);
     // Resume navigation only when opening an activity. A save refresh may
     // arrive after the user has moved to another section; its older workspace
@@ -267,31 +262,6 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
       else localStorage.removeItem(resumeKey);
     } catch { /* Remembering the selection is optional; keep the workspace usable. */ }
   }, [selectedId, resumeKey]);
-  const publicationStatus = detail?.publication?.status;
-  useEffect(() => {
-    if (!selectedId || !publicationStatus || !["queued", "publishing"].includes(publicationStatus)) return;
-    let active = true;
-    let inFlight = false;
-    let failures = 0;
-    const timer = window.setInterval(() => {
-      if (inFlight) return;
-      inFlight = true;
-      void readOrganizerEvent(selectedId).then((next) => {
-        if (active) {
-          failures = 0;
-          setPublicationReadError(null);
-          setDetail(next);
-          setEvents((items) => items.map((item) => item.id === next.event.id ? { ...item, ...next.event } : item));
-        }
-      }).catch((error) => {
-        if (!active) return;
-        const needsLogin = error instanceof PortalError && error.status === 401;
-        setPublicationReadError({ candidateId: selectedId, needsLogin });
-        if (needsLogin || ++failures >= 3) window.clearInterval(timer);
-      }).finally(() => { inFlight = false; });
-    }, 5000);
-    return () => { active = false; window.clearInterval(timer); };
-  }, [selectedId, publicationStatus, pollGeneration]);
 
   /* The two reads answer different questions and neither needs the other's
    * result, so they go out together: a save waits for this whole refresh
@@ -506,11 +476,6 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
             setNotice(IDLE);
           }).catch((error) => setNotice({ kind: "error", message: message(error) })).finally(() => setStartingAmendment(false));
         }}>{startingAmendment ? "核對中…" : "開始修正已發布活動"}</button>
-      </div>}
-      {publicationReadError?.candidateId === selectedId && publicationReadError && <div role="alert" className={styles.error}>
-        <p>{publicationReadError.needsLogin ? "登入已失效，無法更新發布進度。" : "暫時無法讀取發布進度。"}目前顯示的是上次讀取的進度。</p>
-        {publicationReadError.needsLogin ? <a href="/organizer?reauth=1">重新登入並返回活動</a>
-          : <button type="button" onClick={() => { void refresh().catch((error) => setNotice({ kind: "error", message: message(error) })); }}>重新讀取進度</button>}
       </div>}
       {/* An empty list used to be told to open something from a list that has
           nothing in it. The line now names the one thing that can be done from

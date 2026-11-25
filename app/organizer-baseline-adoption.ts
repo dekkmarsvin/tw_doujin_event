@@ -5,6 +5,9 @@ export type PublishedSourceIdentity = {
   candidateId: string; candidateVersion: number; jobId: string; snapshotId: string;
   approvalHash: string; dataCommit: string; mainCommit: string;
 };
+/** A baseline's source: since #569 it names no job or commits; Git-era ones do. */
+type BaselineSource = Omit<PublishedSourceIdentity, "jobId" | "dataCommit" | "mainCommit">
+  & Partial<Pick<PublishedSourceIdentity, "jobId" | "dataCommit" | "mainCommit">>;
 /** A reviewed, deployed record authorizes one exact historical correction.
  * This is not a caller-supplied replacement snapshot or a general import API. */
 export type OrganizerBaselineAdoption = {
@@ -44,13 +47,13 @@ export function parseBaselineAdoption(value: unknown): OrganizerBaselineAdoption
   return record;
 }
 
-export function adoptionMatchesSource(record: OrganizerBaselineAdoption, source: PublishedSourceIdentity, eventId: string) {
+export function adoptionMatchesSource(record: OrganizerBaselineAdoption, source: BaselineSource, eventId: string) {
   return record.eventId === eventId && (Object.keys(record.source) as Array<keyof PublishedSourceIdentity>)
     .every((key) => record.source[key] === source[key]);
 }
 
 type BaselineIdentity = {
-  schema: string; source: PublishedSourceIdentity; event: { id: string };
+  schema: string; source: BaselineSource; event: { id: string };
   pin?: ReturnType<typeof parseEventDataPin>; version?: string; grouping: unknown; evidence: unknown;
   adoption?: { record: OrganizerBaselineAdoption; sha256: string };
 };

@@ -52,8 +52,8 @@ export function createOrganizerAmendmentRepository(database: D1Database, ensureT
   }
 
   async function createOrganizerAmendment(input: {
-    id: string; sourceCandidateId: string; sourceVersion: number; sourceJobId: string;
-    sourceSnapshotId: string; sourceApprovalHash: string; sourceMainCommit: string;
+    id: string; sourceCandidateId: string; sourceVersion: number;
+    sourceSnapshotId: string; sourceApprovalHash: string;
     eventId: string; draftJson: string; baselineJson: string; baselineSha256: string;
     rows: readonly OrganizerNormalizedImportRow[];
     maps: ReadonlyArray<{ periodKey: string; venueSpaceId: string; content: unknown }>;
@@ -67,17 +67,14 @@ export function createOrganizerAmendmentRepository(database: D1Database, ensureT
         (id, tentative_name, event_id, event_id_locked_at, status, current_version, current_draft_json,
          created_by, created_at, updated_at, last_updated_by, last_updated_role, publication_operation)
         SELECT ?1, c.tentative_name, c.event_id, ?2, 'draft', 1, ?3, ?4, ?2, ?2, ?4, ?5, 'AMEND'
-        FROM organizer_event_candidates c JOIN organizer_publication_jobs j ON j.candidate_id = c.id
-        JOIN organizer_submission_snapshots s ON s.id = j.snapshot_id
+        FROM organizer_event_candidates c JOIN organizer_submission_snapshots s ON s.candidate_id = c.id AND s.candidate_version = ?7
         WHERE c.id = ?6 AND c.current_version = ?7 AND c.published_version = ?7 AND c.status = 'published'
-          AND c.event_id = ?8 AND j.id = ?9 AND j.status = 'published' AND j.candidate_version = ?7
-          AND j.snapshot_id = ?10 AND j.approval_hash = ?11 AND s.sha256 = ?11 AND j.main_merge_sha = ?12
-          AND ((?13 = 1 AND EXISTS (SELECT 1 FROM accounts actor JOIN admins ON admins.email = actor.email WHERE actor.id = ?4))
-            OR (?13 = 0 AND EXISTS (SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = c.id
+          AND c.event_id = ?8 AND s.id = ?9 AND s.sha256 = ?10
+          AND ((?11 = 1 AND EXISTS (SELECT 1 FROM accounts actor JOIN admins ON admins.email = actor.email WHERE actor.id = ?4))
+            OR (?11 = 0 AND EXISTS (SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = c.id
               AND g.account_id = ?4 AND g.role = 'owner' AND g.revoked_at IS NULL)))`)
         .bind(input.id, actor.now, input.draftJson, actor.accountId, actorRole(actor), input.sourceCandidateId,
-          input.sourceVersion, input.eventId, input.sourceJobId, input.sourceSnapshotId, input.sourceApprovalHash,
-          input.sourceMainCommit, actor.admin ? 1 : 0),
+          input.sourceVersion, input.eventId, input.sourceSnapshotId, input.sourceApprovalHash, actor.admin ? 1 : 0),
       database.prepare(`INSERT INTO organizer_event_revisions
         (id, candidate_id, version, event_id, draft_json, created_by, created_by_role, created_at)
         SELECT ?1, id, 1, event_id, current_draft_json, ?2, ?3, ?4 FROM organizer_event_candidates WHERE id = ?5`)
@@ -85,7 +82,7 @@ export function createOrganizerAmendmentRepository(database: D1Database, ensureT
       database.prepare(`INSERT INTO organizer_amendments
         (candidate_id, source_candidate_id, source_version, source_job_id, baseline_json, baseline_sha256, created_at)
         SELECT ?2, ?3, ?4, ?5, ?6, ?7, ?8 WHERE ${revisionExists}`)
-        .bind(revisionId, input.id, input.sourceCandidateId, input.sourceVersion, input.sourceJobId, input.baselineJson, input.baselineSha256, actor.now),
+        .bind(revisionId, input.id, input.sourceCandidateId, input.sourceVersion, input.sourceSnapshotId, input.baselineJson, input.baselineSha256, actor.now),
       database.prepare(`INSERT INTO organizer_amendment_changes (candidate_id, version, changes_json, revision_id, created_at)
         SELECT ?2, 1, '[]', ?1, ?3 WHERE ${revisionExists}`).bind(revisionId, input.id, actor.now),
       database.prepare(`INSERT INTO organizer_workspace_state
@@ -112,7 +109,7 @@ export function createOrganizerAmendmentRepository(database: D1Database, ensureT
     }
     statements.push(audit(revisionId, input.id, actor, "organizer.amendment.create", {
       sourceCandidateId: input.sourceCandidateId, sourceVersion: input.sourceVersion,
-      sourceJobId: input.sourceJobId, baselineSha256: input.baselineSha256,
+      sourceSnapshotId: input.sourceSnapshotId, baselineSha256: input.baselineSha256,
     }));
     try {
       const result = await database.batch(statements);

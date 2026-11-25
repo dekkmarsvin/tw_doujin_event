@@ -20,7 +20,7 @@ async function routes(page, { isAdmin, failure = 0 }) {
     else if (path === "/api/admin/review-queue") body = { claims: [], pendingClaimCount: 0, claimCounts: [], organizer: { applications: 0, submissions: 0 } };
     else if (path === "/api/admin/site-settings") body = { settings: { organizerApplicationMode: "closed", organizerAllowedEmails: [], accountNotificationsEnabled: false,
       accountNotificationsSince: null, adminReviewNotificationsEnabled: false, publicationEnabled: true, contactUrl: "", claimReviewNotice: "", updatedAt: now, updatedBy: "fixture" },
-      publicationMode: "disabled", services: null, publicationActivities: [] };
+      publicationMode: "disabled", services: null };
     else if (path.endsWith("/claims")) body = { claims: [], eventId: "sample" };
     await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
   });

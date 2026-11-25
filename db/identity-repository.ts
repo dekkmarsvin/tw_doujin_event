@@ -2227,93 +2227,91 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       : { ok: false as const, reason: "status" as const };
   }
 
-  async function reviewOrganizerCandidate(input: {
-    candidateId: string;
-    expectedVersion: number;
-    decision: "changes_requested" | "approve";
-    actorAccountId: string;
-    note?: string;
-    publication?: { snapshotId: string; approvalHash: string; jobId: string };
-    now: number;
+  const adminActive = `EXISTS (SELECT 1 FROM accounts actor JOIN admins ON admins.email = actor.email
+    WHERE actor.id = ?3 AND actor.disabled_at IS NULL AND actor.deletion_started_at IS NULL)`;
+
+  /** An admin sends a submitted candidate back for changes. */
+  async function reviewOrganizerCandidate(input: { candidateId: string; expectedVersion: number; actorAccountId: string; note?: string; now: number }) {
+    await ensureTables();
+    const candidate = await getOrganizerCandidate(input.candidateId);
+    if (!candidate) return { ok: false as const, reason: "not_found" as const };
+    if (candidate.current_version !== input.expectedVersion || candidate.status !== "submitted") {
+      return { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version, status: candidate.status };
+    }
+    const transitionToken = crypto.randomUUID();
+    const results = await database.batch([
+      database.prepare(
+        `INSERT INTO organizer_event_reviews (id, candidate_id, version, from_status, to_status, actor_account_id, note, at)
+         SELECT ?1, id, current_version, 'submitted', 'changes_requested', ?3, ?4, ?5 FROM organizer_event_candidates
+         WHERE id = ?6 AND current_version = ?7 AND status = 'submitted' AND ${adminActive}`,
+      ).bind(transitionToken, null, input.actorAccountId, input.note ?? null, input.now, input.candidateId, input.expectedVersion),
+      database.prepare(
+        `UPDATE organizer_event_candidates SET status = 'changes_requested', updated_at = ?1, last_updated_by = ?2, last_updated_role = 'admin',
+           approved_by = NULL, approved_at = NULL
+         WHERE id = ?3 AND current_version = ?4 AND status = 'submitted'
+           AND EXISTS (SELECT 1 FROM organizer_event_reviews r WHERE r.id = ?5 AND r.candidate_id = ?3)`,
+      ).bind(input.now, input.actorAccountId, input.candidateId, input.expectedVersion, transitionToken),
+      ...notify({ kind: "review.changes_requested", occurrence: transitionToken, now: input.now },
+        `${ownerNotificationSource} WHERE c.id = ?1 AND EXISTS (SELECT 1 FROM organizer_event_reviews r WHERE r.id = ?2 AND r.candidate_id = c.id)`,
+        [input.candidateId, transitionToken]),
+    ]);
+    return results.slice(0, 2).every((result) => result.meta.changes === 1)
+      ? { ok: true as const, status: "changes_requested" as const }
+      : { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version, status: candidate.status };
+  }
+
+  /**
+   * Records an approval whose files the event data bucket already serves
+   * (#569): the review, the candidate published at this version, its owners'
+   * notices and, from the published end date, recounted retention deadlines,
+   * in one batch. Calling it again for the version already published is a
+   * no-op, so an approval repeated after a lost response settles cleanly.
+   */
+  async function publishOrganizerCandidate(input: {
+    candidateId: string; expectedVersion: number; actorAccountId: string; note?: string;
+    snapshotId: string; approvalHash: string; eventEndsAt?: string; now: number;
   }) {
     await ensureTables();
     const candidate = await getOrganizerCandidate(input.candidateId);
     if (!candidate) return { ok: false as const, reason: "not_found" as const };
-    if (!await database.prepare(`SELECT 1 FROM accounts actor JOIN admins ON admins.email = actor.email WHERE actor.id = ?1 AND actor.disabled_at IS NULL AND actor.deletion_started_at IS NULL`)
-      .bind(input.actorAccountId).first()) return { ok: false as const, reason: "forbidden" as const };
-    if (candidate.current_version !== input.expectedVersion) {
-      return { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version };
+    if (candidate.status === "published" && candidate.published_version === input.expectedVersion) {
+      return { ok: true as const, alreadyPublished: true as const };
     }
-    let publication = input.decision === "approve" ? input.publication : undefined;
-    let reuseQueuedJob = false;
-    if (publication) {
-      const existing = await database.prepare(`SELECT id, snapshot_id, approval_hash, status FROM organizer_publication_jobs
-        WHERE candidate_id = ?1 AND candidate_version = ?2`).bind(input.candidateId, input.expectedVersion)
-        .first<{ id: string; snapshot_id: string; approval_hash: string; status: string }>();
-      if (existing) {
-        if (existing.approval_hash !== publication.approvalHash || existing.snapshot_id !== publication.snapshotId) {
-          return { ok: false as const, reason: "approval_mismatch" as const };
-        }
-        if (candidate.approved_at !== null && ["approved", "publishing", "failed", "published"].includes(candidate.status)) {
-          return { ok: true as const, status: candidate.status, publicationJobId: existing.id, alreadyReviewed: true as const };
-        }
-        if (candidate.status !== "submitted" || existing.status !== "queued") {
-          return { ok: false as const, reason: "status" as const, status: candidate.status };
-        }
-        publication = { ...publication, jobId: existing.id };
-        reuseQueuedJob = true;
-      }
+    if (candidate.current_version !== input.expectedVersion || candidate.status !== "submitted") {
+      return { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version, status: candidate.status };
     }
-    if (candidate.status !== "submitted") return { ok: false as const, reason: "status" as const, status: candidate.status };
-    const status = input.decision === "approve" ? "approved" : "changes_requested";
     const transitionToken = crypto.randomUUID();
+    const reviewed = `EXISTS (SELECT 1 FROM organizer_event_reviews r WHERE r.id = ?2 AND r.candidate_id = c.id)`;
     const results = await database.batch([
-      // The unique review token anchors every write in this transaction. A
-      // revoked Admin or losing concurrent request cannot reuse a timestamp
-      // from a previous review to create a job or move the candidate.
       database.prepare(
-        `INSERT INTO organizer_event_reviews (
-           id, candidate_id, version, from_status, to_status, actor_account_id, note, at
-         ) SELECT ?1, id, current_version, 'submitted', ?2, ?3, ?4, ?5
-           FROM organizer_event_candidates
-           WHERE id = ?6 AND current_version = ?7 AND status = 'submitted'
-             AND EXISTS (SELECT 1 FROM accounts actor JOIN admins ON admins.email = actor.email WHERE actor.id = ?3 AND actor.disabled_at IS NULL AND actor.deletion_started_at IS NULL)
-             AND (?8 IS NULL OR EXISTS (SELECT 1 FROM organizer_submission_snapshots s
-               WHERE s.id = ?8 AND s.candidate_id = ?6 AND s.candidate_version = ?7 AND s.sha256 = ?9))`,
-      ).bind(transitionToken, status, input.actorAccountId, input.note ?? null, input.now,
-        input.candidateId, input.expectedVersion, publication?.snapshotId ?? null, publication?.approvalHash ?? null),
+        `INSERT INTO organizer_event_reviews (id, candidate_id, version, from_status, to_status, actor_account_id, note, at)
+         SELECT ?1, id, current_version, 'submitted', 'approved', ?3, ?4, ?5 FROM organizer_event_candidates
+         WHERE id = ?6 AND current_version = ?7 AND status = 'submitted' AND ${adminActive}
+           AND EXISTS (SELECT 1 FROM organizer_submission_snapshots s
+             WHERE s.id = ?8 AND s.candidate_id = ?6 AND s.candidate_version = ?7 AND s.sha256 = ?9)`,
+      ).bind(transitionToken, null, input.actorAccountId, input.note ?? null, input.now, input.candidateId, input.expectedVersion,
+        input.snapshotId, input.approvalHash),
       database.prepare(
-        `UPDATE organizer_event_candidates SET status = ?1, updated_at = ?2,
-           last_updated_by = ?3, last_updated_role = 'admin',
-           approved_by = CASE WHEN ?1 = 'approved' THEN ?3 ELSE NULL END,
-           approved_at = CASE WHEN ?1 = 'approved' THEN ?2 ELSE NULL END
-         WHERE id = ?4 AND current_version = ?5 AND status = 'submitted'
-           AND EXISTS (SELECT 1 FROM organizer_event_reviews r WHERE r.id = ?6 AND r.candidate_id = ?4)`,
-      ).bind(status, input.now, input.actorAccountId, input.candidateId, input.expectedVersion,
-        transitionToken),
-      ...(publication ? [
-        database.prepare(`INSERT INTO organizer_publication_jobs (
-          id, candidate_id, candidate_version, snapshot_id, approval_hash, status, step, created_at, updated_at
-        ) SELECT ?1, c.id, c.current_version, ?2, ?3, 'queued', 'preparing_data', ?4, ?4
-          FROM organizer_event_candidates c WHERE c.id = ?5 AND c.status = 'approved'
-            AND EXISTS (SELECT 1 FROM organizer_event_reviews r WHERE r.id = ?6 AND r.candidate_id = c.id)
-          ON CONFLICT(candidate_id, candidate_version) DO NOTHING`)
-          .bind(publication.jobId, publication.snapshotId, publication.approvalHash,
-            input.now, input.candidateId, transitionToken),
-        database.prepare(`UPDATE organizer_event_candidates SET status = 'publishing'
-          WHERE id = ?1 AND status = 'approved' AND EXISTS (
-            SELECT 1 FROM organizer_publication_jobs j WHERE j.id = ?2 AND j.candidate_id = ?1)
-            AND EXISTS (SELECT 1 FROM organizer_event_reviews r WHERE r.id = ?3 AND r.candidate_id = ?1)`)
-          .bind(input.candidateId, publication.jobId, transitionToken),
-      ] : []),
-      ...notify({ kind: status === "approved" ? "review.approved" : "review.changes_requested", occurrence: transitionToken, now: input.now },
-        `${ownerNotificationSource} WHERE c.id = ?1 AND EXISTS (SELECT 1 FROM organizer_event_reviews r WHERE r.id = ?2 AND r.candidate_id = c.id)`,
-        [input.candidateId, transitionToken]),
+        `UPDATE organizer_event_candidates SET status = 'published', updated_at = ?1, last_updated_by = ?2, last_updated_role = 'admin',
+           approved_by = ?2, approved_at = ?1, published_version = current_version, published_at = ?1
+         WHERE id = ?3 AND current_version = ?4 AND status = 'submitted'
+           AND EXISTS (SELECT 1 FROM organizer_event_reviews r WHERE r.id = ?5 AND r.candidate_id = ?3)`,
+      ).bind(input.now, input.actorAccountId, input.candidateId, input.expectedVersion, transitionToken),
+      ...notify({ kind: "review.approved", occurrence: transitionToken, now: input.now },
+        `${ownerNotificationSource} WHERE c.id = ?1 AND ${reviewed}`, [input.candidateId, transitionToken]),
+      ...notify({ kind: "publication.published", occurrence: `published:${input.candidateId}:${input.expectedVersion}`, now: input.now },
+        `${ownerNotificationSource} WHERE c.id = ?1 AND ${reviewed}`, [input.candidateId, transitionToken]),
+      // A deadline was counted from the end date live when it was chosen. A
+      // corrected date must move it too, or a postponed event could lose its
+      // circles' content before it has even ended (ADR-0068).
+      ...(input.eventEndsAt ? [database.prepare(
+        `UPDATE circle_overrides SET retention_expires_at = ?1
+         WHERE retention_choice = 'purge' AND event_id = (SELECT c.event_id FROM organizer_event_candidates c WHERE c.id = ?3 AND ${reviewed})`,
+      ).bind(circleRetentionExpiresAt("purge", Date.parse(input.eventEndsAt)), transitionToken, input.candidateId)] : []),
     ]);
-    return results.slice(0, publication ? 4 : 2).every((result, index) => result.meta.changes === (reuseQueuedJob && index === 2 ? 0 : 1))
-      ? { ok: true as const, status: publication ? "publishing" : status,
-        ...(publication ? { publicationJobId: publication.jobId } : {}) }
-      : { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version };
+    return results.slice(0, 2).every((result) => result.meta.changes === 1)
+      ? { ok: true as const, alreadyPublished: false as const }
+      : { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version, status: candidate.status };
   }
 
   async function storeOrganizerSubmissionSnapshot(input: {
@@ -2364,644 +2362,6 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       sha256: string; created_by: string; created_at: number;
     }>();
   }
-
-  async function createOrganizerPublicationJob(input: {
-    candidateId: string;
-    candidateVersion: number;
-    snapshotId: string;
-    approvalHash: string;
-    now: number;
-  }) {
-    await ensureTables();
-    const existing = await database.prepare(
-      "SELECT id, approval_hash FROM organizer_publication_jobs WHERE candidate_id = ?1 AND candidate_version = ?2",
-    ).bind(input.candidateId, input.candidateVersion).first<{ id: string; approval_hash: string }>();
-    if (existing) return existing.approval_hash === input.approvalHash
-      ? { ok: true as const, jobId: existing.id, existing: true as const }
-      : { ok: false as const, reason: "approval_mismatch" as const };
-    const jobId = crypto.randomUUID();
-    const result = await database.prepare(
-      `INSERT INTO organizer_publication_jobs (
-         id, candidate_id, candidate_version, snapshot_id, approval_hash, status, step, created_at, updated_at
-       ) SELECT ?1, c.id, ?2, s.id, s.sha256, 'queued', 'assemble', ?3, ?3
-         FROM organizer_event_candidates c JOIN organizer_submission_snapshots s
-           ON s.candidate_id = c.id AND s.candidate_version = ?2
-         WHERE c.id = ?4 AND c.status = 'approved' AND c.current_version = ?2
-           AND s.id = ?5 AND s.sha256 = ?6`,
-    ).bind(jobId, input.candidateVersion, input.now, input.candidateId,
-      input.snapshotId, input.approvalHash).run();
-    return result.meta.changes === 1
-      ? { ok: true as const, jobId, existing: false as const }
-      : { ok: false as const, reason: "conflict" as const };
-  }
-
-  async function getOrganizerPublicationJob(jobId: string) {
-    await ensureTables();
-    return database.prepare(
-      `SELECT * FROM organizer_publication_jobs WHERE id = ?1`,
-    ).bind(jobId).first<{
-      id: string; candidate_id: string; candidate_version: number; snapshot_id: string; approval_hash: string;
-      status: string; step: string; data_pr_number: number | null; data_head_sha: string | null;
-      data_merge_sha: string | null; main_pr_number: number | null; main_head_sha: string | null;
-      main_merge_sha: string | null; workflow_run_id: number | null; error: string | null;
-      failure_code: string | null; retryable: number; remote_write_intent_at: number | null;
-      next_attempt_at: number; pending_attempts: number;
-      workflow_run_attempt: number | null; workflow_retry_attempt: number | null; production_manifest_sha256: string | null;
-      created_at: number; updated_at: number;
-    }>();
-  }
-
-  async function getLatestOrganizerPublicationJob(candidateId: string) {
-    await ensureTables();
-    return database.prepare(
-      `SELECT * FROM organizer_publication_jobs WHERE candidate_id = ?1
-       ORDER BY created_at DESC LIMIT 1`,
-    ).bind(candidateId).first<{
-      id: string; candidate_id: string; candidate_version: number; snapshot_id: string; approval_hash: string;
-      status: string; step: string; data_pr_number: number | null; data_head_sha: string | null;
-      data_merge_sha: string | null; main_pr_number: number | null; main_head_sha: string | null;
-      main_merge_sha: string | null; workflow_run_id: number | null; error: string | null;
-      failure_code: string | null; retryable: number; remote_write_intent_at: number | null;
-      created_at: number; updated_at: number;
-    }>();
-  }
-
-  /**
-   * Claim the same global publication lease used by the executor, but leave a
-   * failed job failed while its remote state is audited. The eligibility
-   * predicates live on the INSERT itself: a pre-read may explain a refusal,
-   * but it is never the guard that grants the lease.
-   */
-  async function claimFailedOrganizerCandidateReopenLease(input: {
-    candidateId: string;
-    expectedVersion: number;
-    actorAccountId: string;
-    now: number;
-    ttlMs: number;
-    admin?: boolean;
-  }) {
-    await ensureTables();
-    if (!input.admin && await organizerRole(input.candidateId, input.actorAccountId) !== "owner") {
-      return { ok: false as const, reason: "forbidden" as const };
-    }
-    const token = crypto.randomUUID();
-    const result = await database.prepare(
-      `INSERT INTO organizer_publication_lease (id, job_id, token, acquired_at, expires_at)
-       SELECT 'global', j.id, ?3, ?4, ?5
-       FROM organizer_event_candidates c
-       JOIN organizer_publication_jobs j
-         ON j.candidate_id = c.id AND j.candidate_version = c.current_version
-       WHERE c.id = ?1 AND c.current_version = ?2 AND c.status = 'failed'
-         AND c.approved_at IS NOT NULL AND j.status = 'failed'
-         AND j.data_pr_number IS NULL AND j.data_head_sha IS NULL
-         AND j.data_merge_sha IS NULL AND j.main_pr_number IS NULL
-         AND j.main_head_sha IS NULL AND j.main_merge_sha IS NULL
-         AND j.workflow_run_id IS NULL AND j.remote_write_intent_at IS NULL
-       ON CONFLICT(id) DO UPDATE SET job_id = excluded.job_id, token = excluded.token,
-         acquired_at = excluded.acquired_at, expires_at = excluded.expires_at
-       WHERE organizer_publication_lease.expires_at <= ?4`,
-    ).bind(input.candidateId, input.expectedVersion, token, input.now, input.now + input.ttlMs).run();
-    if (result.meta.changes === 1) {
-      const lease = await database.prepare(
-        `SELECT job_id, expires_at FROM organizer_publication_lease
-         WHERE id = 'global' AND token = ?1`,
-      ).bind(token).first<{ job_id: string; expires_at: number }>();
-      if (lease) return { ok: true as const, jobId: lease.job_id, token, expiresAt: lease.expires_at };
-      // This can only be a concurrent lease replacement between the INSERT
-      // and the read. Treat it as busy rather than handing out an unverified
-      // token.
-      return { ok: false as const, reason: "busy" as const };
-    }
-
-    // These reads are explanatory only. The conditional INSERT above remains
-    // the authority, so a concurrent change cannot turn this classification
-    // into a successful claim.
-    const candidate = await getOrganizerCandidate(input.candidateId);
-    if (!candidate) return { ok: false as const, reason: "not_found" as const };
-    if (candidate.current_version !== input.expectedVersion) {
-      return { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version };
-    }
-    if (candidate.status !== "failed" || candidate.approved_at === null) {
-      return { ok: false as const, reason: "status" as const, status: candidate.status };
-    }
-    const job = await database.prepare(
-      `SELECT id, status, data_pr_number, data_head_sha, data_merge_sha,
-              main_pr_number, main_head_sha, main_merge_sha, workflow_run_id,
-              remote_write_intent_at
-       FROM organizer_publication_jobs
-       WHERE id IN (SELECT id FROM organizer_publication_jobs WHERE candidate_id = ?1 AND candidate_version = ?2)
-       LIMIT 1`,
-    ).bind(input.candidateId, input.expectedVersion).first<{
-      id: string; status: string; data_pr_number: number | null; data_head_sha: string | null;
-      data_merge_sha: string | null; main_pr_number: number | null; main_head_sha: string | null;
-      main_merge_sha: string | null; workflow_run_id: number | null; remote_write_intent_at: number | null;
-    }>();
-    if (!job || job.status !== "failed") return { ok: false as const, reason: "publication" as const };
-    if (job.remote_write_intent_at !== null) return { ok: false as const, reason: "remote_write_started" as const };
-    if ([job.data_pr_number, job.data_head_sha, job.data_merge_sha, job.main_pr_number,
-      job.main_head_sha, job.main_merge_sha, job.workflow_run_id].some((value) => value !== null)) {
-      return { ok: false as const, reason: "started" as const };
-    }
-    const liveLease = await database.prepare(
-      "SELECT 1 FROM organizer_publication_lease WHERE id = 'global' AND expires_at > ?1",
-    ).bind(input.now).first();
-    return liveLease ? { ok: false as const, reason: "busy" as const }
-      : { ok: false as const, reason: "conflict" as const };
-  }
-
-  /**
-   * Persist the failed-candidate → changes_requested transition while the
-   * caller's global lease is still live. The old job is retained as history,
-   * but made permanently non-retryable in this same transaction. The revision,
-   * review reason, audit row and lease release are all part of the commit.
-   */
-  async function reopenFailedOrganizerCandidate(input: {
-    candidateId: string;
-    expectedVersion: number;
-    actorAccountId: string;
-    reason: string;
-    jobId: string;
-    leaseToken: string;
-    now: number;
-    admin?: boolean;
-    audit: IdentityAuditEntry;
-  }) {
-    await ensureTables();
-    if (!input.admin && await organizerRole(input.candidateId, input.actorAccountId) !== "owner") {
-      return { ok: false as const, reason: "forbidden" as const };
-    }
-    // Candidate/revision rows use the organizer grant role (`owner`), while
-    // the audit entry supplied by the handler uses its separate audit role
-    // (`organizer_owner`).
-    const actorRole = input.admin ? "admin" : "owner";
-    const nextVersion = input.expectedVersion + 1;
-    // Unlike a normal audit write, this row is part of the CAS commit. Its
-    // WHERE clause observes the candidate/job changes made earlier in this
-    // batch and the still-live lease, so a zero-row candidate CAS cannot leave
-    // behind an audit entry (including a same-millisecond retry).
-    const conditionalAudit = database.prepare(
-      `INSERT INTO audit_log (
-         id, at, actor_account_id, actor_role, action, subject_type, subject_id,
-         detail_json, ip_hash, shredded_at
-       ) SELECT ?1, ?2,
-         CASE WHEN actor_allowed = 1 THEN ?3 ELSE NULL END,
-         ?4, ?5, ?6, ?7,
-         CASE WHEN actor_allowed = 1 THEN ?8 ELSE NULL END,
-         CASE WHEN actor_allowed = 1 THEN ?9 ELSE NULL END,
-         CASE WHEN actor_allowed = 1 THEN NULL ELSE ?2 END
-       FROM (
-         SELECT CASE WHEN ?3 IS NULL OR EXISTS (
-           SELECT 1 FROM accounts WHERE id = ?3 AND deletion_started_at IS NULL
-         ) THEN 1 ELSE 0 END AS actor_allowed
-       )
-       WHERE EXISTS (
-         SELECT 1 FROM organizer_event_candidates c
-         WHERE c.id = ?10 AND c.current_version = ?11
-           AND c.status = 'changes_requested' AND c.approved_at IS NULL
-           AND c.last_updated_by = ?15 AND c.last_updated_role = ?16 AND c.updated_at = ?14
-       )
-       AND EXISTS (
-         SELECT 1 FROM organizer_publication_jobs j
-         WHERE j.id = ?12 AND j.candidate_id = ?10
-           AND j.candidate_version = ?11 - 1 AND j.status = 'failed'
-           AND j.retryable = 0 AND j.updated_at = ?14
-           AND j.data_pr_number IS NULL AND j.data_head_sha IS NULL
-           AND j.data_merge_sha IS NULL AND j.main_pr_number IS NULL
-           AND j.main_head_sha IS NULL AND j.main_merge_sha IS NULL
-           AND j.workflow_run_id IS NULL AND j.remote_write_intent_at IS NULL
-       )
-       AND EXISTS (
-         SELECT 1 FROM organizer_publication_lease l
-         WHERE l.id = 'global' AND l.job_id = ?12 AND l.token = ?13
-           AND l.expires_at > ?14
-       )`,
-    ).bind(
-      crypto.randomUUID(), input.audit.at, input.audit.actorAccountId ?? null, input.audit.actorRole,
-      input.audit.action, input.audit.subjectType, input.audit.subjectId,
-      input.audit.detail === undefined ? null : JSON.stringify(input.audit.detail), input.audit.ipHash ?? null,
-      input.candidateId, nextVersion, input.jobId, input.leaseToken, input.now,
-      input.actorAccountId, actorRole,
-    );
-    const notices = notify({ kind: "review.changes_requested", occurrence: crypto.randomUUID(), now: input.now },
-      `${ownerNotificationSource} WHERE c.id = ?1 AND changes() = 1`, [input.candidateId]);
-    const results = await database.batch([
-      database.prepare(
-        `UPDATE organizer_event_candidates SET status = 'changes_requested',
-           current_version = ?1, approved_by = NULL, approved_at = NULL,
-           updated_at = ?2, last_updated_by = ?3, last_updated_role = ?4
-         WHERE id = ?5 AND current_version = ?6 AND status = 'failed'
-           AND approved_at IS NOT NULL
-           AND EXISTS (
-             SELECT 1 FROM organizer_publication_jobs j
-             WHERE j.id = ?7 AND j.candidate_id = organizer_event_candidates.id
-               AND j.candidate_version = ?6 AND j.status = 'failed'
-               AND j.data_pr_number IS NULL AND j.data_head_sha IS NULL
-               AND j.data_merge_sha IS NULL AND j.main_pr_number IS NULL
-               AND j.main_head_sha IS NULL AND j.main_merge_sha IS NULL
-               AND j.workflow_run_id IS NULL AND j.remote_write_intent_at IS NULL
-           )
-           AND EXISTS (
-             SELECT 1 FROM organizer_publication_lease l
-             WHERE l.id = 'global' AND l.job_id = ?7 AND l.token = ?8
-               AND l.expires_at > ?2
-           )
-           ${input.admin ? "" : `AND EXISTS (
-             SELECT 1 FROM organizer_event_grants g
-             WHERE g.candidate_id = organizer_event_candidates.id
-               AND g.account_id = ?3 AND g.role = 'owner' AND g.revoked_at IS NULL
-           )`}`,
-      ).bind(nextVersion, input.now, input.actorAccountId, actorRole, input.candidateId,
-        input.expectedVersion, input.jobId, input.leaseToken),
-      ...notices,
-      database.prepare(
-        `INSERT INTO organizer_event_revisions (
-           id, candidate_id, version, event_id, draft_json, created_by, created_by_role, created_at
-         ) SELECT ?1, id, current_version, event_id, current_draft_json, ?2, ?3, ?4
-           FROM organizer_event_candidates
-           WHERE id = ?5 AND current_version = ?6 AND status = 'changes_requested'
-             AND last_updated_by = ?2 AND last_updated_role = ?3 AND updated_at = ?4
-             AND EXISTS (
-               SELECT 1 FROM organizer_publication_lease l
-               WHERE l.id = 'global' AND l.job_id = ?7 AND l.token = ?8
-                 AND l.expires_at > ?4
-             )`,
-      ).bind(crypto.randomUUID(), input.actorAccountId, actorRole, input.now,
-        input.candidateId, nextVersion, input.jobId, input.leaseToken),
-      database.prepare(
-        `INSERT INTO organizer_event_reviews (
-           id, candidate_id, version, from_status, to_status, actor_account_id, note, at
-         ) SELECT ?1, id, current_version, 'failed', 'changes_requested', ?2, ?3, ?4
-           FROM organizer_event_candidates
-           WHERE id = ?5 AND current_version = ?6 AND status = 'changes_requested'
-             AND last_updated_by = ?2 AND last_updated_role = ?7 AND updated_at = ?4
-             AND EXISTS (
-               SELECT 1 FROM organizer_publication_lease l
-               WHERE l.id = 'global' AND l.job_id = ?8 AND l.token = ?9
-                 AND l.expires_at > ?4
-             )`,
-      ).bind(crypto.randomUUID(), input.actorAccountId, input.reason, input.now,
-        input.candidateId, nextVersion, actorRole, input.jobId, input.leaseToken),
-      database.prepare(
-        `UPDATE organizer_publication_jobs SET retryable = 0, updated_at = ?1
-         WHERE id = ?2 AND candidate_id = ?3 AND candidate_version = ?4
-           AND status = 'failed' AND data_pr_number IS NULL AND data_head_sha IS NULL
-           AND data_merge_sha IS NULL AND main_pr_number IS NULL
-           AND main_head_sha IS NULL AND main_merge_sha IS NULL
-           AND workflow_run_id IS NULL AND remote_write_intent_at IS NULL
-           AND EXISTS (
-             SELECT 1 FROM organizer_event_candidates c
-             WHERE c.id = ?3 AND c.current_version = ?4 + 1
-               AND c.status = 'changes_requested' AND c.approved_at IS NULL
-               AND c.last_updated_by = ?5 AND c.updated_at = ?1
-           )
-           AND EXISTS (
-             SELECT 1 FROM organizer_publication_lease l
-             WHERE l.id = 'global' AND l.job_id = ?2 AND l.token = ?6
-               AND l.expires_at > ?1
-           )`,
-      ).bind(input.now, input.jobId, input.candidateId, input.expectedVersion,
-        input.actorAccountId, input.leaseToken),
-      conditionalAudit,
-      database.prepare(
-        "DELETE FROM organizer_publication_lease WHERE id = 'global' AND job_id = ?1 AND token = ?2",
-      ).bind(input.jobId, input.leaseToken),
-    ]);
-    if (results.filter((_, index) => index < 1 || index >= 1 + notices.length).every(result => result.meta.changes === 1)) {
-      return { ok: true as const, status: "changes_requested" as const, version: nextVersion, jobId: input.jobId };
-    }
-    return { ok: false as const, reason: "conflict" as const };
-  }
-
-  /** Mark that a driver is about to issue its first remote mutation. */
-  async function markOrganizerPublicationRemoteWriteIntent(input: {
-    jobId: string;
-    leaseToken: string;
-    now: number;
-  }) {
-    await ensureTables();
-    const result = await database.prepare(
-      `UPDATE organizer_publication_jobs SET remote_write_intent_at = COALESCE(remote_write_intent_at, ?1)
-       WHERE id = ?2 AND status = 'publishing'
-         AND EXISTS (
-           SELECT 1 FROM organizer_event_candidates c
-           WHERE c.id = organizer_publication_jobs.candidate_id
-             AND c.current_version = organizer_publication_jobs.candidate_version
-             AND c.approved_at IS NOT NULL
-             AND c.status IN ('approved', 'publishing', 'failed')
-         )
-         AND EXISTS (
-           SELECT 1 FROM organizer_publication_lease l
-           WHERE l.id = 'global' AND l.job_id = ?2 AND l.token = ?3
-             AND l.expires_at > ?1
-         )`,
-    ).bind(input.now, input.jobId, input.leaseToken).run();
-    if (result.meta.changes === 1) return true;
-    // SQLite normally reports a COALESCE update as one changed row even when
-    // the value was already present. Keep the seam explicitly idempotent for
-    // D1-compatible engines that report matched rows instead.
-    const existing = await database.prepare(
-      `SELECT remote_write_intent_at FROM organizer_publication_jobs
-       WHERE id = ?1 AND remote_write_intent_at IS NOT NULL
-         AND status = 'publishing'
-         AND EXISTS (
-           SELECT 1 FROM organizer_event_candidates c
-           WHERE c.id = organizer_publication_jobs.candidate_id
-             AND c.current_version = organizer_publication_jobs.candidate_version
-             AND c.approved_at IS NOT NULL
-             AND c.status IN ('approved', 'publishing', 'failed')
-         )
-         AND EXISTS (
-           SELECT 1 FROM organizer_publication_lease l
-           WHERE l.id = 'global' AND l.job_id = ?1 AND l.token = ?2 AND l.expires_at > ?3
-         )`,
-    ).bind(input.jobId, input.leaseToken, input.now).first<{ remote_write_intent_at: number }>();
-    return existing?.remote_write_intent_at !== undefined;
-  }
-
-  async function retryOrganizerPublicationJob(input: { jobId: string; now: number }) {
-    await ensureTables();
-    const job = await getOrganizerPublicationJob(input.jobId);
-    if (!job) return { ok: false as const, reason: "not_found" as const };
-    if (job.status !== "failed") return { ok: false as const, reason: "status" as const, status: job.status };
-    if (!job.retryable) return { ok: false as const, reason: "not_retryable" as const, status: job.status };
-    const snapshot = await getOrganizerSubmissionSnapshot(job.candidate_id, job.candidate_version);
-    if (!snapshot || snapshot.id !== job.snapshot_id || snapshot.sha256 !== job.approval_hash) {
-      return { ok: false as const, reason: "snapshot_mismatch" as const, status: job.status };
-    }
-    const candidate = await getOrganizerCandidate(job.candidate_id);
-    if (!candidate || candidate.current_version !== job.candidate_version
-      || candidate.status !== "failed" || candidate.approved_at === null) {
-      return { ok: false as const, reason: "candidate_mismatch" as const, status: job.status };
-    }
-    const results = await database.batch([
-      database.prepare(
-        `DELETE FROM organizer_publication_lease WHERE id = 'global' AND job_id = ?1
-           AND expires_at <= ?2
-           AND EXISTS (
-             SELECT 1 FROM organizer_publication_jobs j
-             JOIN organizer_event_candidates c ON c.id = j.candidate_id
-             WHERE j.id = ?1 AND j.status = 'failed'
-               AND j.candidate_version = c.current_version AND c.status = 'failed'
-               AND c.approved_at IS NOT NULL
-           )`,
-      ).bind(input.jobId, input.now),
-      database.prepare(
-        `UPDATE organizer_publication_jobs SET status = 'queued', error = NULL, failure_code = NULL, retryable = 1, updated_at = ?1,
-           next_attempt_at = 0, pending_attempts = 0,
-           workflow_retry_attempt = CASE WHEN failure_code = 'publication_deployment_failed' AND workflow_run_attempt IS NOT NULL
-             THEN workflow_run_attempt + 1 ELSE workflow_retry_attempt END
-         WHERE id = ?2 AND status = 'failed' AND step = ?3
-           AND retryable = 1
-           AND EXISTS (
-             SELECT 1 FROM organizer_submission_snapshots s
-             WHERE s.id = organizer_publication_jobs.snapshot_id
-               AND s.candidate_id = organizer_publication_jobs.candidate_id
-               AND s.candidate_version = organizer_publication_jobs.candidate_version
-               AND s.sha256 = organizer_publication_jobs.approval_hash
-           )
-           AND EXISTS (
-             SELECT 1 FROM organizer_event_candidates c
-             WHERE c.id = organizer_publication_jobs.candidate_id
-               AND c.current_version = organizer_publication_jobs.candidate_version
-               AND c.status = 'failed' AND c.approved_at IS NOT NULL
-           )
-           AND NOT EXISTS (
-             SELECT 1 FROM organizer_publication_lease l
-             WHERE l.id = 'global' AND l.expires_at > ?1
-           )`,
-      ).bind(input.now, input.jobId, job.step),
-      database.prepare(`UPDATE organizer_event_candidates SET status = 'publishing', updated_at = ?1
-        WHERE id = ?2 AND current_version = ?3 AND status = 'failed' AND approved_at IS NOT NULL
-          AND EXISTS (
-            SELECT 1 FROM organizer_publication_jobs j WHERE j.id = ?4 AND j.status = 'queued'
-              AND j.retryable = 1
-              AND j.candidate_id = organizer_event_candidates.id
-              AND j.candidate_version = organizer_event_candidates.current_version
-              AND EXISTS (
-                SELECT 1 FROM organizer_submission_snapshots s
-                WHERE s.id = j.snapshot_id AND s.candidate_id = j.candidate_id
-                  AND s.candidate_version = j.candidate_version AND s.sha256 = j.approval_hash
-              )
-          )
-          AND NOT EXISTS (
-            SELECT 1 FROM organizer_publication_lease l
-            WHERE l.id = 'global' AND l.expires_at > ?1
-          )`)
-        .bind(input.now, job.candidate_id, job.candidate_version, job.id),
-    ]);
-    return results[1].meta.changes === 1 && results[2].meta.changes === 1
-      ? { ok: true as const, step: job.step }
-      : { ok: false as const, reason: "status" as const, status: job.status };
-  }
-
-  /**
-   * Nothing but dispatch moves a job out of `queued`, so a job whose dispatch
-   * never happened waits forever: the executor is only entered by the
-   * dispatcher, and `retryOrganizerPublicationJob()` refuses every status but
-   * `failed`. Past the contract's timeout that wait becomes the failure —
-   * retryable, on the step it never started — so the recovery path the
-   * workspace already has takes the job over, instead of a second way to start
-   * a publication (issue #228). Waiting on CI is `publishing`, never `queued`,
-   * so no in-flight step is reachable from here, and a job under a live lease
-   * is left to whoever holds it.
-   */
-  async function expireStalledOrganizerPublicationJobs(input: { now: number; timeoutMs: number }) {
-    await ensureTables();
-    const cutoff = input.now - input.timeoutMs;
-    const stalled = await database.prepare(
-      `SELECT id FROM organizer_publication_jobs WHERE status = 'queued' AND updated_at <= ?1
-         AND NOT EXISTS (SELECT 1 FROM organizer_publication_lease
-           WHERE id = 'global' AND job_id = organizer_publication_jobs.id AND expires_at > ?2)`,
-    ).bind(cutoff, input.now).all<{ id: string }>();
-    const expired = stalled.results.map((row) => row.id);
-    if (expired.length === 0) return { expired };
-    const results = await database.batch(expired.flatMap((jobId) => [
-      database.prepare(
-        `UPDATE organizer_publication_jobs SET status = 'failed', failure_code = 'queued_timeout',
-           retryable = 1, error = ?1, updated_at = ?2
-         WHERE id = ?3 AND status = 'queued' AND updated_at <= ?4
-           AND NOT EXISTS (SELECT 1 FROM organizer_publication_lease
-             WHERE id = 'global' AND job_id = ?3 AND expires_at > ?2)`,
-      ).bind("Publication never started: the job stayed queued past the timeout.", input.now, jobId, cutoff),
-      database.prepare(
-        `UPDATE organizer_event_candidates SET status = 'failed', updated_at = ?1, last_updated_role = 'system'
-         WHERE status IN ('approved', 'publishing')
-           AND EXISTS (SELECT 1 FROM organizer_publication_jobs j
-             WHERE j.id = ?2 AND j.status = 'failed' AND j.failure_code = 'queued_timeout' AND j.updated_at = ?1
-               AND j.candidate_id = organizer_event_candidates.id
-               AND j.candidate_version = organizer_event_candidates.current_version)`,
-      ).bind(input.now, jobId),
-      ...notify({ kind: "publication.failed", occurrence: crypto.randomUUID(), now: input.now },
-        `${ownerNotificationSource} JOIN organizer_publication_jobs j ON j.candidate_id = c.id
-          WHERE j.id = ?1 AND c.current_version = j.candidate_version AND changes() = 1`, [jobId]),
-    ]));
-    return { expired: expired.filter((_, index) => results[index * (results.length / expired.length)].meta.changes === 1) };
-  }
-
-  async function listDueOrganizerPublicationJobs(now: number, limit = 10) {
-    await ensureTables();
-    return (await database.prepare(`SELECT j.id FROM organizer_publication_jobs j
-      JOIN organizer_event_candidates c ON c.id = j.candidate_id AND c.current_version = j.candidate_version
-      WHERE j.status IN ('queued', 'publishing') AND j.next_attempt_at <= ?1
-        AND c.approved_at IS NOT NULL AND c.status IN ('approved', 'publishing')
-      ORDER BY j.next_attempt_at, j.created_at, j.id LIMIT ?2`).bind(now, Math.max(1, Math.min(10, limit))).all<{ id: string }>()).results;
-  }
-
-
-  async function claimOrganizerPublicationLease(input: { jobId: string; now: number; ttlMs: number }) {
-    await ensureTables();
-    const job = await getOrganizerPublicationJob(input.jobId);
-    if (!job || !["queued", "publishing"].includes(job.status)) return { ok: false as const, reason: "busy" as const };
-    const token = crypto.randomUUID();
-    const results = await database.batch([
-      database.prepare(
-        `INSERT INTO organizer_publication_lease (id, job_id, token, acquired_at, expires_at)
-         SELECT 'global', j.id, ?2, ?3, ?4
-         FROM organizer_publication_jobs j
-         JOIN organizer_event_candidates c
-           ON c.id = j.candidate_id AND c.current_version = j.candidate_version
-         WHERE j.id = ?1 AND j.status IN ('queued', 'publishing')
-           AND c.approved_at IS NOT NULL AND c.status IN ('approved', 'publishing')
-         ON CONFLICT(id) DO UPDATE SET job_id = excluded.job_id, token = excluded.token,
-           acquired_at = excluded.acquired_at, expires_at = excluded.expires_at
-         WHERE organizer_publication_lease.expires_at <= ?3`,
-      ).bind(input.jobId, token, input.now, input.now + input.ttlMs),
-      database.prepare(
-        `UPDATE organizer_publication_jobs SET status = 'publishing', updated_at = ?1, error = NULL
-         WHERE id = ?2 AND status IN ('queued', 'publishing')
-           AND EXISTS (
-             SELECT 1 FROM organizer_event_candidates c
-             WHERE c.id = organizer_publication_jobs.candidate_id
-               AND c.current_version = organizer_publication_jobs.candidate_version
-               AND c.approved_at IS NOT NULL AND c.status IN ('approved', 'publishing')
-           )
-           AND EXISTS (SELECT 1 FROM organizer_publication_lease WHERE id = 'global' AND job_id = ?2 AND token = ?3)`,
-      ).bind(input.now, input.jobId, token),
-    ]);
-    if (results[0].meta.changes === 1 && results[1].meta.changes === 1) {
-      return { ok: true as const, token, expiresAt: input.now + input.ttlMs };
-    }
-    await releaseOrganizerPublicationLease(input.jobId, token);
-    return { ok: false as const, reason: "busy" as const };
-  }
-
-  async function updateOrganizerPublicationJob(input: {
-    jobId: string;
-    leaseToken: string;
-    expectedStep: string;
-    nextStep: string;
-    status: "publishing" | "published" | "failed";
-    expectedHeadSha?: string | null;
-    error?: string | null;
-    failureCode?: string | null;
-    productionVerified?: boolean;
-    /** Failure-only checkpoint; the original token and step must still own it. */
-    allowExpiredFailure?: boolean;
-    retryable?: boolean;
-    nextAttemptAt?: number;
-    pendingAttempts?: number;
-    metadata?: Partial<Record<"data_pr_number" | "data_head_sha" | "data_merge_sha" | "main_pr_number" | "main_head_sha" | "main_merge_sha" | "workflow_run_id" | "workflow_run_attempt" | "production_manifest_sha256", string | number | null>>;
-    /** The published event's end; on `published`, stored retention deadlines are recounted from it. */
-    eventEndsAt?: string;
-    now: number;
-  }) {
-    await ensureTables();
-    if (input.status === "published" && (input.expectedStep !== "verifying_production"
-      || input.nextStep !== "completed" || input.productionVerified !== true)) return false;
-    const jobUpdate = database.prepare(
-      `UPDATE organizer_publication_jobs SET step = ?1, status = ?2, error = ?3, updated_at = ?4,
-         failure_code = ?9, retryable = ?10,
-         data_pr_number = COALESCE(?11, data_pr_number), data_head_sha = COALESCE(?12, data_head_sha),
-         data_merge_sha = COALESCE(?13, data_merge_sha), main_pr_number = COALESCE(?14, main_pr_number),
-         main_head_sha = COALESCE(?15, main_head_sha), main_merge_sha = COALESCE(?16, main_merge_sha),
-         workflow_run_id = COALESCE(?17, workflow_run_id),
-         next_attempt_at = COALESCE(?19, next_attempt_at), pending_attempts = COALESCE(?20, pending_attempts),
-         workflow_run_attempt = COALESCE(?21, workflow_run_attempt), production_manifest_sha256 = COALESCE(?22, production_manifest_sha256)
-       WHERE id = ?5 AND step = ?6
-         AND (?7 IS NULL OR data_head_sha = ?7 OR main_head_sha = ?7)
-         AND EXISTS (
-           SELECT 1 FROM organizer_event_candidates c
-           WHERE c.id = organizer_publication_jobs.candidate_id
-             AND c.current_version = organizer_publication_jobs.candidate_version
-             AND c.approved_at IS NOT NULL AND c.status IN ('approved', 'publishing')
-         )
-         AND EXISTS (SELECT 1 FROM organizer_publication_lease
-           WHERE id = 'global' AND job_id = ?5 AND token = ?8
-             AND (expires_at > ?4 OR ?18 = 1))`,
-    ).bind(input.nextStep, input.status, input.error ?? null, input.now, input.jobId,
-      input.expectedStep, input.expectedHeadSha ?? null, input.leaseToken,
-      input.failureCode ?? null, input.retryable === false ? 0 : 1,
-      input.metadata?.data_pr_number ?? null, input.metadata?.data_head_sha ?? null, input.metadata?.data_merge_sha ?? null,
-      input.metadata?.main_pr_number ?? null, input.metadata?.main_head_sha ?? null, input.metadata?.main_merge_sha ?? null,
-      input.metadata?.workflow_run_id ?? null,
-      input.status === "failed" && input.allowExpiredFailure ? 1 : 0,
-      input.nextAttemptAt ?? null, input.pendingAttempts ?? null,
-      input.metadata?.workflow_run_attempt ?? null, input.metadata?.production_manifest_sha256 ?? null);
-    if (input.status !== "published") {
-      const [result] = await database.batch([jobUpdate,
-        database.prepare(`UPDATE organizer_event_candidates SET status = ?1, updated_at = ?2, last_updated_role = 'system'
-          WHERE id = (SELECT candidate_id FROM organizer_publication_jobs WHERE id = ?3)
-            AND current_version = (SELECT candidate_version FROM organizer_publication_jobs WHERE id = ?3)
-            AND status IN ('approved', 'publishing', 'failed') AND changes() = 1`).bind(input.status, input.now, input.jobId),
-        ...(input.status === "failed" ? notify({ kind: "publication.failed", occurrence: crypto.randomUUID(), now: input.now },
-          `${ownerNotificationSource} JOIN organizer_publication_jobs j ON j.candidate_id = c.id
-            WHERE j.id = ?1 AND c.current_version = j.candidate_version AND changes() = 1`, [input.jobId]) : []),
-      ]);
-      return result.meta.changes === 1;
-    }
-    // Completion is one transaction. If any part fails, none of it lands: the
-    // job stays at verifying_production, the executor records a retryable
-    // failure, and the retry completes everything. A job marked published on
-    // its own would be skipped forever with its side effects missing.
-    // Statements in a batch cannot read each other's results, so each one after
-    // the job update checks that this call made the transition: the job is
-    // published while this call's lease, released last, is still held.
-    const transitioned = `EXISTS (SELECT 1 FROM organizer_publication_jobs
-        WHERE id = ?2 AND status = 'published' AND step = 'completed')
-      AND EXISTS (SELECT 1 FROM organizer_publication_lease WHERE id = 'global' AND job_id = ?2 AND token = ?3)`;
-    const [job] = await database.batch([
-      jobUpdate,
-      ...notify({ kind: "publication.published", occurrence: `published:${input.jobId}`, now: input.now },
-        `${ownerNotificationSource} JOIN organizer_publication_jobs j ON j.candidate_id = c.id
-          WHERE j.id = ?1 AND c.current_version = j.candidate_version AND changes() = 1`, [input.jobId]),
-      database.prepare(
-        `UPDATE organizer_event_candidates SET status = 'published', published_version = current_version,
-           published_at = ?1, updated_at = ?1, last_updated_role = 'system'
-         WHERE id = (SELECT candidate_id FROM organizer_publication_jobs WHERE id = ?2)
-           AND current_version = (SELECT candidate_version FROM organizer_publication_jobs WHERE id = ?2)
-           AND ${transitioned}`,
-      ).bind(input.now, input.jobId, input.leaseToken),
-      // A deadline was counted from the end date live when it was chosen. A
-      // corrected date must move it too, or a postponed event could lose its
-      // circles' content before it has even ended (ADR-0068).
-      ...(input.eventEndsAt ? [database.prepare(
-        `UPDATE circle_overrides SET retention_expires_at = ?1
-         WHERE retention_choice = 'purge' AND event_id = (
-           SELECT c.event_id FROM organizer_event_candidates c
-           JOIN organizer_publication_jobs j ON j.candidate_id = c.id WHERE j.id = ?2)
-           AND ${transitioned}`,
-      ).bind(circleRetentionExpiresAt("purge", Date.parse(input.eventEndsAt)), input.jobId, input.leaseToken)] : []),
-      database.prepare(
-        `DELETE FROM organizer_publication_lease WHERE id = 'global' AND job_id = ?1 AND token = ?2
-           AND EXISTS (SELECT 1 FROM organizer_publication_jobs WHERE id = ?1 AND status = 'published' AND step = 'completed')`,
-      ).bind(input.jobId, input.leaseToken),
-    ]);
-    return job.meta.changes === 1;
-  }
-
-  async function hasOrganizerPublicationLease(jobId: string, token: string, now: number) {
-    await ensureTables();
-    return Boolean(await database.prepare(`SELECT 1 FROM organizer_publication_lease
-      WHERE id = 'global' AND job_id = ?1 AND token = ?2 AND expires_at > ?3`).bind(jobId, token, now).first());
-  }
-
-  async function releaseOrganizerPublicationLease(jobId: string, token: string) {
-    await ensureTables();
-    await database.prepare("DELETE FROM organizer_publication_lease WHERE id = 'global' AND job_id = ?1 AND token = ?2")
-      .bind(jobId, token).run();
-  }
-
-
 
   async function storePreviewMail(message: { email: string; subject: string; text: string; now: number }) {
     await ensureTables();
@@ -3059,15 +2419,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     manageOrganizerOwner,
     listOrganizerMapDrafts, getOrganizerMapDraft, createOrganizerMapDraft, saveOrganizerMapDraft,
     getOrganizerImport, replaceOrganizerImport,
-    saveOrganizerCandidate, submitOrganizerCandidate, reviewOrganizerCandidate,
+    saveOrganizerCandidate, submitOrganizerCandidate, reviewOrganizerCandidate, publishOrganizerCandidate,
     storeOrganizerSubmissionSnapshot, getOrganizerSubmissionSnapshot,
-    createOrganizerPublicationJob, getOrganizerPublicationJob, getLatestOrganizerPublicationJob,
-    claimFailedOrganizerCandidateReopenLease, reopenFailedOrganizerCandidate,
-    markOrganizerPublicationRemoteWriteIntent,
-    retryOrganizerPublicationJob, expireStalledOrganizerPublicationJobs, claimOrganizerPublicationLease,
-    listDueOrganizerPublicationJobs,
-    hasOrganizerPublicationLease, releaseOrganizerPublicationLease,
-    updateOrganizerPublicationJob,
     storePreviewMail, latestPreviewMail, clearPreviewData,
   };
 }
