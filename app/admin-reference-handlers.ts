@@ -7,6 +7,8 @@ import { sharedReferenceCatalog } from './shared-reference-catalog';
 import { sha256Hex } from './portal-crypto';
 import { editSharedReference } from './admin-reference-edit';
 
+const MANAGED_REFERENCE_KINDS = new Set(['organizer', 'category-catalog', 'venue', 'venue-space']);
+
 type Gate = { ok: false; response: Response } | { ok: true; session: { accountId: string } };
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
 export function createAdminReferenceHandlers(repository: IdentityRepository, requireAdmin: (request: Request) => Promise<Gate>, now: () => number) {
@@ -28,6 +30,9 @@ export function createAdminReferenceHandlers(repository: IdentityRepository, req
     const timestamp = now();
     const actor = { actorAccountId: gate.session.accountId, now: timestamp };
     if (body.action === 'edit' || body.action === 'delete') {
+      if (typeof body.kind !== 'string' || !MANAGED_REFERENCE_KINDS.has(body.kind)) {
+        return json({ error: '此共用資料類型不支援在此編輯或刪除。' }, 400);
+      }
       const records = await repository.listOrganizerReferenceRecords();
       const previous = records.find(row => row.path === body.path && row.kind === body.kind);
       if (!previous) return json({ error: '找不到這筆共用資料，請重新讀取。' }, 404);

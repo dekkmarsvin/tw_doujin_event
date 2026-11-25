@@ -1,0 +1,18 @@
+{
+  "schema": "circle-catalog/3",
+  "eventId": "sample-multi",
+  "generatedAt": "2026-01-01T00:00:00.000+08:00",
+  "circles": [
+    { "id": "c-910001", "name": "海風社團" },
+    { "id": "c-910002", "name": "星港工房" },
+    { "id": "c-910003", "name": "鐵道畫室" }
+  ],
+  "placements": [
+    { "id": "1-a01", "circleId": "c-910001", "day": 1, "area": "area-a", "boothCode": "A01", "status": "active", "tone": "mint" },
+    { "id": "1-b01", "circleId": "c-910002", "day": 1, "area": "area-b", "boothCode": "B01", "status": "active", "tone": "blue" },
+    { "id": "1-c01", "circleId": "c-910003", "day": 1, "area": "area-c", "boothCode": "C01", "status": "active", "tone": "coral" },
+    { "id": "2-a01", "circleId": "c-910001", "day": 2, "area": "area-a", "boothCode": "A01", "status": "active", "tone": "mint" },
+    { "id": "2-b01", "circleId": "c-910002", "day": 2, "area": "area-b", "boothCode": "B01", "status": "active", "tone": "blue" },
+    { "id": "2-c01", "circleId": "c-910003", "day": 2, "area": "area-c", "boothCode": "C01", "status": "active", "tone": "coral" }
+  ]
+}

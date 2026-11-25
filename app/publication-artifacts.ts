@@ -39,11 +39,43 @@ function semanticJson(text: string): string {
 const sameJson = (a: unknown, b: unknown) => semanticJson(JSON.stringify(a)) === semanticJson(JSON.stringify(b));
 
 /** A correction publishes the references its baseline was published with,
- * except that a venue may have gained its address since (#395). Every other
- * difference, in the selection or any file, still breaks the baseline. */
+ * except that a venue may have gained its address since (#395) or a single-venue
+ * event may have attached a venue-overview (#578). Every other difference still
+ * breaks the baseline. */
+function withoutAddedOverviewSelection(selection: OrganizerReferenceSnapshot["selection"], stripIndices: ReadonlySet<number>) {
+  return {
+    ...selection,
+    venues: selection.venues.map((venue, index) => {
+      if (!stripIndices.has(index)) return venue;
+      const next = { ...venue };
+      delete next.overview;
+      return next;
+    }),
+  };
+}
+
 function referencesMatchBaseline(baseline: OrganizerReferenceSnapshot, current: OrganizerReferenceSnapshot) {
-  if (!sameJson(baseline.selection, current.selection) || baseline.files.length !== current.files.length) return false;
-  return current.files.every((file, index) => {
+  if (baseline.selection.venues.length !== current.selection.venues.length) return false;
+  const addedOverviewPaths = new Set<string>();
+  const stripIndices = new Set<number>();
+  const singleVenueMultiSpace = baseline.selection.venues.length === 1
+    && current.selection.venues.length === 1
+    && new Set(current.selection.venues[0].spaces.map((space) => space.id)).size > 1;
+  if (singleVenueMultiSpace) {
+    const beforeVenue = baseline.selection.venues[0];
+    const afterVenue = current.selection.venues[0];
+    if (!beforeVenue.overview && afterVenue.overview) {
+      stripIndices.add(0);
+      addedOverviewPaths.add(afterVenue.overview.path);
+    }
+  }
+  const comparableSelection = stripIndices.size > 0 ? withoutAddedOverviewSelection(current.selection, stripIndices) : current.selection;
+  if (!sameJson(baseline.selection, comparableSelection)) return false;
+  const comparableFiles = addedOverviewPaths.size > 0
+    ? current.files.filter((file) => !addedOverviewPaths.has(file.path))
+    : current.files;
+  if (baseline.files.length !== comparableFiles.length) return false;
+  return comparableFiles.every((file, index) => {
     const before = baseline.files[index];
     if (sameJson(before, file)) return true;
     try { return before.path === file.path && isVenueAddressCompletion(JSON.parse(before.content), JSON.parse(file.content), file.path); }

@@ -27,8 +27,10 @@ export function editSharedReference(previous: OrganizerReferenceRecord, input: R
     next = { ...next, id: previous.id, path: previous.path, publicReferenceJson: `${JSON.stringify(value, null, 2)}\n` };
   } else if (previous.kind === 'venue') {
     next = createVenueReference({ id: previous.id, name, sourceUrl, address: normalizeOrganizerVenueAddress(input.address) }, now);
-  } else {
+  } else if (previous.kind === 'venue-space') {
     next = createVenueSpaceReference({ id: previous.id, venueId: JSON.parse(previous.publicReferenceJson).venueId, name, sourceUrl }, now);
+  } else {
+    throw new Error('此共用資料類型不支援編輯。');
   }
   parseReferenceRecord(JSON.parse(next.publicReferenceJson), next.path);
   return next;

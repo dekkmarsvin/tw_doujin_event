@@ -52,6 +52,7 @@ const OUTPUT = { representative: "outputs/map-viewport-pr", full: "outputs/map-v
 const ENVIRONMENTS = {
   pinned: { fetch: "ff47", server: "vite", label: "published ff47" },
   fixture: { stage: ["--fixture", "sample", "sample-two"], server: "vite", label: "fixtures sample, sample-two" },
+  multi: { stage: ["--fixture", "sample-multi"], server: "vite", label: "fixture sample-multi" },
   portal: { server: "portal", label: "local portal (sample fixture)" },
 };
 const DECLARED_DATA = /^\/\/ staged-data: (\w+)/m;

@@ -39,6 +39,12 @@
 .navigationBanner button { padding:4px 8px; border:1px solid #dac48f; border-radius:6px; background:#f9faf8; color:#755a25; font-size:calc(12px * var(--ui-font-scale,1)); cursor:pointer; }
 .vectorFloor { overflow:hidden; background:#f5f3ed; box-shadow:0 7px 24px #202a3526; }
 .vectorFloor.mapGestureActive { transition:none; }
+.vectorFloorHidden { visibility:hidden; pointer-events:none; }
+.venueOverviewLayer { position:absolute; z-index:1; overflow:hidden; border:1px solid #d4d8dd; border-radius:12px; background:#eff1f3; box-shadow:0 8px 26px #202a351c; }
+.venueOverviewLayer :global([role="button"]:hover [data-roof-lit]),
+.venueOverviewLayer :global([role="button"]:focus-visible [data-roof-lit]) { fill:#f06292; }
+.venueOverviewLayer :global([role="button"]:focus-visible) { outline:none; }
+.venueOverviewLayer :global([role="button"]:focus-visible polygon:last-of-type) { stroke:#1a73e8; stroke-width:3px; }
 .mapState { position:absolute; z-index:8; left:50%; top:50%; width:min(360px,calc(100% - 32px)); transform:translate(-50%,-50%); padding:22px; border:1px solid #d3d9d4; border-radius:12px; background:#fffffff2; text-align:center; box-shadow:0 12px 36px #27332a24; }
 .mapState b,.mapState span { display:block; }.mapState b { font-size:calc(14px * var(--ui-font-scale,1)); }.mapState span { margin-top:5px; color:#59626c; font-size:calc(12px * var(--ui-font-scale,1)); line-height:1.55; }
 .mapState button { margin-top:13px; padding:8px 12px; border:0; border-radius:7px; background:#202a35; color:#fff; font-size:calc(12px * var(--ui-font-scale,1)); font-weight:800; cursor:pointer; }

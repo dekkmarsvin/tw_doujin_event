@@ -1,13 +1,14 @@
 import type { OrganizerEventDraft, OrganizerValidationIssue } from "./organizer-event";
 import { INITIAL_ORGANIZER_VENUE_CATALOG, normalizeOrganizerVenueName, normalizeOrganizerVenueSourceUrl } from "./organizer-venue-catalog";
 import { parseReferenceRecord, verifyReferenceFiles } from "./reference-selection.mjs";
+import { parseVenueOverviewRecord, venueOverviewSpaceIds } from "./venue-overview.mjs";
 import { sha256Hex } from "./portal-crypto";
 import { pinnedVenue, pinnedSpace } from "./organizer-reference-seeds";
 import { parseCircleCategoryDefinitions } from "./circle-categories";
 
 export type OrganizerReferenceRecord = {
   path: string;
-  kind: "organizer" | "category-catalog" | "venue" | "venue-space";
+  kind: "organizer" | "category-catalog" | "venue" | "venue-space" | "venue-overview";
   id: string;
   organizerId: string | null;
   revision: string | null;
@@ -25,7 +26,7 @@ export type OrganizerReferenceSnapshot = {
     schema: "reference-selection/1"; eventId: string;
     organizers: Array<{ id: string; path: string }>;
     categoryCatalog: { id: string; organizerId: string; revision: string; path: string };
-    venues: Array<{ id: string; path: string; spaces: Array<{ id: string; path: string }> }>;
+    venues: Array<{ id: string; path: string; overview?: { id: string; path: string }; spaces: Array<{ id: string; path: string }> }>;
   };
   files: Array<{ path: string; content: string; sha256: string }>;
 };
@@ -181,15 +182,34 @@ export async function resolveOrganizerReferences(draft: OrganizerEventDraft, rec
   if (issues.length || !draft.event.id || !draft.references?.categoryCatalog || !draft.venue.assignments.length) return { issues, snapshot: null };
   const category = draft.references.categoryCatalog;
   const venues = [...new Set(draft.venue.assignments.map((item) => item.venueId))].sort();
+  const singleOverview = (() => {
+    if (venues.length !== 1 || draft.venue.assignments.length <= 1) return null;
+    const overviewPath = `references/venue-overviews/${venues[0]}.json`;
+    const row = records.find((record) => record.kind === "venue-overview" && record.path === overviewPath);
+    if (!row) return null;
+    try {
+      const overview = parseVenueOverviewRecord(JSON.parse(row.publicReferenceJson), overviewPath);
+      const spaces = venueOverviewSpaceIds(overview);
+      if (overview.venueId !== venues[0] || !draft.venue.assignments.every((item) => spaces.has(item.venueSpaceId))) return null;
+      return { id: venues[0], path: overviewPath };
+    } catch {
+      return null;
+    }
+  })();
   const selection: OrganizerReferenceSnapshot["selection"] = {
     schema: "reference-selection/1", eventId: draft.event.id,
     organizers: draft.references.organizerAssignments.map(({ organizerId: id }) => ({ id, path: `references/organizers/${id}.json` })).sort((a, b) => a.id.localeCompare(b.id, "en")),
     categoryCatalog: { ...category, path: `references/category-catalogs/${category.organizerId}/${category.id}/${category.revision}.json` },
-    venues: venues.map((id) => ({ id, path: `references/venues/${id}.json`, spaces: draft.venue.assignments.filter((item) => item.venueId === id)
-      .map(({ venueSpaceId: id }) => ({ id, path: `references/venue-spaces/${id}.json` })).sort((a, b) => a.id.localeCompare(b.id, "en")) })),
+    venues: venues.map((id) => ({
+      id,
+      path: `references/venues/${id}.json`,
+      ...(singleOverview && singleOverview.id === id ? { overview: singleOverview } : {}),
+      spaces: draft.venue.assignments.filter((item) => item.venueId === id)
+        .map(({ venueSpaceId: id }) => ({ id, path: `references/venue-spaces/${id}.json` })).sort((a, b) => a.id.localeCompare(b.id, "en")),
+    })),
   };
   const paths = [...selection.organizers.map((item) => item.path), selection.categoryCatalog.path,
-    ...selection.venues.flatMap((venue) => [venue.path, ...venue.spaces.map((space) => space.path)])].sort();
+    ...selection.venues.flatMap((venue) => [venue.path, ...(venue.overview ? [venue.overview.path] : []), ...venue.spaces.map((space) => space.path)])].sort();
   for (const venue of selection.venues) {
     for (const item of [venue, ...venue.spaces]) {
       if (!records.some((record) => record.path === item.path)) issues.push({ severity: "error", step: "venue",

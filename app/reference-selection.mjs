@@ -1,4 +1,15 @@
 
+import {
+  VENUE_OVERVIEW_SCHEMA,
+  parseVenueOverviewRecord,
+  venueOverviewSpaceIds,
+} from "./venue-overview.mjs";
+import {
+  requireHttpsUrl,
+  validateReferenceProvenance,
+  validateReferenceSources,
+} from "./reference-provenance.mjs";
+
 // ADR-0039 removed the locator face of `reference-data-pin/2`: the repository,
 // the commit and the second fetch are gone because references now live in the
 // same commit the event data pin already names. What this module still owns is
@@ -10,7 +21,6 @@ const ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const EVENT_ID = /^[a-z0-9][a-z0-9-]*$/;
 const REVISION = /^[a-z0-9][a-z0-9.-]*$/;
 const REFERENCE_PATH = /^references\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*\.json$/;
-const SOURCE_KINDS = new Set(["organizer-official", "venue-official"]);
 
 function isRecord(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -35,64 +45,10 @@ function requireString(value, label, pattern) {
   return value;
 }
 
-function requireHttpsUrl(value, label) {
-  requireString(value, label);
-  if (!value.startsWith("https://")) fail(`${label} must use HTTPS.`);
-  let parsed;
-  try {
-    parsed = new URL(value);
-  } catch {
-    fail(`${label} is invalid.`);
-  }
-  if (parsed.protocol !== "https:") fail(`${label} must use HTTPS.`);
-}
-
-function requireTimestamp(value, label) {
-  requireString(value, label);
-  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](\d{2}):(\d{2}))$/.exec(value);
-  if (!match) fail(`${label} must be an ISO timestamp.`);
-  const [, yearText, monthText, dayText, hourText, minuteText, secondText, offsetHourText, offsetMinuteText] = match;
-  const [year, month, day, hour, minute, second, offsetHour, offsetMinute] = [
-    yearText, monthText, dayText, hourText, minuteText, secondText, offsetHourText ?? "0", offsetMinuteText ?? "0",
-  ].map(Number);
-  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  if (month < 1 || month > 12 || day < 1 || day > daysInMonth[month - 1]
-    || hour > 23 || minute > 59 || second > 59 || offsetHour > 23 || offsetMinute > 59
-    || Number.isNaN(Date.parse(value))) fail(`${label} must be an ISO timestamp.`);
-}
-
 function normalizeReferencePath(value, label) {
   requireString(value, label);
   if (!REFERENCE_PATH.test(value) || value.startsWith("/") || value.includes("\\") || value.split("/").includes("..")) fail(`${label} is invalid.`);
   return value;
-}
-
-function validateSources(value, label, allowedKinds = SOURCE_KINDS) {
-  if (!Array.isArray(value) || value.length === 0) fail(`${label} must list official sources.`);
-  const ids = new Set();
-  for (const [index, sourceValue] of value.entries()) {
-    const source = requireRecord(sourceValue, `${label}[${index}]`);
-    requireKeys(source, ["id", "kind", "url", "retrievedAt"], ["id", "kind", "url", "retrievedAt", "note"], `${label}[${index}]`);
-    requireString(source.id, `${label}[${index}].id`, ID);
-    if (ids.has(source.id)) fail(`${label} has duplicate source id ${source.id}.`);
-    ids.add(source.id);
-    if (!allowedKinds.has(source.kind)) fail(`${label}[${index}].kind is invalid.`);
-    requireHttpsUrl(source.url, `${label}[${index}].url`);
-    requireTimestamp(source.retrievedAt, `${label}[${index}].retrievedAt`);
-    if (source.note !== undefined) requireString(source.note, `${label}[${index}].note`);
-  }
-  return ids;
-}
-
-function validateProvenance(value, sourceIds, requiredPointers, label) {
-  const provenance = requireRecord(value, label);
-  for (const [pointer, references] of Object.entries(provenance)) {
-    if (!pointer.startsWith("/") || !Array.isArray(references) || references.length === 0) fail(`${label}.${pointer} is invalid.`);
-    if (new Set(references).size !== references.length) fail(`${label}.${pointer} has duplicate source ids.`);
-    for (const sourceId of references) if (!sourceIds.has(sourceId)) fail(`${label}.${pointer} references unknown source ${sourceId}.`);
-  }
-  for (const pointer of requiredPointers) if (!(pointer in provenance)) fail(`${label} is missing provenance for ${pointer}.`);
 }
 
 export function parseReferenceRecord(value, relativePath) {
@@ -102,7 +58,7 @@ export function parseReferenceRecord(value, relativePath) {
     requireString(record.id, `${relativePath}.id`, ID);
     requireString(record.name, `${relativePath}.name`);
     requireHttpsUrl(record.officialUrl, `${relativePath}.officialUrl`);
-    validateProvenance(record.provenance, validateSources(record.sources, `${relativePath}.sources`, new Set(["organizer-official"])), ["/name", "/officialUrl"], `${relativePath}.provenance`);
+    validateReferenceProvenance(record.provenance, validateReferenceSources(record.sources, `${relativePath}.sources`, new Set(["organizer-official"])), ["/name", "/officialUrl"], `${relativePath}.provenance`);
     if (relativePath !== `references/organizers/${record.id}.json`) fail(`${relativePath} does not match organizer stable ID ${record.id}.`);
     return record;
   }
@@ -127,7 +83,7 @@ export function parseReferenceRecord(value, relativePath) {
         requiredPointers.push(`/categories/${index}/description`);
       }
     }
-    validateProvenance(record.provenance, validateSources(record.sources, `${relativePath}.sources`, new Set(["organizer-official"])), requiredPointers, `${relativePath}.provenance`);
+    validateReferenceProvenance(record.provenance, validateReferenceSources(record.sources, `${relativePath}.sources`, new Set(["organizer-official"])), requiredPointers, `${relativePath}.provenance`);
     const expected = `references/category-catalogs/${record.organizerId}/${record.id}/${record.revision}.json`;
     if (relativePath !== expected) fail(`${relativePath} does not match category catalog identity.`);
     return record;
@@ -140,7 +96,7 @@ export function parseReferenceRecord(value, relativePath) {
     // Optional only because records pinned before #395 have none; a new venue
     // always carries one, and one that does must say where it came from.
     if (record.address !== undefined) requireString(record.address, `${relativePath}.address`);
-    validateProvenance(record.provenance, validateSources(record.sources, `${relativePath}.sources`),
+    validateReferenceProvenance(record.provenance, validateReferenceSources(record.sources, `${relativePath}.sources`),
       ["/name", "/officialUrl", ...(record.address !== undefined ? ["/address"] : [])], `${relativePath}.provenance`);
     if (relativePath !== `references/venues/${record.id}.json`) fail(`${relativePath} does not match venue stable ID ${record.id}.`);
     return record;
@@ -150,9 +106,14 @@ export function parseReferenceRecord(value, relativePath) {
     requireString(record.id, `${relativePath}.id`, ID);
     requireString(record.venueId, `${relativePath}.venueId`, ID);
     requireString(record.name, `${relativePath}.name`);
-    validateProvenance(record.provenance, validateSources(record.sources, `${relativePath}.sources`), ["/name"], `${relativePath}.provenance`);
+    validateReferenceProvenance(record.provenance, validateReferenceSources(record.sources, `${relativePath}.sources`), ["/name"], `${relativePath}.provenance`);
     if (relativePath !== `references/venue-spaces/${record.id}.json`) fail(`${relativePath} does not match venue-space stable ID ${record.id}.`);
     return record;
+  }
+  if (record.schema === VENUE_OVERVIEW_SCHEMA) {
+    const overview = parseVenueOverviewRecord(record, relativePath);
+    if (relativePath !== `references/venue-overviews/${overview.venueId}.json`) fail(`${relativePath} does not match venue-overview venueId ${overview.venueId}.`);
+    return overview;
   }
   fail(`${relativePath} uses unsupported reference schema ${record.schema ?? "(missing)"}.`);
 }
@@ -208,7 +169,11 @@ export function referenceSelectionPaths(selection) {
   const paths = [
     ...selection.organizers.map(({ path }) => path),
     selection.categoryCatalog.path,
-    ...selection.venues.flatMap((venue) => [venue.path, ...venue.spaces.map(({ path }) => path)]),
+    ...selection.venues.flatMap((venue) => [
+      venue.path,
+      ...(venue.overview ? [venue.overview.path] : []),
+      ...venue.spaces.map(({ path }) => path),
+    ]),
   ];
   const unique = new Set();
   for (const filePath of paths) {
@@ -242,10 +207,16 @@ export function parseReferenceSelection(value) {
   const spaceIds = new Set();
   for (const [venueIndex, venueValue] of selection.venues.entries()) {
     const venue = requireRecord(venueValue, `reference selection venues[${venueIndex}]`);
-    requireKeys(venue, ["id", "path", "spaces"], ["id", "path", "spaces"], `reference selection venues[${venueIndex}]`);
+    requireKeys(venue, ["id", "path", "spaces"], ["id", "path", "spaces", "overview"], `reference selection venues[${venueIndex}]`);
     parseIdPath({ id: venue.id, path: venue.path }, `reference selection venues[${venueIndex}]`);
     if (venueIds.has(venue.id)) fail(`Duplicate venue stable ID ${venue.id}.`);
     venueIds.add(venue.id);
+    if (venue.overview !== undefined) {
+      const overview = parseIdPath(venue.overview, `reference selection venues[${venueIndex}].overview`);
+      if (overview.id !== venue.id || overview.path !== `references/venue-overviews/${venue.id}.json`) {
+        fail(`Reference selection venues[${venueIndex}].overview does not match venue ${venue.id}.`);
+      }
+    }
     if (!Array.isArray(venue.spaces) || venue.spaces.length === 0) fail(`Reference selection venues[${venueIndex}] must select spaces.`);
     for (const [spaceIndex, space] of venue.spaces.entries()) {
       const parsed = parseIdPath(space, `reference selection venues[${venueIndex}].spaces[${spaceIndex}]`);
@@ -298,10 +269,18 @@ export function verifyReferenceFiles(value, filesByPath, eventId) {
   for (const venue of venues) {
     const venueRecord = records.get(venue.path);
     if (venueRecord?.schema !== "venue/1" || venueRecord.id !== venue.id) fail(`Unknown venue stable ID ${venue.id}.`);
+    const overviewRecord = venue.overview ? records.get(venue.overview.path) : null;
+    if (venue.overview && (overviewRecord?.schema !== VENUE_OVERVIEW_SCHEMA || overviewRecord.venueId !== venueRecord.id)) {
+      fail(`Venue overview ${venue.overview.id} does not match venue ${venueRecord.id}.`);
+    }
+    const overviewSpaces = overviewRecord ? venueOverviewSpaceIds(overviewRecord) : null;
     for (const selected of venue.spaces) {
       const record = records.get(selected.path);
       if (record?.schema !== "venue-space/1" || record.id !== selected.id) fail(`Unknown venue-space stable ID ${selected.id}.`);
       if (record.venueId !== venueRecord.id) fail(`Venue-space ${selected.id} does not belong to venue ${venueRecord.id}.`);
+      if (overviewSpaces && !overviewSpaces.has(selected.id)) {
+        fail(`Venue overview for ${venueRecord.id} is missing venue-space ${selected.id}.`);
+      }
     }
   }
   return { selection, records };

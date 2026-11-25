@@ -47,12 +47,76 @@ export function resizeMapView(view: MapView, before: MapSize, after: MapSize, mi
   return { zoom, offset: offsetMapPointInRect(point, { x: 0, y: 0, ...after }, zoom, inset) };
 }
 export type MapView = { zoom: number; offset: MapPoint };
-export type MapPinchOrigin = { distance: number; zoom: number; mapX: number; mapY: number; center: MapPoint; inset?: MapPoint; boundaryCenter?: MapPoint };
+export type MapPinchOrigin = { distance: number; zoom: number; mapX: number; mapY: number; center: MapPoint; inset?: MapPoint; boundaryCenter?: MapPoint; startedAtMinimum?: boolean };
 type MapPinchView = MapView & { boundaryCenter?: MapPoint };
 type MapWheelMode = "pan" | "zoom";
 
 const MAP_MAX_ZOOM = 6;
 const MAP_MEDIA_ZOOM_THRESHOLD = 1.45;
+export const MAP_MINIMUM_ZOOM_EPSILON = 0.006;
+export const MAP_OVERVIEW_WHEEL_GAP_MS = 280;
+export const MAP_OVERVIEW_WHEEL_THRESHOLD = 120;
+export const MAP_OVERVIEW_PINCH_RATIO = 0.86;
+
+export type WheelOverviewState = {
+  active: boolean;
+  startedAtMinimum: boolean;
+  accumulated: number;
+  lastAt: number;
+};
+
+export const INITIAL_WHEEL_OVERVIEW_STATE: WheelOverviewState = {
+  active: false,
+  startedAtMinimum: false,
+  accumulated: 0,
+  lastAt: 0,
+};
+
+export function isAtMinimumZoom(zoom: number, minimum: number) {
+  return minimum > 0 && zoom <= minimum + MAP_MINIMUM_ZOOM_EPSILON;
+}
+
+/**
+ * Tracks a single wheel gesture with one pause boundary (`280ms`): momentum
+ * zooming out from a higher magnification stops at `fit`, and only a fresh
+ * zoom-out gesture starting at minimum zoom enters the venue overview once it
+ * accumulates `120` px.
+ */
+export function stepWheelOverviewGesture(
+  state: WheelOverviewState,
+  input: { now: number; deltaY: number; zoom: number; minimum: number },
+): { state: WheelOverviewState; enterOverview: boolean } {
+  const isNewGesture = !state.active || input.now - state.lastAt > MAP_OVERVIEW_WHEEL_GAP_MS;
+  const startedAtMinimum = isNewGesture ? isAtMinimumZoom(input.zoom, input.minimum) : state.startedAtMinimum;
+  const accumulatedBase = isNewGesture ? 0 : state.accumulated;
+
+  if (input.deltaY <= 0) {
+    return {
+      state: { active: true, startedAtMinimum: false, accumulated: 0, lastAt: input.now },
+      enterOverview: false,
+    };
+  }
+  if (!startedAtMinimum || !isAtMinimumZoom(input.zoom, input.minimum)) {
+    return {
+      state: { active: true, startedAtMinimum, accumulated: 0, lastAt: input.now },
+      enterOverview: false,
+    };
+  }
+  const accumulated = accumulatedBase + input.deltaY;
+  if (accumulated >= MAP_OVERVIEW_WHEEL_THRESHOLD) {
+    return { state: INITIAL_WHEEL_OVERVIEW_STATE, enterOverview: true };
+  }
+  return {
+    state: { active: true, startedAtMinimum: true, accumulated, lastAt: input.now },
+    enterOverview: false,
+  };
+}
+
+export function shouldEnterOverviewFromPinch(origin: MapPinchOrigin, distance: number, minimum: number) {
+  if (!origin.startedAtMinimum || minimum <= 0) return false;
+  const requestedZoom = origin.zoom * distance / Math.max(1, origin.distance);
+  return requestedZoom <= minimum * MAP_OVERVIEW_PINCH_RATIO;
+}
 
 export function clampMapZoom(value: number, minimum = .35, maximum = MAP_MAX_ZOOM) {
   return Math.max(Math.min(minimum, maximum), Math.min(maximum, value));

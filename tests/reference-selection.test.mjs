@@ -243,3 +243,55 @@ test("a selection supports plural organizers, venues and spaces as exact sets", 
   extraSpace.venueAssignments.push({ venueId: "second-venue", venueSpaceId: "unselected-hall", areaIds: ["extra"] });
   assert.throws(() => selectEventReferenceRecords(plural, verified.records, extraSpace), /venue assignments do not match/);
 });
+
+test("venue-overview/1 selection validates pinned overview, duplicate spaces, and extra context buildings", () => {
+  const overviewRecord = {
+    schema: "venue-overview/1",
+    venueId: "example-venue",
+    viewBox: { width: 1200, height: 640 },
+    buildings: [
+      {
+        id: "hall-1",
+        venueSpaceId: "example-hall",
+        label: "虛構展館",
+        rect: { x: 100, y: 200, width: 140, height: 50 },
+        orientation: "horizontal",
+        roof: "gable",
+        kind: "warehouse",
+      },
+      {
+        id: "unassigned-bg",
+        venueSpaceId: "example-unassigned",
+        label: "背景倉庫",
+        rect: { x: 300, y: 200, width: 120, height: 50 },
+        orientation: "horizontal",
+        roof: "gable",
+        kind: "warehouse",
+      },
+    ],
+    sources: [venueSource],
+    provenance: { "/viewBox": [venueSource.id], "/buildings": [venueSource.id] },
+  };
+  const overviewPath = "references/venue-overviews/example-venue.json";
+  const withOverviewRecords = new Map([...records, [overviewPath, Buffer.from(JSON.stringify(overviewRecord))]]);
+  const withOverviewSelection = structuredClone(selection);
+  withOverviewSelection.venues[0].overview = { id: "example-venue", path: overviewPath };
+
+  assert.equal(referenceSelectionPaths(withOverviewSelection).length, 5);
+  const verified = verifyReferenceFiles(withOverviewSelection, withOverviewRecords, "event-alpha");
+  assert.equal(selectEventReferenceRecords(withOverviewSelection, verified.records, event).length, 5);
+
+  const duplicateSpaceOverview = structuredClone(overviewRecord);
+  duplicateSpaceOverview.buildings[1].venueSpaceId = "example-hall";
+  assert.throws(
+    () => verifyReferenceFiles(withOverviewSelection, new Map([...records, [overviewPath, Buffer.from(JSON.stringify(duplicateSpaceOverview))]]), "event-alpha"),
+    /duplicate venueSpaceId/,
+  );
+
+  const missingSpaceOverview = structuredClone(overviewRecord);
+  missingSpaceOverview.buildings = [missingSpaceOverview.buildings[1]];
+  assert.throws(
+    () => verifyReferenceFiles(withOverviewSelection, new Map([...records, [overviewPath, Buffer.from(JSON.stringify(missingSpaceOverview))]]), "event-alpha"),
+    /missing venue-space example-hall/,
+  );
+});
