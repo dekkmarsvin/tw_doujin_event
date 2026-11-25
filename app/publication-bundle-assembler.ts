@@ -1,30 +1,8 @@
 type PublicationFileInput = { path: string; content: string | unknown };
 
-type PublicationBundleInput = {
-  candidateId: string;
-  eventId: string;
-  candidateVersion: number;
-  approvalHash: string;
-  dataFiles: readonly PublicationFileInput[];
-  mainFiles: readonly PublicationFileInput[];
-};
-
 export type PublicationBundleFile = { path: string; text: string; sha256: string };
-type PublicationBundle = {
-  schema: "organizer-publication-bundle/1";
-  candidateId: string;
-  eventId: string;
-  candidateVersion: number;
-  approvalHash: string;
-  stages: readonly [
-    { repository: "data"; files: PublicationBundleFile[] },
-    { repository: "main"; files: PublicationBundleFile[] },
-  ];
-  bundleHash: string;
-};
 
 const EVENT_ID = /^[a-z0-9][a-z0-9-]*$/u;
-const HASH = /^[0-9a-f]{64}$/u;
 const encoder = new TextEncoder();
 
 function hex(bytes: ArrayBuffer) {
@@ -39,54 +17,31 @@ function serialized(content: unknown) {
   return typeof content === "string" ? content : `${JSON.stringify(content, null, 2)}\n`;
 }
 
-function publicationPathAllowed(repository: "data" | "main", eventId: string, path: string) {
+/** An approval may only produce this event's own files and the reference
+ * records it names, never a path outside them. */
+function publicationPathAllowed(eventId: string, path: string) {
   if (!EVENT_ID.test(eventId) || !path || path.startsWith("/") || path.includes("\\") || path.split("/").includes("..")
     || path === ".github" || path.startsWith(".github/")) return false;
-  if (repository === "data") {
-    const eventPrefix = `events/${eventId}/`;
-    if (path.startsWith(eventPrefix)) {
-      const relative = path.slice(eventPrefix.length);
-      return /^(?:event|official-booths|circle-identity-groups|map|map-manifest|reference-selection)\.json$/u.test(relative)
-        || /^maps\/[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*\.json$/u.test(relative)
-        || relative === "NOTICE";
-    }
-    return /^references\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+\.json$/u.test(path);
+  const eventPrefix = `events/${eventId}/`;
+  if (path.startsWith(eventPrefix)) {
+    const relative = path.slice(eventPrefix.length);
+    return /^(?:event|official-booths|circle-identity-groups|map|map-manifest|reference-selection)\.json$/u.test(relative)
+      || /^maps\/[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*\.json$/u.test(relative)
+      || relative === "NOTICE";
   }
-  return path === "data/published-events.json"
-    || path === "data/circle-identities/allocations.json"
-    || path === "data/circle-identities/evidence.json"
-    || path === `data/event-data-pins/${eventId}.json`;
+  return /^references\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+\.json$/u.test(path);
 }
 
-export async function assemblePublicationStage(repository: "data" | "main", eventId: string, files: readonly PublicationFileInput[]) {
+/** The files an approval produces, sorted, serialized and hashed. */
+export async function assemblePublicationFiles(eventId: string, files: readonly PublicationFileInput[]) {
   const seen = new Set<string>();
   const output: PublicationBundleFile[] = [];
   for (const file of [...files].sort((a, b) => a.path.localeCompare(b.path, "en-US"))) {
-    if (!publicationPathAllowed(repository, eventId, file.path)) throw new Error(`${repository} publication path is not allowed: ${file.path}`);
+    if (!publicationPathAllowed(eventId, file.path)) throw new Error(`publication path is not allowed: ${file.path}`);
     if (seen.has(file.path)) throw new Error(`Duplicate publication path: ${file.path}`);
     seen.add(file.path);
     const text = serialized(file.content);
     output.push({ path: file.path, text, sha256: await sha256(text) });
   }
   return output;
-}
-
-/** Pure assembler: callers provide already validated generator/identity/pin
- * outputs. CLI and web adapters decide where the returned bytes go. */
-export async function assemblePublicationBundle(input: PublicationBundleInput): Promise<PublicationBundle> {
-  if (!input.candidateId || !EVENT_ID.test(input.eventId) || !Number.isSafeInteger(input.candidateVersion)
-    || input.candidateVersion < 1 || !HASH.test(input.approvalHash)) throw new Error("Publication bundle identity is invalid.");
-  const dataFiles = await assemblePublicationStage("data", input.eventId, input.dataFiles);
-  const mainFiles = await assemblePublicationStage("main", input.eventId, input.mainFiles);
-  const hashInput = JSON.stringify({
-    schema: "organizer-publication-bundle/1", candidateId: input.candidateId, eventId: input.eventId,
-    candidateVersion: input.candidateVersion, approvalHash: input.approvalHash,
-    stages: [{ repository: "data", files: dataFiles }, { repository: "main", files: mainFiles }],
-  });
-  return {
-    schema: "organizer-publication-bundle/1", candidateId: input.candidateId, eventId: input.eventId,
-    candidateVersion: input.candidateVersion, approvalHash: input.approvalHash,
-    stages: [{ repository: "data", files: dataFiles }, { repository: "main", files: mainFiles }],
-    bundleHash: await sha256(hashInput),
-  };
 }

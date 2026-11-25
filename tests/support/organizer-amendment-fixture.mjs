@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { buildOfficialCatalogPayload } from "../../scripts/official-catalog-core.mjs";
 import { buildOrganizerCircleGrouping } from "../../app/organizer-circle-groups.mjs";
+import { planCircleIdentityRegistryUpdate } from "../../app/circle-identity-registry.mjs";
+import { EVENT_DATA_REPOSITORY, parseEventDataPin } from "../../app/event-data-pin.mjs";
 
 export const hash = (text) => createHash("sha256").update(text).digest("hex");
 export async function amendmentFixture(runner, adjustSnapshot = () => {}) {
@@ -26,20 +28,21 @@ export async function amendmentFixture(runner, adjustSnapshot = () => {}) {
   const source = { candidateId: "source", candidateVersion: 1, jobId: "published-job", snapshotId: "published-snapshot",
     snapshotJson, approvalHash: hash(snapshotJson), mainCommit: "1".repeat(40), dataCommit: "3".repeat(40), publishedAt: now };
   const artifacts = await builder.buildApprovedPublicationArtifacts(source);
-  const main = await builder.buildPublicationMainStage(source, { dataCommit: source.dataCommit,
-    dataFiles: new Map(artifacts.files.map((file) => [file.path, file.text])), mainCommit: "0".repeat(40),
-    publishedEventsJson: '{"schema":"published-events/1","events":["prior-event"]}', existingPinJson: null,
-    allocationsJson: '{"schema":"circle-id-allocations/1","nextSequence":1,"allocations":[]}', evidenceJson: '{"schema":"circle-identity-evidence/1","entries":[]}' });
-  const mainFiles = new Map(main.files.map((file) => [file.path, file.text]));
   const dataFiles = new Map(artifacts.files.map((file) => [file.path, file.text]));
-  const allocations = JSON.parse(mainFiles.get("data/circle-identities/allocations.json"));
-  const evidence = JSON.parse(mainFiles.get("data/circle-identities/evidence.json"));
+  // The identity registry after this first publication, from an empty one.
+  const { allocations, evidence } = planCircleIdentityRegistryUpdate({ eventId: "event-alpha", official: artifacts.official,
+    grouping: artifacts.grouping, allocations: { schema: "circle-id-allocations/1", nextSequence: 1, allocations: [] },
+    evidence: { schema: "circle-identity-evidence/1", entries: [] }, today: () => snapshot.contentUpdatedAt.slice(0, 10) });
+  // The Git-era `/1` baseline names the data commit and every published file
+  // but NOTICE, as corrections approved before #546 still carry it.
+  const pin = parseEventDataPin({ schema: "event-data-pin/2", eventId: "event-alpha", repository: EVENT_DATA_REPOSITORY,
+    commit: source.dataCommit, files: artifacts.files.filter((file) => !file.path.endsWith("/NOTICE")).map((file) => ({ path: file.path, sha256: hash(file.text) })) });
   const published = { dataCommit: source.dataCommit, catalog: buildOfficialCatalogPayload({ eventId: "event-alpha", event: artifacts.event, official: artifacts.official, evidence }) };
   const baseline = { schema: "organizer-amendment-baseline/1", source: { ...source }, mainCommit: "2".repeat(40),
-    pin: JSON.parse(mainFiles.get("data/event-data-pins/event-alpha.json")), event: artifacts.event, official: artifacts.official,
+    pin, event: artifacts.event, official: artifacts.official,
     grouping: artifacts.grouping, allocations, evidence, draft, references, maps: snapshot.maps };
   delete baseline.source.snapshotJson;
-  return { now, source, snapshot, baseline, published, mainFiles, dataFiles, referenceRecords };
+  return { now, source, snapshot, baseline, published, registry: { allocations, evidence }, dataFiles, referenceRecords };
 }
 
 export async function adoptedAmendmentFixture(runner) {
@@ -56,12 +59,11 @@ export async function adoptedAmendmentFixture(runner) {
   const pin = structuredClone(data.baseline.pin);
   pin.commit = "4".repeat(40);
   pin.files.find((file) => file.path === groupingPath).sha256 = hash(text);
-  data.mainFiles.set("data/event-data-pins/event-alpha.json", JSON.stringify(pin));
   const evidence = structuredClone(data.baseline.evidence);
   evidence.entries[0].sources.push(...evidence.entries[2].sources);
   evidence.entries[1].sources.push(...evidence.entries[3].sources);
   evidence.entries.splice(2);
-  data.mainFiles.set("data/circle-identities/evidence.json", JSON.stringify(evidence));
+  data.registry.evidence = evidence;
   data.published = { dataCommit: pin.commit, catalog: buildOfficialCatalogPayload({ eventId: data.baseline.event.id,
     event: data.baseline.event, official: data.baseline.official, evidence }) };
   const { publishedAt: _publishedAt, snapshotJson: _snapshotJson, ...source } = data.source;
