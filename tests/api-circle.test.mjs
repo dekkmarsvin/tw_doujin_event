@@ -155,3 +155,33 @@ test("content its circle chose to hide after the event leaves readers when the e
   await api.republish("sample", { eventEndsAt: "2020-01-01T00:00:00.000+08:00" });
   assert.equal(await published(NORTH), undefined);
 });
+
+test("deleting an account leaves the kept pictures of an owner whose claim was revoked", async () => {
+  const at = (path) => `${path}?event=sample-two`;
+  const decide = async (claimId, decision) => {
+    const response = await api.call("POST", at("/api/admin/claims"), { cookie: admin, body: { claimId, decision } });
+    assert.equal(response.status, 200, await response.clone().text());
+  };
+  const claimed = await api.call("POST", at("/api/claims"), { cookie: owner, body: { circleId: OTHER_EVENT_CIRCLE } });
+  assert.equal(claimed.status, 201, await claimed.clone().text());
+  const ownerClaim = (await claimed.json()).id;
+  await decide(ownerClaim, "approve");
+  const form = new FormData();
+  form.set("file", new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 1, 0])], "a.png", { type: "image/png" }));
+  const uploaded = await api.call("POST", at(`/api/circle/${OTHER_EVENT_CIRCLE}/thumbnail`), { cookie: owner, body: form });
+  assert.equal(uploaded.status, 200, await uploaded.clone().text());
+  const picture = await uploaded.json();
+  const saved = await api.call("PUT", at(`/api/circle/${OTHER_EVENT_CIRCLE}/overrides`), { cookie: owner,
+    body: { fields: { saleInfo: "撤銷前的內容", thumbnail: picture.thumbnail }, hostedThumbnailKey: picture.uploadKey } });
+  assert.equal(saved.status, 200, await saved.clone().text());
+  // Revoking keeps the content and its pictures for the circle's rightful owner.
+  await decide(ownerClaim, "revoke");
+
+  const email = "second@example.test";
+  const second = await api.signIn(email);
+  const refused = await api.call("POST", at("/api/claims"), { cookie: second, body: { circleId: OTHER_EVENT_CIRCLE } });
+  assert.equal(refused.status, 201, await refused.clone().text());
+  await decide((await refused.json()).id, "reject");
+  assert.equal((await api.call("DELETE", "/api/account", { cookie: second, body: { confirm: email } })).status, 200);
+  assert.ok(await api.thumbnails.head(picture.uploadKey), "a rejected claimant deletes none of the kept pictures");
+});
