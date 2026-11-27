@@ -279,19 +279,19 @@ try {
   await banner.getByRole("button", { name: "退出", exact: true }).click();
   await pause(mobile);
 
-  // The tools menu owes a reader both exits.
-  const toolsMenu = mobile.locator("details");
-  await toolsMenu.locator("summary").click();
+  // The reader's menu (#581) owes a reader both exits.
+  const menuButton = mobile.getByRole("button", { name: /^我的/ });
+  await menuButton.click();
   await mobile.getByRole("button", { name: "最大字級", exact: true }).focus();
   await mobile.keyboard.press("Escape");
-  assert.equal(await toolsMenu.evaluate((node) => node.open), false, "Escape closes the tools menu");
-  assert.equal(await toolsMenu.locator("summary").evaluate((node) => node === document.activeElement), true);
+  assert.equal(await menuButton.getAttribute("aria-expanded"), "false", "Escape closes the menu");
+  assert.equal(await menuButton.evaluate((node) => node === document.activeElement), true);
   await pause(mobile);
   const mapBefore = await state(mobile);
-  await toolsMenu.locator("summary").click();
+  await menuButton.click();
   await mobile.locator(".map").click({ position: { x: 20, y: 150 } });
   await pause(mobile);
-  assert.equal(await toolsMenu.evaluate((node) => node.open), false, "a press outside closes the tools menu");
+  assert.equal(await menuButton.getAttribute("aria-expanded"), "false", "a press outside closes the menu");
   const afterMenu = await state(mobile);
   assert.deepEqual(afterMenu.offset, mapBefore.offset, "closing the menu leaves the map where it was");
   assert.equal(afterMenu.zoom, mapBefore.zoom);
@@ -511,8 +511,10 @@ try {
   const storage = await open(761, 768, "extra", async (storagePage) => {
     await storagePage.addInitScript(() => localStorage.setItem("event-map-planning-v1", '{"schemaVersion":999}'));
   });
-  assert.equal(await storage.getByText("儲存異常，請開啟資料管理", { exact: true }).filter({ visible: true }).count(), 1);
+  // A device that cannot save says so beside the menu, and the menu leads to 資料管理.
+  assert.equal(await storage.getByText("無法儲存", { exact: true }).filter({ visible: true }).count(), 1);
   await capture(storage, "synthetic-storage-error-761-extra");
+  await storage.getByRole("button", { name: "我的（有問題）", exact: true }).click();
   await storage.getByRole("button", { name: "資料管理", exact: true }).click();
   assert.equal(await storage.getByRole("dialog").count(), 1);
   await storage.close();

@@ -835,7 +835,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       ).all<{ event_id: string; pending: number }>(),
       database.prepare(
         `SELECT (SELECT COUNT(*) FROM organizer_applications WHERE status = 'pending') AS applications,
-                (SELECT COUNT(*) FROM organizer_event_candidates WHERE status = 'submitted') AS submissions`,
+                -- An approval whose publishing did not finish stays 'approved' until
+                -- approved again (#569), so it still waits for an admin (#581).
+                (SELECT COUNT(*) FROM organizer_event_candidates WHERE status IN ('submitted', 'approved')) AS submissions`,
       ).first<{ applications: number; submissions: number }>(),
     ]);
     return {

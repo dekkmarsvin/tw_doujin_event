@@ -17,9 +17,9 @@ try {
   assert.ok(await page.evaluate(() => Boolean(navigator.serviceWorker.controller)), "the reader is controlled by the Service Worker");
   await page.locator("[data-slot-code]").first().waitFor();
 
-  // The check lives in 使用說明 › 離線使用 (maintainer request on #415).
-  await page.getByRole("button", { name: "使用說明", exact: true }).click();
-  await page.getByRole("button", { name: "確認這天可離線使用", exact: true }).click();
+  // The check lives in the header's 我的 menu, under 活動資料 (#581).
+  await page.getByRole("button", { name: /^我的/ }).click();
+  await page.getByRole("button", { name: "檢查", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "離線使用" });
   await dialog.getByText(/已就緒|還缺/).waitFor();
   if (await dialog.getByText(/還缺/).count()) await dialog.getByRole("button", { name: "補齊", exact: true }).click();
@@ -39,6 +39,9 @@ try {
   await journey.capture(page, "reader-offline-prep-offline");
   const planningBeforeSwitch = await page.evaluate((key) => localStorage.getItem(key), PLAN_KEY);
   const originalUrl = new URL(page.url());
+  // The language lives in the header's menu (#581); it stays open while switching.
+  const menu = page.getByRole("button", { name: /^(我的|Me|マイページ)/ });
+  await menu.click();
   for (const [locale, tabName] of [["en", "Plan 1"], ["ja", "プラン 1"], ["zh-Hant", "行程 1"]]) {
     await page.getByRole("combobox", { name: /^(介面語言|Language|表示言語)$/ }).selectOption(locale);
     await page.getByRole("tab", { name: tabName, exact: true }).waitFor();
@@ -53,6 +56,7 @@ try {
   }
   // The dictionary being cached must also let the reader finish an errand.
   await page.getByRole("combobox", { name: "介面語言" }).selectOption("en");
+  await page.keyboard.press("Escape");
   await page.getByRole("tab", { name: "Explore", exact: true }).click();
   await page.getByRole("textbox", { name: "Search circles, booths or works", exact: true }).fill("南星");
   await page.getByRole("link", { name: /南星工房/ }).first().click();
@@ -62,6 +66,7 @@ try {
   assert.ok(expanded.favorites.some(entry => entry.circleId === "c-900002"));
   assert.ok(expanded.visitPlans.some(entry => entry.circleId === "c-900002" && entry.day === 1));
   assert.equal(expanded.favorites.find(entry => entry.circleId === "c-900001").memo, "離線備註");
+  await menu.click();
   await page.getByRole("combobox", { name: "Language" }).selectOption("ja");
   await page.getByRole("tab", { name: "プラン 2", exact: true }).waitFor();
   assert.deepEqual(await page.evaluate(key => JSON.parse(localStorage.getItem(key)), PLAN_KEY), expanded);

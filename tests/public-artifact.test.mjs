@@ -94,7 +94,11 @@ test("keeps the reader separate from the control surfaces but linked to them", a
 
   const readerJs = (await Promise.all(readerAssets.filter((path) => path.endsWith(".js"))
     .map((path) => readFile(dist(path.slice(1)), "utf8")))).join("\n");
-  assert.doesNotMatch(readerJs, /\/api\/auth\/|\/api\/claims|\/api\/admin\/|\/api\/organizer\//, "the reader must not carry write endpoints");
+  // The reader's 我的 menu reads who is signed in and what waits for them
+  // (#581), and nothing else: no control-surface client, no write endpoint.
+  const READER_READS = ["/api/shares", "/api/auth/session", "/api/claims", "/api/organizer/events", "/api/admin/review-queue", "/api/admin/site-settings"];
+  const endpoints = [...new Set([...readerJs.matchAll(/\/api\/[a-z-]+(?:\/[a-z-]+)*/g)].map(([path]) => path))];
+  assert.deepEqual(endpoints.filter((path) => !READER_READS.includes(path)), [], "the reader must not carry control-surface endpoints");
   assert.doesNotMatch(readerJs, /寄出登入連結|認領社團|__Host-ff47_session/);
 
   // Entry separation is a code boundary, not concealment: a circle who only
