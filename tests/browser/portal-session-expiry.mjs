@@ -79,7 +79,7 @@ try {
     } });
     currentPage = page;
     await page.getByRole("heading", { name: "請先登入", exact: true }).waitFor();
-    await page.locator('a[href^="/circle?"]').click();
+    await page.getByRole("link", { name: "前往社團入口登入", exact: true }).click();
     await page.getByLabel("Email", { exact: true }).fill("session@example.test");
     await page.waitForFunction(() => [...document.querySelectorAll("button")].some(button => button.textContent === "寄出登入連結" && !button.disabled));
     await page.getByRole("button", { name: "寄出登入連結", exact: true }).click();
