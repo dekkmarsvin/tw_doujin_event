@@ -31,6 +31,9 @@
 .link { display:inline-flex; align-items:center; min-height:36px; font-size:calc(14px * var(--ui-font-scale,1)); }
 .inline { min-height:32px; padding:0; border:0; background:transparent; font-size:calc(14px * var(--ui-font-scale,1)); cursor:pointer; }
 .tool { margin-top:6px; }
+.row:has(.scale) + .row { margin-top:8px; }
+.identity { display:grid; gap:2px; overflow-wrap:anywhere; font-size:calc(14px * var(--ui-font-scale,1)); }
+.identity small { color:var(--muted); font-size:calc(12px * var(--ui-font-scale,1)); }
 .scale { display:inline-grid !important; grid-template-columns:repeat(3,40px); gap:2px; padding:2px; border:1px solid var(--line); border-radius:7px; background:#f5f6f3; }
 .scale button { height:30px; padding:0; border:0; border-radius:5px; background:transparent; color:#68726c; font-weight:800; cursor:pointer; }
 .scale button[aria-pressed="true"] { background:#fff; color:var(--ink); box-shadow:0 1px 3px #20283522; }

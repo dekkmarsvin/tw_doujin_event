@@ -206,7 +206,10 @@ export default function ReaderAccountMenu({ account, event, day, textScale, onTe
         <div className={styles.tool}><ReaderHelp eventId={event.id} dataLastUpdatedLabel={event.dataLastUpdatedLabel} inline /></div>
       </Section>
       {session ? <Section title={t("account")}>
-        <Row label={session.email}>{session.expiresAt ? t("until", { date: new Date(session.expiresAt).toLocaleString(locale, { dateStyle: "short", timeStyle: "short" }) }) : undefined}</Row>
+        <div className={styles.identity}>
+          <span>{session.email}</span>
+          {session.expiresAt && <small>{t("until", { date: new Date(session.expiresAt).toLocaleString(locale, { dateStyle: "short", timeStyle: "short" }) })}</small>}
+        </div>
         <div className={styles.actions}>
           <a href={circleHref()}>{t("circleWorkspace")}</a>
           {session.hasOrganizerAccess && <a href="/organizer">{t("toOrganizer")}</a>}
