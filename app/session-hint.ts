@@ -20,3 +20,11 @@ export function forgetSignedIn() {
 export function wasSignedIn() {
   try { return window.localStorage.getItem(KEY) === "1"; } catch { return false; }
 }
+
+export function subscribeSignedInChange(listener: () => void) {
+  const onStorage = (event: StorageEvent) => {
+    if (event.storageArea === window.localStorage && (event.key === null || event.key === KEY)) listener();
+  };
+  window.addEventListener("storage", onStorage);
+  return () => window.removeEventListener("storage", onStorage);
+}

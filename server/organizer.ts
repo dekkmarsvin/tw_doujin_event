@@ -358,6 +358,7 @@ export function createOrganizer(dependencies: PortalDependencies, auth: Auth, ad
       edition: event.edition,
       updatedByRole: event.last_updated_role,
       role: event.role,
+      isMember: "is_member" in event ? Boolean(event.is_member) : true,
       operation: event.publication_operation,
       workspaceMode: event.workspace_mode,
       ...(admin && "event_days_json" in event ? { dateRange: dateRange(event.event_days_json, event.amendment_days_json) } : {}),

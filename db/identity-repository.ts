@@ -1490,14 +1490,18 @@ export function createIdentityRepository(database: D1Database, options: { bootst
                 (SELECT json_extract(settings_json, '$.days') FROM organizer_amendment_changes
                  WHERE candidate_id = c.id ORDER BY version DESC LIMIT 1) AS amendment_days_json,
                 ${organizerCandidateEdition} AS edition, 'admin' AS role,
+                EXISTS (
+                  SELECT 1 FROM organizer_event_grants g
+                  WHERE g.candidate_id = c.id AND g.account_id = ?1 AND g.role = 'owner' AND g.revoked_at IS NULL
+                ) AS is_member,
                 CASE WHEN w.candidate_id IS NULL OR w.onboarding_completed_at IS NOT NULL
                   THEN 'binder' ELSE 'guided' END AS workspace_mode
          FROM organizer_event_candidates c
          LEFT JOIN organizer_workspace_state w ON w.candidate_id = c.id
          ORDER BY c.updated_at DESC, c.id`,
-      ).all<{
+      ).bind(accountId).all<{
         id: string; tentative_name: string; event_id: string | null; status: OrganizerCandidateStatus;
-        current_version: number; updated_at: number; last_updated_role: string; role: "admin";
+        current_version: number; updated_at: number; last_updated_role: string; role: "admin"; is_member: number;
         workspace_mode: "guided" | "binder"; publication_operation: "CREATE" | "AMEND"; created_at: number; edition: number;
         event_days_json: string | null; amendment_days_json: string | null;
       }>();

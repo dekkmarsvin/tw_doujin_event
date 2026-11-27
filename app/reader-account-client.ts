@@ -3,17 +3,30 @@ import type { OrganizerEventSummary } from "./organizer-client";
 import type { AdminSiteSettings } from "./site-settings";
 import { forgetSignedIn } from "./session-hint";
 
+export class ReaderUnauthorizedError extends Error {
+  constructor() { super("Session ended."); }
+}
+
 /**
  * The reader's own, read-only view of the signed-in account (#581). The
  * control surfaces' clients stay out of the reader bundle: this module only
  * reads, never writes, and answers null for anything it could not read.
  */
 async function read<T>(path: string): Promise<T | null> {
+  let response: Response;
   try {
-    const response = await fetch(path, { credentials: "same-origin", headers: { accept: "application/json" } });
-    // The session ended: this device is no longer signed in.
-    if (response.status === 401) forgetSignedIn();
-    return response.ok ? await response.json() as T : null;
+    response = await fetch(path, { credentials: "same-origin", headers: { accept: "application/json" } });
+  } catch {
+    return null;
+  }
+  // The session ended: this device is no longer signed in.
+  if (response.status === 401) {
+    forgetSignedIn();
+    throw new ReaderUnauthorizedError();
+  }
+  if (!response.ok) return null;
+  try {
+    return await response.json() as T;
   } catch {
     return null;
   }

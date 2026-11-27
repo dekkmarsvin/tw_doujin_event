@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { ClaimSummary, PortalSession, ReviewQueue } from "./circle-editor-client";
 import type { OrganizerEventSummary } from "./organizer-client";
-import { readReaderClaims, readReaderReviewQueue, readReaderServices, readReaderSession, readReaderWorkspaceClaims, readReaderWorkspaces } from "./reader-account-client";
+import { ReaderUnauthorizedError, readReaderClaims, readReaderReviewQueue, readReaderServices, readReaderSession, readReaderWorkspaceClaims, readReaderWorkspaces } from "./reader-account-client";
 import type { EventDefinition } from "./event-catalog";
 import type { ServiceChecks } from "./site-settings";
-import { wasSignedIn } from "./session-hint";
+import { subscribeSignedInChange, wasSignedIn } from "./session-hint";
 import { circlePath, readerLink } from "./seo";
 import { publicLoginHref } from "./public-header";
 import { useCircleCatalog } from "./use-circle-catalog";
@@ -25,7 +25,7 @@ const MESSAGES = defineMessages({
     open: "我的", openSignedIn: "我的：{email}",
     attention: "需要留意", alert: "有問題",
     pending: "待處理", claimsQueue: "社團認領", applications: "活動申請", submissions: "送審（含發布未完成）", toAdmin: "前往管理入口",
-    services: "服務", servicesOk: "可用", servicesStale: "上次檢查 {date}", servicesNever: "尚未檢查", servicesDown: "不可用",
+    services: "服務", servicesOk: "可用", servicesUnknown: "無法確認", servicesStale: "上次檢查 {date}", servicesNever: "尚未檢查", servicesDown: "不可用",
     myEvent: "我的活動", pendingClaims: "本場待審認領 {count}", editEvent: "編輯活動", toOrganizer: "主辦工作區",
     myCircles: "我的社團", verified: "已認領", reviewing: "審核中", rejected: "需補件", revoked: "已撤銷",
     booth: "本場 {codes}", notHere: "本場沒有攤位", catalogLive: "品書已上線", catalogNone: "還沒有品書",
@@ -42,7 +42,7 @@ const MESSAGES = defineMessages({
     open: "Me", openSignedIn: "Me: {email}",
     attention: "Needs attention", alert: "Problem",
     pending: "To do", claimsQueue: "Circle claims", applications: "Event applications", submissions: "Submissions (incl. unfinished publishing)", toAdmin: "Open admin",
-    services: "Services", servicesOk: "Working", servicesStale: "Last checked {date}", servicesNever: "Not checked yet", servicesDown: "Not working",
+    services: "Services", servicesOk: "Working", servicesUnknown: "Couldn't confirm", servicesStale: "Last checked {date}", servicesNever: "Not checked yet", servicesDown: "Not working",
     myEvent: "My event", pendingClaims: "{count} claims to review", editEvent: "Edit event", toOrganizer: "Organizer workspace",
     myCircles: "My circles", verified: "Claimed", reviewing: "In review", rejected: "Needs more", revoked: "Revoked",
     booth: "Here at {codes}", notHere: "No booth at this event", catalogLive: "Item list is live", catalogNone: "No item list yet",
@@ -59,7 +59,7 @@ const MESSAGES = defineMessages({
     open: "マイページ", openSignedIn: "マイページ：{email}",
     attention: "確認が必要", alert: "問題あり",
     pending: "対応待ち", claimsQueue: "サークル申請", applications: "イベント申請", submissions: "審査待ち（公開未完了を含む）", toAdmin: "管理画面へ",
-    services: "サービス", servicesOk: "利用可能", servicesStale: "前回の確認 {date}", servicesNever: "未確認", servicesDown: "利用不可",
+    services: "サービス", servicesOk: "利用可能", servicesUnknown: "確認できません", servicesStale: "前回の確認 {date}", servicesNever: "未確認", servicesDown: "利用不可",
     myEvent: "担当イベント", pendingClaims: "審査待ちの申請 {count} 件", editEvent: "イベントを編集", toOrganizer: "主催ワークスペース",
     myCircles: "マイサークル", verified: "確認済み", reviewing: "審査中", rejected: "要追加資料", revoked: "取り消し済み",
     booth: "このイベント {codes}", notHere: "このイベントに配置なし", catalogLive: "お品書き公開中", catalogNone: "お品書き未登録",
@@ -98,25 +98,32 @@ function useReaderAccount(eventId: string) {
   const [account, setAccount] = useState<Account | null>(null);
   const sequence = useRef({ value: 0 });
   const refresh = useCallback(async () => {
-    if (!wasSignedIn()) { setAccount(null); return; }
     const request = ++sequence.current.value;
-    const session = await readReaderSession();
-    if (request !== sequence.current.value) return;
-    if (!session) { setAccount(null); return; }
-    const [claims, events, queue, services] = await Promise.all([
-      readReaderClaims(eventId),
-      session.hasOrganizerAccess ? readReaderWorkspaces() : null,
-      session.isAdmin ? readReaderReviewQueue() : null,
-      session.isAdmin ? readReaderServices() : null,
-    ]);
-    const candidate = (events ?? []).filter((item) => item.eventId === eventId && item.role !== "admin")
-      .sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
-    const organizerQueue = candidate ? await readReaderWorkspaceClaims(candidate.id) : null;
-    if (request !== sequence.current.value) return;
-    setAccount({
-      session, claims, candidate, queue, services,
-      candidatePendingClaims: organizerQueue ? organizerQueue.pendingClaimCount ?? organizerQueue.claims.length : null,
-    });
+    if (!wasSignedIn()) { setAccount(null); return; }
+    try {
+      const session = await readReaderSession();
+      if (request !== sequence.current.value) return;
+      if (!session) { setAccount(null); return; }
+      const [claims, events, queue, services] = await Promise.all([
+        readReaderClaims(eventId),
+        session.hasOrganizerAccess ? readReaderWorkspaces() : null,
+        session.isAdmin ? readReaderReviewQueue() : null,
+        session.isAdmin ? readReaderServices() : null,
+      ]);
+      const candidate = (events ?? []).filter((item) => item.eventId === eventId && (item.isMember ?? item.role !== "admin"))
+        .sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
+      const organizerQueue = candidate ? await readReaderWorkspaceClaims(candidate.id) : null;
+      if (request !== sequence.current.value) return;
+      setAccount({
+        session, claims, candidate, queue, services,
+        candidatePendingClaims: organizerQueue ? organizerQueue.pendingClaimCount ?? organizerQueue.claims.length : null,
+      });
+    } catch (error) {
+      if (error instanceof ReaderUnauthorizedError) {
+        ++sequence.current.value;
+        setAccount(null);
+      }
+    }
   }, [eventId]);
   useEffect(() => {
     const requests = sequence.current;
@@ -124,11 +131,13 @@ function useReaderAccount(eventId: string) {
     queueMicrotask(() => { if (active) void refresh(); });
     const visible = () => { if (document.visibilityState === "visible") void refresh(); };
     const online = () => void refresh();
+    const stopStorage = subscribeSignedInChange(() => void refresh());
     document.addEventListener("visibilitychange", visible);
     window.addEventListener("online", online);
     return () => {
       active = false;
       ++requests.value;
+      stopStorage();
       document.removeEventListener("visibilitychange", visible);
       window.removeEventListener("online", online);
     };
@@ -148,11 +157,14 @@ function useOnline() {
   return online;
 }
 
-type ServiceLight = "ok" | "stale" | "never" | "down";
+type ServiceLight = "ok" | "unknown" | "stale" | "never" | "down";
 function serviceLight(services: ServiceChecks | null, now: number): ServiceLight {
   if (!services || services.checkedAt === null) return "never";
-  if ([services.mail, services.publication].some((check) => check?.status === "unavailable")) return "down";
-  return now - services.checkedAt > SERVICE_CHECK_FRESH_MS ? "stale" : "ok";
+  if (now - services.checkedAt > SERVICE_CHECK_FRESH_MS) return "stale";
+  const checks = [services.mail, services.publication];
+  if (checks.some((check) => check?.status === "unavailable")) return "down";
+  if (checks.every((check) => check?.status === "available")) return "ok";
+  return "unknown";
 }
 
 const shortDate = (time: number, locale: string) => new Date(time).toLocaleDateString(locale, { month: "numeric", day: "numeric", timeZone: "Asia/Taipei" });
@@ -201,7 +213,7 @@ export default function ReaderAccountMenu({ event, textScale, onTextScale, onChe
       if (!root.current?.contains(pressed.target as Node) && !inDialog(pressed.target)) setOpen(false);
     };
     const escape = (key: KeyboardEvent) => {
-      if (key.key !== "Escape" || inDialog(key.target) || document.querySelector("[aria-modal='true']")) return;
+      if (key.key !== "Escape" || inDialog(key.target) || document.querySelector("[aria-modal='true']") || root.current?.querySelector("[role='dialog']")) return;
       setOpen(false);
       trigger.current?.focus();
     };
@@ -239,7 +251,7 @@ export default function ReaderAccountMenu({ event, textScale, onTextScale, onChe
         <Row label={t("applications")}>{queue.organizer.applications}</Row>
         <Row label={t("submissions")}>{queue.organizer.submissions}</Row>
         {light && <Row label={t("services")} tone={light === "ok" ? "ok" : light === "down" ? "bad" : "muted"}>
-          {light === "ok" ? t("servicesOk") : light === "down" ? t("servicesDown") : light === "never" ? t("servicesNever") : t("servicesStale", { date: shortDate(account!.services!.checkedAt!, locale) })}
+          {light === "ok" ? t("servicesOk") : light === "down" ? t("servicesDown") : light === "unknown" ? t("servicesUnknown") : light === "never" ? t("servicesNever") : t("servicesStale", { date: shortDate(account!.services!.checkedAt!, locale) })}
         </Row>}
         <a className={styles.link} href="/admin">{t("toAdmin")}</a>
       </Section>}
