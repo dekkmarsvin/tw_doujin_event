@@ -1,3 +1,4 @@
+import { useEditorSaveStatus } from "../workspace-save-status";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { PortalError } from "../circle-editor-client";
 import { EVENT_ALIAS_MAX_COUNT } from "../event-aliases";
@@ -51,6 +52,7 @@ export function OrganizerAmendmentPanel({ detail, onChanged, onDirtyChange, onSa
   const changesDirty = loaded !== null && JSON.stringify(changes) !== JSON.stringify(loaded.changes);
   const settingsDirty = loaded !== null && settings !== null && JSON.stringify(settings) !== JSON.stringify(settingsForm(loaded));
   const dirty = changesDirty || settingsDirty || formDirty;
+  useEditorSaveStatus(dirty, busy, detail.event.updatedAt);
   useEffect(() => {
     let active = true;
     void readOrganizerAmendment(detail.event.id).then((result) => {

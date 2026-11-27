@@ -1,3 +1,4 @@
+import { useEditorSaveStatus } from "../workspace-save-status";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { PortalError } from "../circle-editor-client";
 import { listOrganizerMaps, putOrganizerImport, saveOrganizerEvent, type OrganizerEventDetail, type OrganizerMapLocation, type OrganizerMapSummary } from "../organizer-client";
@@ -68,6 +69,7 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
   const aliasesDirty = Object.keys(labels).length > 0;
   const aliasesInvalid = Object.values(labels).some(names => Object.values(names).some(name => !name.trim() || name.length > 60));
   const anyDirty = dirty || aliasesDirty;
+  useEditorSaveStatus(anyDirty, busy === "save" || busy === "aliases", detail.event.updatedAt);
   if (!anyDirty && loadedVersion !== detail.event.version && detail.event.version >= expectedVersion) {
     const next = entriesOf(detail.import?.rows ?? []);
     setBaseline(new Map(next.map(entry => [entry.key, entry.row])));

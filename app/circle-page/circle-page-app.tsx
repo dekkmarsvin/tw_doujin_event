@@ -1,4 +1,6 @@
 "use client";
+import { OwnedCircleLink } from "../owned-circle-link";
+import { useReaderAccount } from "../use-reader-account";
 import { sharePublicContent } from "../public-share";
 import { localizedHref } from "../i18n/locale";
 
@@ -72,6 +74,7 @@ const MESSAGES = defineMessages({
  */
 export default function CirclePageApp({ data }: { data: CircleCatalogPayload }) {
   const eventId = data.eventId;
+  const account = useReaderAccount(eventId, true);
   const circleId = data.circles[0].id;
   const event = getEventDefinition(eventId);
   // The page's own slice is the base; only the overlay goes to the network.
@@ -158,6 +161,7 @@ export default function CirclePageApp({ data }: { data: CircleCatalogPayload }) 
   };
 
   return <>
+    {account?.claims?.some(claim => claim.status === "verified" && claim.circleId === circleId) && <p className={styles.owned}><OwnedCircleLink eventId={eventId} circleId={circleId} /></p>}
     {targets.notice && createPortal(<EventNoticeBanner notice={state.overrides?.notice} className={styles.notice} />, targets.notice)}
     {targets.bar && createPortal(<div ref={setBar} className={styles.actionBar} role="group" aria-label={t("actions")}>
       {planning.storageError && <p className={styles.error} role="alert">{planning.storageError}</p>}

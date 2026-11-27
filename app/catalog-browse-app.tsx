@@ -17,6 +17,9 @@ import { restoreFavorite, toggleFavorite } from "./planning-store";
 import { applyReaderMetadata, circlePath, pageMetadata, readerLink } from "./seo";
 import ReaderViewTabs, { navigateReader, ordinaryLinkClick } from "./reader-navigation";
 import AdvancedCircleSearchControls from "./advanced-circle-search";
+import { useReaderAccount } from "./use-reader-account";
+import { OfflinePrepDialog } from "./offline-prep-dialog";
+import { SiteTopbar } from "./site-topbar";
 import ReaderAccountMenu from "./reader-account";
 import { localizedHref } from "./i18n/locale";
 import { useDocumentLanguage, useLocale, useMessages } from "./i18n/locale-context";
@@ -28,6 +31,8 @@ import styles from "./catalog-browse-app.module.css";
 
 export default function CatalogBrowseApp({ event, onChooseEvent }: { event: EventDefinition; onChooseEvent?: () => void }) {
   const publication = useCircleCatalog(event.id);
+  const [offlineDay, setOfflineDay] = useState<string | number | null>(null);
+  const account = useReaderAccount(event.id);
   const planning = useReaderPlanning();
   const { textScale, changeTextScale, fontScale } = useReaderTextScale();
   const { locale } = useLocale();
@@ -173,13 +178,16 @@ export default function CatalogBrowseApp({ event, onChooseEvent }: { event: Even
   const failed = publication.status === "error" || publication.overlayStatus === "unavailable";
   const allScope = state.day === null && state.venueSpaceId === null;
   return <div className={styles.page} style={{ "--ui-font-scale": fontScale } as CSSProperties}>
-    <header className={styles.header}>
-      <div className={styles.identity}><div className={`brand ${styles.brand}`}><span aria-hidden="true">場</span>場刊 Map</div>{/* As on the map: the event name leads back to the chooser only when there is another event to choose. */}{onChooseEvent ? <a className={styles.event} href={localizedHref("/", locale)} onClick={(pressed) => { if (!ordinaryLinkClick(pressed)) return; pressed.preventDefault(); savePosition(); onChooseEvent(); }}><span>{event.name}<small>{eventCalendar(event, locale).label}</small></span><span className={styles.eventSwitch}>{t("switchEvent")}<UiIcon name="chevron-right" /></span></a> : <div className={styles.event}><span>{event.name}<small>{eventCalendar(event, locale).label}</small></span></div>}<ReaderViewTabs className={styles.viewSwitch} event={event} view="browse" url={url} beforeNavigate={savePosition} /><ReaderAccountMenu className={styles.readerMenu} event={event} day={state.day} textScale={textScale} onTextScale={changeTextScale} /></div>
-    </header>
+    <SiteTopbar className={styles.header} innerClassName={styles.identity}
+      brand={<div className={`brand ${styles.brand}`}><span aria-hidden="true">場</span>場刊 Map</div>}
+      event={onChooseEvent ? <a className={styles.event} href={localizedHref("/", locale)} onClick={(pressed) => { if (!ordinaryLinkClick(pressed)) return; pressed.preventDefault(); savePosition(); onChooseEvent(); }}><span>{event.name}<small>{eventCalendar(event, locale).label}</small></span><span className={styles.eventSwitch}>{t("switchEvent")}<UiIcon name="chevron-right" /></span></a> : <div className={styles.event}><span>{event.name}<small>{eventCalendar(event, locale).label}</small></span></div>}
+      search={<div className={styles.search}><UiIcon name="search" /><input aria-label={t("search")} placeholder={t("search")} value={state.query} onChange={(e) => change({ ...state, query: e.target.value }, true)} /></div>}
+      navigation={<ReaderViewTabs className={styles.viewSwitch} event={event} view="browse" url={url} beforeNavigate={savePosition} />}
+      account={<ReaderAccountMenu key={event.id} account={account} className={styles.readerMenu} event={event} day={state.day} textScale={textScale} onTextScale={changeTextScale} onCheckOffline={setOfflineDay} />} />
+    {offlineDay !== null && <OfflinePrepDialog event={event} day={offlineDay} venueSpaceId={state.venueSpaceId ?? event.venueAssignments[0]?.venueSpaceId} onClose={() => setOfflineDay(null)} />}
     <EventNoticeBanner notice={publication.overrides?.notice} className={styles.notice} />
     <main className={styles.main}>
       <h1 className={styles.srOnly}>{t("heading", { name: event.name })}</h1>
-      <div className={styles.search}><UiIcon name="search" /><input aria-label={t("search")} placeholder={t("search")} value={state.query} onChange={(e) => change({ ...state, query: e.target.value }, true)} /></div>
       <div className={styles.scope}>
         <label><span className={styles.srOnly}>{t("eventDay")}</span><select aria-label={t("eventDay")} value={state.day === null ? "" : String(state.day)} onChange={(e) => change({ ...state, day: event.days.find((day) => String(day.id) === e.target.value)?.id ?? null })}>
           <option value="">{t("allDays")}</option>{event.days.map((day) => { const iso = locale === "zh-Hant" ? null : eventDayCalendarDate(event, day.id); return <option key={day.id} value={String(day.id)}>{iso ? dayDateLabel(iso, locale) : day.dateLabel}</option>; })}

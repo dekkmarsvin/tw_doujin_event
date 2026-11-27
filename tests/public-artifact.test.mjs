@@ -109,7 +109,8 @@ test("keeps the reader separate from the control surfaces but linked to them", a
     ...readerJs.matchAll(/\/api\/[a-z-]+(?:\/[a-z-]+)*(?:\/["'`]\s*\+\s*[^"'`]+\+\s*["'`]\/[a-z-]+(?:\/[a-z-]+)*)?/g),
   ].map(([raw]) => raw.replace(/\/["'`]\s*\+\s*[^"'`]+\+\s*["'`]\//, "/:candidateId/")))];
   assert.deepEqual(endpoints.filter((path) => !READER_READS.includes(path)), [], "the reader must not carry control-surface endpoints");
-  assert.doesNotMatch(readerJs, /\bmethod\s*:\s*["'`](?:DELETE|PUT|PATCH)["'`]/i, "the reader must not carry write HTTP methods");
+  assert.doesNotMatch(readerJs, /\bmethod\s*:\s*["'`](?:PUT|PATCH)["'`]/i, "the reader must not carry write HTTP methods");
+  assert.doesNotMatch(readerJs.replace(/fetch\(["'`][/]api[/]auth[/]session["'`],\{method:["'`]DELETE["'`]/g, ""), /method:["'`]DELETE["'`]/, "only sign-out may use DELETE");
   const postCalls = [...readerJs.matchAll(/.{0,60}\bmethod\s*:\s*["'`]POST["'`].{0,60}/gi)].map(([snippet]) => snippet);
   assert.ok(postCalls.every((snippet) => snippet.includes("/api/shares")), `unexpected POST in reader bundle: ${postCalls.join(" | ")}`);
   assert.doesNotMatch(readerJs, /寄出登入連結|認領社團|__Host-ff47_session/);
@@ -134,7 +135,7 @@ test("the circle page script is its own public entry, outside the offline shell"
   assert.ok(own.some((asset) => /\/circlePage-[\w-]+\.js$/.test(asset)), "the page has its own entry chunk");
 
   const pageJs = (await Promise.all(pageAssets.filter((path) => path.endsWith(".js")).map((path) => readFile(dist(path.slice(1)), "utf8")))).join("\n");
-  assert.doesNotMatch(pageJs, /\/api\/auth\/|\/api\/claims|\/api\/admin\/|\/api\/organizer\/|\/api\/circle\//, "the page must not carry write endpoints");
+  assert.doesNotMatch(pageJs, /\/api\/auth\/(?!session)|\/api\/claims\/|\/api\/circle\//, "the page must not carry write endpoints");
   assert.doesNotMatch(pageJs, /challenges\.cloudflare\.com|寄出登入連結|__Host-ff47_session/, "nor sign-in");
   assert.match(pageJs, /overrides\.json/, "it reads the circle's content from the public overlay");
 

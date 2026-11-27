@@ -11,7 +11,7 @@ export function requestAdminServiceCheck() {
   return call<{ services: ServiceChecks }>("/api/admin/service-check", { method: "POST", body: "{}" });
 }
 import { notificationParameters } from "./notification-navigation";
-import { forgetSignedIn, rememberSignedIn } from "./session-hint";
+import { SESSION_EXPIRED_EVENT, forgetSignedIn, rememberSignedIn } from "./session-hint";
 import type { AdminCircleDetail } from "./admin-circle-detail";
 export type { AdminCircleDetail, AdminCircleClaim, AdminCircleHistory } from "./admin-circle-detail";
 import type { AdminAccountCircleSearchResponse, AdminAccountDetailResponse } from "./admin-account-detail";
@@ -72,7 +72,7 @@ export class PortalError extends Error {
   }
 }
 
-export const SESSION_EXPIRED_EVENT = "portal-session-expired";
+export { SESSION_EXPIRED_EVENT } from "./session-hint";
 
 export function reportSessionResponse(status: number) {
   if (status === 401 && typeof window !== "undefined") {
@@ -220,6 +220,7 @@ export function readMyOverride(circleId: string) {
   return call<{
     fields: CircleOverrideFields;
     status: string;
+    updatedAt?: number | null;
     postEventHidden: boolean;
     /** `null` where the circle has not answered the retention question yet. */
     retention: CircleRetentionChoice | null;

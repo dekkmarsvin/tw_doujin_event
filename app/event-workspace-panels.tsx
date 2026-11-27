@@ -14,6 +14,7 @@ import { defineMessages, translate, type MessageParams } from "./i18n/messages";
 import type { EventDayKey, FavoriteGroup, FavoriteRecord, VisitPlanEntry } from "./planning-store";
 import { UiIcon } from "./ui-icons";
 import { circlePath } from "./seo";
+import { OwnedCircleLink } from "./owned-circle-link";
 import styles from "./event-workspace-panels.module.css";
 
 const RESULT_LIMIT = 80;
@@ -484,8 +485,8 @@ function preventLinkActivation(event: MouseEvent<HTMLAnchorElement>) {
   event.preventDefault();
 }
 
-export function CircleDetails({ record, sharedRecords, movedDestination = null, favorite, plan, groups, compact = false, readOnly = false, embedded = false, floating = false, onClose, onOpenFull, onSelectShared, onToggleFavorite, onTogglePlan, onSetNext, onUpdateFavorite, onCreateGroup }: {
-  record: CircleViewRecord | null;
+export function CircleDetails({ owned = false, record, sharedRecords, movedDestination = null, favorite, plan, groups, compact = false, readOnly = false, embedded = false, floating = false, onClose, onOpenFull, onSelectShared, onToggleFavorite, onTogglePlan, onSetNext, onUpdateFavorite, onCreateGroup }: {
+  owned?: boolean;  record: CircleViewRecord | null;
   sharedRecords: CircleViewRecord[];
   /** The circle's live booth in this event, when the organizer's data has one. */
   movedDestination?: CircleViewRecord | null;
@@ -545,7 +546,7 @@ export function CircleDetails({ record, sharedRecords, movedDestination = null, 
         <b>{t("sources")}</b>
         {record.sources.map((source) => <div key={`${source.provider}-${source.contentType}`}><span><strong>{sourceProviderLabel(source, locale)}</strong>{source.label && <small>{sourceTitleLabel(source, locale)}</small>}{SOURCE_STATUS_NOTE[source.status] && <small>{t(SOURCE_STATUS_NOTE[source.status]!)}</small>}<small>{sourceDateLabel(source, locale)}</small></span>{source.url && <a href={source.url} target="_blank" rel="noreferrer" aria-disabled={readOnly || undefined} tabIndex={readOnly ? -1 : undefined} onClick={readOnly ? preventLinkActivation : undefined}>{t("originalSource")} <UiIcon name="external" /></a>}</div>)}
       </div>}
-      {(floating || embedded) && !readOnly && <p className={styles.claimEntry}>{t("claimQuestion")}<a href={localizedHref(`/circle?${new URLSearchParams({ event: record.placement.eventId, circle: record.circle.id })}`, locale)}>{t("claim")}</a></p>}
+      {owned && !readOnly ? <p className={styles.claimEntry}><OwnedCircleLink eventId={record.placement.eventId} circleId={record.circle.id} /></p> : (floating || embedded) && !readOnly && <p className={styles.claimEntry}>{t("claimQuestion")}<a href={localizedHref(`/circle?${new URLSearchParams({ event: record.placement.eventId, circle: record.circle.id })}`, locale)}>{t("claim")}</a></p>}
     </div>;
   // The scroll region must be reachable with Tab so keyboard users can scroll it.
   // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex

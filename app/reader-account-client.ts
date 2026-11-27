@@ -7,11 +7,7 @@ export class ReaderUnauthorizedError extends Error {
   constructor() { super("Session ended."); }
 }
 
-/**
- * The reader's own, read-only view of the signed-in account (#581). The
- * control surfaces' clients stay out of the reader bundle: this module only
- * reads, never writes, and answers null for anything it could not read.
- */
+/** Read just the private account data the reader needs. */
 async function read<T>(path: string): Promise<T | null> {
   let response: Response;
   try {
@@ -21,7 +17,6 @@ async function read<T>(path: string): Promise<T | null> {
   }
   // The session ended: this device is no longer signed in.
   if (response.status === 401) {
-    forgetSignedIn();
     throw new ReaderUnauthorizedError();
   }
   if (!response.ok) return null;
@@ -39,3 +34,10 @@ export const readReaderWorkspaces = () => read<{ events: OrganizerEventSummary[]
 export const readReaderWorkspaceClaims = (candidateId: string) => read<ReviewQueue>(`/api/organizer/events/${encodeURIComponent(candidateId)}/claims`);
 export const readReaderReviewQueue = () => read<ReviewQueue>("/api/admin/review-queue");
 export const readReaderServices = () => read<AdminSiteSettings>("/api/admin/site-settings").then((answer) => answer?.services ?? null);
+
+export async function endReaderSession() {
+  const response = await fetch("/api/auth/session", { method: "DELETE", headers: { "Content-Type": "application/json" }, credentials: "same-origin" });
+  if (response.status !== 401 && (!response.ok || (await response.json()).ok !== true)) throw new Error("Sign-out failed");
+  forgetSignedIn();
+  window.dispatchEvent(new Event("reader-signed-out"));
+}

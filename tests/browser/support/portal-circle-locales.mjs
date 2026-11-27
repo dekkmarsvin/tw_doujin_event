@@ -101,11 +101,13 @@ export async function verifyCircleLocales(journey, admin) {
     await editor.getByRole("button", { name: text.earlier, exact: true }).click();
     await page.waitForFunction(id => JSON.parse(localStorage.getItem(`circle-portal-draft:${id}`))?.fields.catalogImages?.length === 2, ID);
     const before = await page.evaluate(id => localStorage.getItem(`circle-portal-draft:${id}`), ID);
+    await page.getByRole("banner").getByRole("button", { name: text.account, exact: true }).click();
     const other = locale === "en" ? "ja" : "en";
     await page.getByRole("banner").getByRole("combobox").filter({ has: page.locator('option[value="en"]') }).selectOption(other);
     assert.equal(await pen.inputValue(), original);
     assert.equal(await page.evaluate(id => localStorage.getItem(`circle-portal-draft:${id}`), ID), before, "locale switching preserves draft bytes and image order");
     await page.getByRole("banner").getByRole("combobox").filter({ has: page.locator('option[value="en"]') }).selectOption(locale);
+    await page.getByRole("banner").getByRole("button", { name: text.account, exact: true }).click();
     await journey.capture(page, `portal-editor-${locale}`);
     // Local R2 returns http addresses; the production HTTPS-only save rule is
     // kept. Staging/order are verified above, then remove the staged pages.

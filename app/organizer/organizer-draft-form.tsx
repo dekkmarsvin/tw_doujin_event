@@ -1,3 +1,4 @@
+import { useEditorSaveStatus } from "../workspace-save-status";
 /** 活動草稿表單：基本設定、活動日、場館與場地、地圖模板。
  *
  * 由 `organizer-app.tsx` 拆出（#224）。該檔原本是 1870 行的單檔，面板
@@ -50,6 +51,7 @@ export function DraftForm({
   const [draft, setDraft] = useState(detail.draft);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  useEditorSaveStatus(dirty, saving, detail.event.updatedAt);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
   /* A task opened for the first time is not a task filled in wrongly. The
    * issue list is what the save says back, so it waits for the press -- except

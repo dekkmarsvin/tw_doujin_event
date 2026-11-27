@@ -1,3 +1,4 @@
+import { useEditorSaveStatus } from "../workspace-save-status";
 import { useEffect, useRef, useState } from 'react';
 import { readSharedReferences, saveSharedReference } from '../organizer-client';
 import type { SharedReferenceCatalog } from '../shared-reference-catalog';
@@ -27,6 +28,8 @@ export function AdminReferencePanel({ initialView = 'venues', onViewChange }: { 
   const [removal, setRemoval] = useState<Removal | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const dirty = !!form && JSON.stringify(form.values) !== form.initial;
+  const [savedAt, setSavedAt] = useState<number>();
+  useEditorSaveStatus(dirty, busy, savedAt);
   const locked = busy || refreshRequired;
   useEffect(() => {
     let current = true;
@@ -101,6 +104,7 @@ export function AdminReferencePanel({ initialView = 'venues', onViewChange }: { 
         ...(form.kind === 'category-catalog' ? { categories: form.values.categories.split('\n').map(label => label.trim()).filter(Boolean).map(label => ({ label })) } : {}) });
     } catch (failure) { setError(messageOf(failure)); setBusy(false); return; }
     if (form.kind === 'category-catalog' && form.values.catalogId) setExpanded(previous => new Set([...previous, form.values.catalogId]));
+    setSavedAt(Date.now());
     setForm(null); setNotice('共用資料已儲存。'); setRefreshRequired(true);
     try { setCatalog(await readSharedReferences()); setRefreshRequired(false); }
     catch { setError('資料已儲存，清單更新失敗。請重新讀取。'); }

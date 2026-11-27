@@ -29,7 +29,6 @@ try {
   // #439: one session opens both workspaces. Signed in at /circle, the
   // organizer workspace is still named there, and opening it asks for nothing.
   await organizer.goto(`${base}/circle`);
-  await organizer.getByRole("banner").getByRole("button", { name: "帳號", exact: true }).click();
   const circleSwitch = organizer.getByRole("banner").getByRole("navigation", { name: "工作區" });
   assert.equal(await circleSwitch.getByRole("link", { name: "社團資料", exact: true }).getAttribute("aria-current"), "page");
   await journey.capture(organizer, "circle-signed-in-switch");
@@ -101,6 +100,8 @@ try {
         { id: "request-one", name: "手機申請審核", status: applicationStatus, officialUrl: "https://official.example/event", startDate: "2026-12-05", endDate: "2026-12-06", location: "", relationship: "organizer", note: "", applicantEmail: "applicant@example.test", candidateId: null },
       ] } });
       if (path === "/api/admin/organizer/applications/request-one") { applicationStatus = route.request().postDataJSON().decision; return route.fulfill({ json: { ok: true } }); }
+      if (path === "/api/admin/review-queue") return route.fulfill({ json: { claims: [], organizer: { applications: 0, submissions: 0 } } });
+      if (path === "/api/admin/site-settings") return route.fulfill({ json: { services: null } });
       throw new Error(`Unexpected application continuation request: ${path}`);
     });
   } });
@@ -153,7 +154,7 @@ try {
   assert.equal(await outsider.getByLabel("Email", { exact: true }).count(), 0, "no sign-in form for an account already signed in");
   assert.equal(await outsider.getByRole("link", { name: "返回社團資料", exact: true }).getAttribute("href"), "/circle");
   assert.equal(await outsider.getByRole("link", { name: "返回活動列表", exact: true }).getAttribute("href"), "/");
-  await outsider.getByRole("button", { name: "登出", exact: true }).waitFor();
+  await outsider.getByRole("banner").getByRole("button", { name: "帳號" }).waitFor();
   assert.equal(await outsider.locator('script[src^="https://challenges.cloudflare.com/"]').count(), 0, "verification loads only when asked for");
   await journey.capture(outsider, "organizer-no-access-390");
   await outsider.getByRole("button", { name: "寄送主辦登入連結", exact: true }).click();

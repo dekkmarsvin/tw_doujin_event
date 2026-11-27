@@ -1,5 +1,10 @@
 # 主辦單位工作區契約
 
+## 工作區頂欄
+
+頂欄使用與社團資料、網站管理相同的工作區切換及頭像面板。活動選單來自此帳號的工作區；切換保留原本的未儲存提醒。所選版本決定面板的主辦待辦；尚未公開的活動也可回到自己的編輯頁。草稿、名單、地圖、匯入及公告的編輯狀態同步顯示於頂欄。
+
+
 > **角色（#546 階段 5b）**：Owner／Editor 已合併為單一「活動成員」，資料庫仍以 `owner` 保存。每位成員都能編輯、送審、管理成員、撤銷認領與開始修正；網站管理者負責核准並發布。
 
 **實作**：`app/organizer-status-summary.ts`、`app/organizer/organizer-workspace-header.tsx`、`app/organizer/use-organizer-pending-claims.ts`、`app/organizer/organizer-takedown-panel.tsx`
@@ -14,7 +19,7 @@
 
 ## 入口與登入
 
-- 入口是 `/organizer`，`noindex, nofollow`，**不與 `/circle` 或閱讀端共用 bundle**。公開頁不直接連到這裡（`/portal/` 介紹頁主辦段落的「前往主辦工作區」除外）：公開頁首的「登入」帶到 `/circle`，`/circle` 與本頁互相列出兩個工作區（見[社團契約的入口分離](./circle-portal.md#入口分離)）。這個入口不受新活動申請開關影響。
+- 入口是 `/organizer`，`noindex, nofollow`，**不與 `/circle` 或閱讀端共用 bundle**。閱讀頁「我的」依權限連到本工作區。未登入的公開頁首「登入」帶到 `/circle`，工作區頂欄依 session 顯示可用入口（見[社團契約的入口分離](./circle-portal.md#入口分離)）。這個入口不受新活動申請開關影響。
 - 登入沿用[社團自助控制面](./circle-portal.md)的 email 一次性連結與統一 7 天 session cookie；`POST /api/auth/request-link` 以 `audience: "organizer"` 決定信件與登入連結指向 `/organizer`。Turnstile、速率上限與 session 規則只寫在該契約，本文不重複。
 - **帳號本身沒有 Organizer 權限。** 能看到工作區的條件是持有任一候選活動的 grant，或是全域管理者。
 - 申請人可在同一 `/organizer` 登入查看自己的申請；送件或待審核不授予候選活動 grant。申請表與結果可在手機使用，管理者即使沒有本人申請或申請資格也可進入申請審核；活動資料與地圖編輯仍限桌機。

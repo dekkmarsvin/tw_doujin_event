@@ -1,3 +1,4 @@
+import { useEditorSaveStatus } from "../workspace-save-status";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { EVENT_NOTICE_TEXT_MAX, EVENT_NOTICE_URL_MAX, eventNoticeInputProblem, type EventNotice, type EventNoticeInput } from "../event-notice";
 import { clearOrganizerNotice, readOrganizerNotice, saveOrganizerNotice } from "../organizer-client";
@@ -50,6 +51,7 @@ export function OrganizerNoticePanel({ candidateId }: { candidateId: string }) {
   };
 
   const pending = status.kind === "busy";
+  useEditorSaveStatus(current !== undefined && JSON.stringify(form) !== JSON.stringify(formOf(current)), pending, current ? Date.parse(current.updatedAt) : undefined);
   const length = form.text.trim().length;
   return <section className={`${styles.card} ${styles.admin} ${styles.eventClaimPanel}`} aria-labelledby="event-notice-heading">
     <h2 id="event-notice-heading">活動公告</h2>
