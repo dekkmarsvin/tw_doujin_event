@@ -1,3 +1,4 @@
+import { workspaceSections } from "./workspace-sections";
 import { useState, type ReactNode } from "react";
 import { getPublishedEvent } from "./event-catalog";
 import { useReaderAccount } from "./use-reader-account";
@@ -24,11 +25,7 @@ export function WorkspaceHeader({ session, current, event, eventId, candidateId,
   const attention = roleDot === "bad" ? roleDot : !online ? "warn" : roleDot;
   const state = useWorkspaceSaveStatus();
   const time = typeof state === "number" && state > 0 ? new Date(state).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) : "";
-  const sections = [
-    { id: "circle", title: "社團資料", visible: true },
-    { id: "organizer", title: "主辦工作區", visible: session?.hasOrganizerAccess || session?.isAdmin || session?.canApplyForEvent || session?.hasEventApplications },
-    { id: "admin", title: "網站管理", visible: session?.isAdmin },
-  ];
+  const sections = workspaceSections(session);
   return <SiteTopbar className={styles.header}
     brand={<h1><span aria-hidden="true">場</span>{t(sections.find(section => section.id === current)!.title)}</h1>}
     event={event && <div className={styles.event}>{event}</div>}

@@ -34,6 +34,33 @@ const signedInBefore = (setup) => async (page) => {
 const menu = (page) => page.getByRole("button", { name: /^我的/ });
 
 try {
+  for (const [role, permissions, links] of [
+    ["circle", {}, ["社團資料"]],
+    ["applicant", { hasEventApplications: true }, ["社團資料", "主辦工作區"]],
+    ["admin", { isAdmin: true }, ["社團資料", "主辦工作區", "網站管理"]],
+  ]) {
+    const asked = [];
+    const page = await journey.page({ event: "", routes: signedInBefore(account(asked, {
+      session: { email: "reader@example.test", ...permissions },
+    })) });
+    const header = page.getByRole("banner");
+    const avatar = header.getByRole("button", { name: "帳號" });
+    assert.equal(await avatar.innerText(), "R");
+    if (role === "admin") await journey.capture(page, "home-avatar");
+    await avatar.click();
+    const menu = header.getByRole("navigation", { name: "帳號" });
+    assert.deepEqual(await menu.getByRole("link").allTextContents(), links);
+    assert.ok(asked.every(path => path === "/api/auth/session"));
+    if (role === "admin") {
+      await journey.capture(page, "home-workspaces");
+      await menu.getByRole("link", { name: "網站管理" }).click();
+      await page.waitForURL("**/admin");
+    } else {
+      await page.keyboard.press("Escape");
+      await menu.waitFor({ state: "hidden" });
+    }
+    await page.close();
+  }
   // Anonymous: no request reaches the API, and 登入 keeps the event.
   {
     const asked = [];

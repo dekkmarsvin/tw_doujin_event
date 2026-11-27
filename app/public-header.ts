@@ -9,9 +9,7 @@ import { defineMessages } from "./i18n/messages";
  * use these class names, styled once by `public/site-header.css`, so the pages
  * cannot drift apart the way two stylesheets did.
  *
- * Nothing here knows about sessions. The public pages stay static, so the entry
- * is a plain link that never asks the server who is reading; whether someone is
- * signed in is the control surface's question, answered after they arrive.
+ * The chooser replaces the static login link once it confirms a session.
  */
 export const PUBLIC_HEADER = {
   home: "/",
