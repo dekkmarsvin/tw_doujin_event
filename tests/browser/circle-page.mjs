@@ -42,6 +42,40 @@ const authored = [{
 
 const journey = await start("circle-page");
 try {
+  for (const [kind, url, circleHref, isAdmin] of [
+    ["event", new URL("/events/sample/", base).href, "/circle?event=sample", true],
+    ["circle", pageOf(TWO_DAYS), "/circle?event=sample&circle=" + TWO_DAYS, false],
+  ]) {
+    const visit = await journey.page({ url, routes: async target => {
+      await target.addInitScript(() => localStorage.setItem("tw-doujin:signed-in", "1"));
+      await target.route("**/api/auth/session", route => route.fulfill({ json: { email: "reader@example.test", isAdmin } }));
+      await target.route("**/api/claims?*", route => route.fulfill({ json: { claims: [] } }));
+    } });
+    const header = visit.getByRole("banner");
+    const avatar = header.getByRole("button", { name: "帳號" });
+    assert.equal(await avatar.innerText(), "R");
+    await journey.capture(visit, kind + "-intro-avatar");
+    await avatar.click();
+    const menu = header.getByRole("navigation", { name: "帳號" });
+    assert.deepEqual(await menu.getByRole("link").allTextContents(), isAdmin ? ["社團資料", "主辦工作區", "網站管理"] : ["社團資料"]);
+    assert.equal(await menu.getByRole("link", { name: "社團資料" }).getAttribute("href"), circleHref);
+    await journey.capture(visit, kind + "-intro-workspaces");
+    await visit.keyboard.press("Escape");
+    await header.getByRole("combobox").selectOption("en");
+    await header.getByRole("button", { name: "Account" }).click();
+    const circle = header.getByRole("link", { name: "Circle data", exact: true });
+    assert.equal(await circle.getAttribute("href"), circleHref + "&lang=en");
+    await visit.evaluate(() => {
+      localStorage.removeItem("tw-doujin:signed-in");
+      window.dispatchEvent(new StorageEvent("storage", { key: "tw-doujin:signed-in", storageArea: localStorage }));
+    });
+    const login = header.getByRole("link", { name: "Sign in", exact: true });
+    await login.waitFor();
+    assert.equal(await login.getAttribute("href"), circleHref + "&lang=en");
+    await login.click();
+    await visit.waitForURL(url => url.pathname === "/circle" && url.searchParams.get("event") === "sample");
+    await visit.close();
+  }
   // Language changes update static and React content without changing authored
   // values or planning. Even words matching a fixed option stay raw in free text.
   const localized = structuredClone(authored);

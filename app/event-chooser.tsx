@@ -1,7 +1,7 @@
 import { navigateReader, ordinaryLinkClick } from "./reader-navigation";
 import { useReaderAccount } from "./use-reader-account";
-import { workspaceSections } from "./workspace-sections";
-import { useEffect, useId, useState } from "react";
+import { PublicWorkspaceMenu } from "./public-workspace-menu";
+import { useEffect, useState } from "react";
 import type { EventDefinition } from "./event-catalog";
 import { groupCalendarEvents, taipeiDate } from "./event-calendar";
 import styles from "./event-chooser.module.css";
@@ -17,7 +17,6 @@ import { UiIcon } from "./ui-icons";
 const MESSAGES = defineMessages({
   "zh-Hant": {
     title: "選擇活動",
-    account: "帳號", circle: "社團資料", organizer: "主辦工作區", admin: "網站管理",
     intro: "選一場活動後即可搜尋社團、查看攤位並收藏。",
     unresolvedTitle: "這個連結指向的活動目前無法開啟",
     unresolvedHint: "可能尚未公開，或連結中的活動代號有誤。請從下方選擇一場活動。",
@@ -33,7 +32,6 @@ const MESSAGES = defineMessages({
   },
   en: {
     title: "Choose an event",
-    account: "Account", circle: "Circle data", organizer: "Organizer workspace", admin: "Site admin",
     intro: "Pick an event to search circles, find their booths and save favorites.",
     unresolvedTitle: "The event in this link can’t be opened right now",
     unresolvedHint: "It may not be public yet, or the event ID in the link is wrong. Choose an event below.",
@@ -49,7 +47,6 @@ const MESSAGES = defineMessages({
   },
   ja: {
     title: "イベントを選択",
-    account: "アカウント", circle: "サークル情報", organizer: "主催ワークスペース", admin: "サイト管理",
     intro: "イベントを選ぶと、サークルの検索、スペースの確認、お気に入り登録ができます。",
     unresolvedTitle: "このリンクのイベントは現在開けません",
     unresolvedHint: "まだ公開されていないか、リンク内のイベントIDが正しくない可能性があります。下の一覧からイベントを選んでください。",
@@ -158,20 +155,12 @@ function PublicHeader({ loginHref }: { loginHref: string }) {
   const { home, mark, name } = PUBLIC_HEADER;
   const t = useMessages(PUBLIC_HEADER_MESSAGES);
   const { locale } = useLocale();
-  const labels = useMessages(MESSAGES);
   const session = useReaderAccount("", true)?.session;
-  const menuId = useId();
   return <header className="site-header">
     <a className="site-header-brand" href={localizedHref(home, locale)}><span className="site-header-mark" aria-hidden="true">{mark}</span><span className="site-header-name"><b>{name}</b><small data-i18n="header.tagline">{t("tagline")}</small></span></a>
     <div className={`site-header-actions ${styles.headerActions}`}>
       <LanguageSwitcher />
-      {session ? <>
-        <button type="button" className={styles.avatar} popoverTarget={menuId} aria-label={labels("account")}>{session.email.slice(0, 1).toUpperCase()}</button>
-        <nav id={menuId} popover="auto" aria-label={labels("account")} className={styles.workspaces}>
-          {workspaceSections(session).filter(section => section.visible).map(section =>
-            <a key={section.id} href={localizedHref("/" + section.id, locale)}>{labels(section.id)}</a>)}
-        </nav>
-      </> : <a className="site-header-login" href={loginHref} data-i18n="header.login">{t("login")}</a>}
+      {session ? <PublicWorkspaceMenu session={session} circleHref={loginHref} /> : <a className="site-header-login" href={loginHref} data-i18n="header.login">{t("login")}</a>}
     </div>
   </header>;
 }
