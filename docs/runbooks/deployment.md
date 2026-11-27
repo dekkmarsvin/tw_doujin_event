@@ -30,7 +30,9 @@
 
 ### D1 migrations
 
-D1 的 schema 由 `migrations/` 管理（#546 5d），程式不在執行時建表或改表。`0001_baseline.sql` 是 5d 當時正式站的完整結構（全部 `IF NOT EXISTS`），`0002_drop_retired_tables.sql` 刪除已停用的表，`0003_drop_publication_jobs.sql` 刪除 #569 之後不再使用的發布工作與租約。
+D1 的 schema 由 `migrations/` 管理（#546 5d），程式不在執行時建表或改表。`0001_baseline.sql` 是 5d 當時正式站的完整結構（全部 `IF NOT EXISTS`），`0002_drop_retired_tables.sql` 刪除已停用的表，`0003_drop_publication_jobs.sql` 刪除 #569 之後不再使用的發布工作與租約。`0004_allow_rejected_claim_resubmission.sql` 保留婉拒紀錄，允許同一帳號補件後建立新的認領。
+
+0004 的順序例外：preview 與正式站各自先部署支援新索引的程式，再套用 0004。舊程式的認領寫入與新索引不相容，回滾時須選支援新索引的版本。
 
 改 schema 時新增下一號 migration，**先套用到資料庫，再部署用到它的程式**；刪除欄位或表時順序相反，先部署不再使用它的程式（含排程清除 Worker），再套用 migration。
 

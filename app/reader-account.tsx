@@ -4,6 +4,8 @@ import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 
 import type { ClaimSummary, PortalSession, ReviewQueue } from "./circle-editor-client";
 import type { OrganizerEventSummary } from "./organizer-client";
 import { ReaderUnauthorizedError, readReaderClaims, readReaderReviewQueue, readReaderServices, readReaderSession, readReaderWorkspaceClaims, readReaderWorkspaces } from "./reader-account-client";
+import type { TextScale } from "./use-reader-text-scale";
+import { eventDayCalendarDate, taipeiDate } from "./event-calendar";
 import type { EventDefinition } from "./event-catalog";
 import type { ServiceChecks } from "./site-settings";
 import { subscribeSignedInChange, wasSignedIn } from "./session-hint";
@@ -73,8 +75,6 @@ const MESSAGES = defineMessages({
     signIn: "サークル・主催者ログイン",
   },
 });
-
-export type TextScale = "standard" | "large" | "extra";
 
 /** How long a service check is trusted before the light turns grey. */
 const SERVICE_CHECK_FRESH_MS = 7 * 24 * 60 * 60 * 1000;
@@ -187,10 +187,11 @@ function Row({ label, children, tone }: { label: ReactNode; children?: ReactNode
  * 資料管理 and the offline check open dialogs that must outlive a click that
  * lands outside the panel.
  */
-export default function ReaderAccountMenu({ event, textScale, onTextScale, onCheckOffline, className }: {
+export default function ReaderAccountMenu({ event, day, textScale, onTextScale, onCheckOffline, className }: {
   event: EventDefinition;
-  textScale?: TextScale;
-  onTextScale?: (next: TextScale) => void;
+  day: string | number | null;
+  textScale: TextScale;
+  onTextScale: (next: TextScale) => void;
   onCheckOffline?: () => void;
   className?: string;
 }) {
@@ -201,7 +202,7 @@ export default function ReaderAccountMenu({ event, textScale, onTextScale, onChe
   const account = useReaderAccount(event.id);
   const online = useOnline();
   const [open, setOpen] = useState(false);
-  const [now] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now());
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const panelId = useId();
@@ -224,7 +225,10 @@ export default function ReaderAccountMenu({ event, textScale, onTextScale, onChe
 
   const session = account?.session ?? null;
   const favorites = planning.document.favorites.filter((item) => item.eventId === event.id);
-  const plans = planning.document.visitPlans.filter((item) => item.eventId === event.id);
+  const planDay = event.days.find((entry) => day === null
+    ? eventDayCalendarDate(event, entry.id) === taipeiDate(now)
+    : entry.id === day) ?? event.days[0];
+  const plans = planning.document.visitPlans.filter((item) => item.eventId === event.id && item.day === planDay.id);
   const claims = (account?.claims ?? []).filter((claim) => claim.status !== "withdrawn");
   const queue = account?.queue ?? null;
   const queueTotal = queue ? (queue.pendingClaimCount ?? queue.claims.length) + queue.organizer.applications + queue.organizer.submissions : 0;
@@ -241,7 +245,7 @@ export default function ReaderAccountMenu({ event, textScale, onTextScale, onChe
   return <div ref={root} className={`${styles.menu} ${className ?? ""}`} data-reader-menu>
     {/* Beside the button where there is room: the two states that change what the reader can rely on. */}
     {(planning.storageError || !online) && <span className={planning.storageError ? `${styles.badge} ${styles.badgeBad}` : styles.badge} role="status">{planning.storageError ? t("storageFailed") : t("offline")}</span>}
-    <button ref={trigger} type="button" className={styles.trigger} aria-expanded={open} aria-controls={panelId} aria-label={dot === "bad" ? `${label}（${t("alert")}）` : dot === "warn" ? `${label}（${t("attention")}）` : label} onClick={() => setOpen(!open)}>
+    <button ref={trigger} type="button" className={styles.trigger} aria-expanded={open} aria-controls={panelId} aria-label={dot === "bad" ? `${label}（${t("alert")}）` : dot === "warn" ? `${label}（${t("attention")}）` : label} onClick={() => { if (!open) setNow(Date.now()); setOpen(!open); }}>
       <span className={session ? styles.avatar : `${styles.avatar} ${styles.anonymous}`} aria-hidden="true">{session ? session.email.slice(0, 1).toUpperCase() : <UiIcon name="user" />}</span>
       {dot && <i className={`${styles.dot} ${styles[dot]}`} aria-hidden="true" />}
     </button>
@@ -285,7 +289,7 @@ export default function ReaderAccountMenu({ event, textScale, onTextScale, onChe
       </Section>}
       <Section title={t("device")}>
         <Row label={t("favorites")}>{t("favoriteCount", { count: favorites.length, groups: planning.document.favoriteGroups.length })}</Row>
-        <Row label={t("plans")}>{t("planCount", { count: plans.length, visited: plans.filter((plan) => plan.status === "visited").length })}</Row>
+        <Row label={`${t("plans")} · ${planDay.dateLabel}`}>{t("planCount", { count: plans.length, visited: plans.filter((plan) => plan.status === "visited").length })}</Row>
         <Row label={t("storage")} tone={planning.storageError ? "bad" : "ok"}>{planning.storageError ? t("storageFailed") : t("stored")}</Row>
         <div className={styles.tool}><PlanningTools eventId={event.id} /></div>
       </Section>
@@ -295,9 +299,9 @@ export default function ReaderAccountMenu({ event, textScale, onTextScale, onChe
         {onCheckOffline && <Row label={t("offlineUse")}><button type="button" className={styles.inline} onClick={() => { setOpen(false); onCheckOffline(); }}>{t("check")}</button></Row>}
       </Section>
       <Section title={t("display")}>
-        {textScale && onTextScale && <div className={styles.row}><span>{t("textScale")}</span>
+        <div className={styles.row}><span>{t("textScale")}</span>
           <span className={styles.scale} role="group" aria-label={t("textScaleGroup")}>{(["standard", "large", "extra"] as const).map((value, index) => <button key={value} type="button" aria-pressed={textScale === value} aria-label={index === 0 ? t("smallLabel") : index === 1 ? t("mediumLabel") : t("largeLabel")} onClick={() => onTextScale(value)}>{index === 0 ? t("small") : index === 1 ? t("medium") : t("large")}</button>)}</span>
-        </div>}
+        </div>
         <div className={styles.row}><span>{t("language")}</span><LanguageSwitcher /></div>
         <div className={styles.tool}><ReaderHelp eventId={event.id} dataLastUpdatedLabel={event.dataLastUpdatedLabel} inline /></div>
       </Section>

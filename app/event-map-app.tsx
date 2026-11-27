@@ -1,5 +1,7 @@
 "use client";
 
+import { useReaderTextScale } from "./use-reader-text-scale";
+
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type FocusEvent as ReactFocusEvent } from "react";
 import { createPortal } from "react-dom";
 import { useMapViewport } from "./use-map-viewport";
@@ -74,10 +76,6 @@ import styles from "./event-map-app.module.css";
 type EventDay = EventDayDefinition["id"];
 type MobilePanel = "filters" | "results" | "details" | "plan";
 type MobileSheetLevel = "peek" | "half" | "full";
-type TextScale = "standard" | "large" | "extra";
-
-const TEXT_SCALE_STORAGE_KEY = "event-map-text-scale";
-const LEGACY_TEXT_SCALE_STORAGE_KEY = "ff47-event-map-text-scale";
 const CATEGORY_DOT_COLORS = ["var(--mint)", "var(--lilac)", "var(--blue)", "var(--amber)", "#4ba9a0", "var(--coral)"] as const;
 
 /** Presentation cycles through a fixed semantic palette; category labels stay
@@ -176,7 +174,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   const [showFullDetail, setShowFullDetail] = useState(false);
   const [offlinePrepOpen, setOfflinePrepOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-  const [textScale, setTextScale] = useState<TextScale>("standard");
+  const { textScale, changeTextScale, fontScale } = useReaderTextScale();
   const [planNotice, setPlanNotice] = useState<{ recordId: string; text: string } | null>(null);
   const [urlReady, setUrlReady] = useState(false);
   const { document: planning, update: updatePlanning, storageError: planningStorageError, favoriteUndo, setFavoriteUndo } = useReaderPlanning();
@@ -287,7 +285,6 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     if (restoreFocus) restoreFocusAfterOverviewExit();
   }, [fitInVisibleRect, restoreFocusAfterOverviewExit]);
   const facilityDirectory = useMemo(() => publishedMap ? mapFacilityDirectory(publishedMap.layout) : null, [publishedMap]);
-  const fontScale = textScale === "extra" ? 1.24 : textScale === "large" ? 1.12 : 1;
   const previousDesktop = useRef<boolean | null>(null);
   useEffect(() => {
     const moveHiddenFocus = () => {
@@ -324,20 +321,6 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   useEffect(() => {
     planPanelRef.current?.querySelectorAll<HTMLElement>("*").forEach((node) => { if (node.scrollTop) node.scrollTop = 0; });
   }, [day]);
-
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(TEXT_SCALE_STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_TEXT_SCALE_STORAGE_KEY);
-      if (stored === "standard" || stored === "large" || stored === "extra") queueMicrotask(() => setTextScale(stored));
-    } catch {
-      // Font scaling remains available for this session when storage is blocked.
-    }
-  }, []);
-
-  const changeTextScale = (next: TextScale) => {
-    setTextScale(next);
-    try { window.localStorage.setItem(TEXT_SCALE_STORAGE_KEY, next); } catch { /* Keep the in-memory preference. */ }
-  };
 
   useEffect(() => () => {
     if (mapGestureFrame.current !== null) cancelAnimationFrame(mapGestureFrame.current);
@@ -984,7 +967,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   </>;
 
   // Everything about the reader that is not the event sits behind one button (#581).
-  const readerMenu = <ReaderAccountMenu className={styles.readerMenu} event={event} textScale={textScale} onTextScale={changeTextScale} onCheckOffline={() => setOfflinePrepOpen(true)} />;
+  const readerMenu = <ReaderAccountMenu className={styles.readerMenu} event={event} day={day} textScale={textScale} onTextScale={changeTextScale} onCheckOffline={() => setOfflinePrepOpen(true)} />;
 
   // The map as the reader sees it, without a selection: what the map/browse
   // switch carries over into the browse view.
@@ -1085,6 +1068,6 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     {/* Keyed on the scope: a day or venue change (e.g. browser Back) starts a fresh check, and an earlier day's result cannot land on it. */}
     {offlinePrepOpen && <OfflinePrepDialog key={`${eventId} ${String(day)} ${venueAssignment.venueSpaceId}`} event={event} day={day} venueSpaceId={venueAssignment.venueSpaceId} onClose={() => setOfflinePrepOpen(false)} />}
     {shareOpen && <ShareItineraryDialog eventId={eventId} document={planning} onClose={() => setShareOpen(false)} />}
-    {showFullDetail && selected && createPortal(<div className={styles.fullDetailBackdrop} style={{ "--ui-font-scale": textScale === "extra" ? 1.24 : textScale === "large" ? 1.12 : 1 } as CSSProperties} role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) { event.preventDefault(); setShowFullDetail(false); } }}><div ref={fullDetailRef} className={styles.fullDetailDialog} role="dialog" aria-modal="true" aria-label={t("fullDetail", { name: selected.name })} tabIndex={-1}>{fullDetailsPanel}</div></div>, document.body)}
+    {showFullDetail && selected && createPortal(<div className={styles.fullDetailBackdrop} style={{ "--ui-font-scale": fontScale } as CSSProperties} role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) { event.preventDefault(); setShowFullDetail(false); } }}><div ref={fullDetailRef} className={styles.fullDetailDialog} role="dialog" aria-modal="true" aria-label={t("fullDetail", { name: selected.name })} tabIndex={-1}>{fullDetailsPanel}</div></div>, document.body)}
   </main>;
 }

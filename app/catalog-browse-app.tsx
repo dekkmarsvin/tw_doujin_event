@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useReaderTextScale } from "./use-reader-text-scale";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EventDefinition } from "./event-catalog";
 import { venueAssignmentForArea } from "./event-catalog";
 import { dayDateLabel, eventCalendar, eventDayCalendarDate, shortDate } from "./event-calendar";
@@ -28,6 +29,7 @@ import styles from "./catalog-browse-app.module.css";
 export default function CatalogBrowseApp({ event, onChooseEvent }: { event: EventDefinition; onChooseEvent?: () => void }) {
   const publication = useCircleCatalog(event.id);
   const planning = useReaderPlanning();
+  const { textScale, changeTextScale, fontScale } = useReaderTextScale();
   const { locale } = useLocale();
   const t = useMessages(CATALOG_BROWSE_MESSAGES);
   useDocumentLanguage();
@@ -170,9 +172,9 @@ export default function CatalogBrowseApp({ event, onChooseEvent }: { event: Even
   const hasFilters = Boolean(state.query.trim() || projection.filters.length);
   const failed = publication.status === "error" || publication.overlayStatus === "unavailable";
   const allScope = state.day === null && state.venueSpaceId === null;
-  return <div className={styles.page}>
+  return <div className={styles.page} style={{ "--ui-font-scale": fontScale } as CSSProperties}>
     <header className={styles.header}>
-      <div className={styles.identity}><div className={`brand ${styles.brand}`}><span aria-hidden="true">場</span>場刊 Map</div>{/* As on the map: the event name leads back to the chooser only when there is another event to choose. */}{onChooseEvent ? <a className={styles.event} href={localizedHref("/", locale)} onClick={(pressed) => { if (!ordinaryLinkClick(pressed)) return; pressed.preventDefault(); savePosition(); onChooseEvent(); }}><span>{event.name}<small>{eventCalendar(event, locale).label}</small></span><span className={styles.eventSwitch}>{t("switchEvent")}<UiIcon name="chevron-right" /></span></a> : <div className={styles.event}><span>{event.name}<small>{eventCalendar(event, locale).label}</small></span></div>}<ReaderViewTabs className={styles.viewSwitch} event={event} view="browse" url={url} beforeNavigate={savePosition} /><ReaderAccountMenu className={styles.readerMenu} event={event} /></div>
+      <div className={styles.identity}><div className={`brand ${styles.brand}`}><span aria-hidden="true">場</span>場刊 Map</div>{/* As on the map: the event name leads back to the chooser only when there is another event to choose. */}{onChooseEvent ? <a className={styles.event} href={localizedHref("/", locale)} onClick={(pressed) => { if (!ordinaryLinkClick(pressed)) return; pressed.preventDefault(); savePosition(); onChooseEvent(); }}><span>{event.name}<small>{eventCalendar(event, locale).label}</small></span><span className={styles.eventSwitch}>{t("switchEvent")}<UiIcon name="chevron-right" /></span></a> : <div className={styles.event}><span>{event.name}<small>{eventCalendar(event, locale).label}</small></span></div>}<ReaderViewTabs className={styles.viewSwitch} event={event} view="browse" url={url} beforeNavigate={savePosition} /><ReaderAccountMenu className={styles.readerMenu} event={event} day={state.day} textScale={textScale} onTextScale={changeTextScale} /></div>
     </header>
     <EventNoticeBanner notice={publication.overrides?.notice} className={styles.notice} />
     <main className={styles.main}>

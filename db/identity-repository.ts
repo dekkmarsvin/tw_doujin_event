@@ -643,12 +643,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     evidenceUrl: string | null; evidenceNote: string | null; now: number;
   }) {
     await ensureTables();
-    // One row per (event, circle, account) is a unique index, so a resubmission
-    // after a withdrawal reuses the row rather than adding one. The guard is
-    // the point: only a claim the account itself withdrew may be overwritten,
-    // and `created_at` moves to now so a resubmission counts against the daily
-    // limit exactly like a first submission — withdrawing is not a way to buy
-    // more attempts. Everything else conflicts and reports no change.
+    // Reuse a withdrawn row. A rejected submission stays in the review history.
     const notificationSubmissionId = crypto.randomUUID();
     const results = await database.batch([database.prepare(
       `INSERT INTO circle_claims (
@@ -657,7 +652,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
          evidence_url, evidence_note, created_at, verified_at, notification_submission_id
        ) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17
          FROM accounts WHERE id = ?2 AND disabled_at IS NULL AND deletion_started_at IS NULL
-       ON CONFLICT(event_id, circle_id, account_id) DO UPDATE SET
+       ON CONFLICT(event_id, circle_id, account_id) WHERE status <> 'rejected' DO UPDATE SET
          circle_name_key = excluded.circle_name_key,
          circle_name_at_claim = excluded.circle_name_at_claim,
          source_row_at_claim = excluded.source_row_at_claim,
@@ -709,7 +704,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   async function listClaimsForAccount(accountId: string, eventId: string) {
     await ensureTables();
     const result = await database.prepare(
-      `SELECT * FROM circle_claims WHERE account_id = ?1 AND event_id = ?2 ORDER BY created_at DESC`,
+      `SELECT * FROM circle_claims WHERE account_id = ?1 AND event_id = ?2 ORDER BY created_at DESC, rowid DESC`,
     ).bind(accountId, eventId).all<ClaimRow>();
     return result.results;
   }
