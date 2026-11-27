@@ -1,0 +1,5 @@
+.avatar { width:44px; height:44px; border:0; border-radius:50%; background:var(--ink,#202a35); color:white; font:inherit; font-weight:700; cursor:pointer; }
+.workspaces { position:fixed; inset:66px 24px auto auto; margin:0; padding:5px; min-width:10rem; border:1px solid var(--line,#dfe3df); border-radius:10px; background:white; color:var(--ink,#202a35); box-shadow:0 8px 24px #26312925; }
+.workspaces a { display:flex; align-items:center; min-height:44px; padding:0 12px; border-radius:6px; color:inherit; text-decoration:none; }
+.workspaces a:hover,.workspaces a:focus-visible { background:var(--paper,#f8f7f2); }
+@media(max-width:760px) { .workspaces { top:60px; right:16px; } }

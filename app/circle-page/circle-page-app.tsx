@@ -1,4 +1,6 @@
 "use client";
+import { PublicWorkspaceMenu } from "../public-workspace-menu";
+import { publicLoginHref } from "../public-header";
 import { OwnedCircleLink } from "../owned-circle-link";
 import { useReaderAccount } from "../use-reader-account";
 import { sharePublicContent } from "../public-share";
@@ -111,6 +113,7 @@ export default function CirclePageApp({ data }: { data: CircleCatalogPayload }) 
   // The places the static page left for the actions: one bar under the name,
   // and one slot on the first card of each day the circle can be visited.
   const [targets] = useState(() => ({
+    header: document.getElementById("public-workspace-menu"),
     bar: document.getElementById(CIRCLE_PAGE_ACTIONS_ID),
     notice: document.getElementById(CIRCLE_PAGE_NOTICE_ID),
     days: [...document.querySelectorAll<HTMLElement>(`[${CIRCLE_PAGE_PLAN_DAY_ATTRIBUTE}]`)]
@@ -161,6 +164,7 @@ export default function CirclePageApp({ data }: { data: CircleCatalogPayload }) 
   };
 
   return <>
+    {targets.header && account && createPortal(<PublicWorkspaceMenu session={account.session} circleHref={publicLoginHref({ eventId, circleId })} />, targets.header)}
     {account?.claims?.some(claim => claim.status === "verified" && claim.circleId === circleId) && <p className={styles.owned}><OwnedCircleLink eventId={eventId} circleId={circleId} /></p>}
     {targets.notice && createPortal(<EventNoticeBanner notice={state.overrides?.notice} className={styles.notice} />, targets.notice)}
     {targets.bar && createPortal(<div ref={setBar} className={styles.actionBar} role="group" aria-label={t("actions")}>

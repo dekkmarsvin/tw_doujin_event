@@ -5,12 +5,6 @@
    copy of that stylesheet; this rule travels with the chooser's bundle. */
 .headerActions { flex:none; display:flex; align-items:center; gap:8px; }
 
-.avatar { width:44px; height:44px; border:0; border-radius:50%; background:var(--ink); color:white; font:inherit; font-weight:700; cursor:pointer; }
-.workspaces { position:fixed; inset:66px 24px auto auto; margin:0; padding:5px; min-width:10rem; border:1px solid var(--line); border-radius:10px; background:white; color:var(--ink); box-shadow:0 8px 24px #26312925; }
-.workspaces a { display:flex; align-items:center; min-height:44px; padding:0 12px; border-radius:6px; color:inherit; text-decoration:none; }
-.workspaces a:hover,.workspaces a:focus-visible { background:var(--paper); }
-@media(max-width:760px) { .workspaces { top:60px; right:16px; } }
-
 /* The list, then the side column: beside it from 1024px, below it under that. */
 .layout { width:100%; max-width:1200px; margin:0 auto; padding:28px 20px 40px; box-sizing:border-box; display:grid; gap:32px; align-content:start; }
 .main { min-width:0; }
