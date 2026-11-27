@@ -7,6 +7,7 @@
  * It is only a hint: the server still answers who is signed in, and a 401
  * clears it.
  */
+export const SESSION_EXPIRED_EVENT = "portal-session-expired";
 const KEY = "tw-doujin:signed-in";
 
 export function rememberSignedIn() {
@@ -26,5 +27,6 @@ export function subscribeSignedInChange(listener: () => void) {
     if (event.storageArea === window.localStorage && (event.key === null || event.key === KEY)) listener();
   };
   window.addEventListener("storage", onStorage);
-  return () => window.removeEventListener("storage", onStorage);
+  window.addEventListener("reader-signed-out", listener);
+  return () => { window.removeEventListener("storage", onStorage); window.removeEventListener("reader-signed-out", listener); };
 }

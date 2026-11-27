@@ -1,3 +1,4 @@
+import { useEditorSaveStatus } from "../workspace-save-status";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { saveAdminSiteSettings } from "../circle-editor-client";
 import { CLAIM_REVIEW_NOTICE_MAX, CONTACT_URL_MAX, type AdminSiteSettings, type SiteSettingsInput } from "../site-settings";
@@ -27,12 +28,15 @@ export function AdminSiteSettingsPanel() {
     return () => { mounted.current = false; };
   }, []);
 
+  const input = form && { ...form, organizerAllowedEmails: emails.split(/[,;\s]+/).filter(Boolean) };
+  useEditorSaveStatus(!!input && !!data && JSON.stringify(input) !== JSON.stringify(formOf(data)), busy, data?.settings.updatedAt);
+
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!form || !data) return;
+    if (!input || !data) return;
     setBusy(true); setError(""); setMessage("");
     try {
-      const answer = await saveAdminSiteSettings({ ...form, organizerAllowedEmails: emails.split(/[,;\s]+/).filter(Boolean) }, data.settings.updatedAt);
+      const answer = await saveAdminSiteSettings(input, data.settings.updatedAt);
       if (mounted.current) { applySaved(answer); setMessage("已生效"); }
     } catch (error) { if (mounted.current) setError(error instanceof Error ? error.message : "儲存失敗，請稍後再試。"); }
     finally { if (mounted.current) setBusy(false); }

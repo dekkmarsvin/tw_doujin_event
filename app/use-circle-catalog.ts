@@ -16,9 +16,9 @@ const browserCatalogPublication = createCatalogPublication({
  * load. Base paints first; an unavailable overlay leaves the reviewed catalog
  * complete and records that freshness could not be confirmed.
  */
-export function useCircleCatalog(eventId: string) {
-  useEffect(() => { void browserCatalogPublication.load(eventId); }, [eventId]);
-  useEffect(() => subscribeOverlayResume(() => { void browserCatalogPublication.refreshOverlay(eventId); }), [eventId]);
+export function useCircleCatalog(eventId: string, enabled = true) {
+  useEffect(() => { if (enabled) void browserCatalogPublication.load(eventId); }, [eventId, enabled]);
+  useEffect(() => enabled ? subscribeOverlayResume(() => { void browserCatalogPublication.refreshOverlay(eventId); }) : undefined, [eventId, enabled]);
   const subscribe = useCallback((listener: () => void) => browserCatalogPublication.subscribe(eventId, listener), [eventId]);
   const snapshot = useCallback(() => browserCatalogPublication.getSnapshot(eventId), [eventId]);
   const state = useSyncExternalStore(subscribe, snapshot, snapshot);

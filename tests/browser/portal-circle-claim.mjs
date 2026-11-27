@@ -45,7 +45,10 @@ try {
   const circle = await journey.page({ url: link });
   await circle.getByRole("banner").getByRole("button", { name: "帳號", exact: true }).waitFor();
   await entryPage.close();
-  assert.match(await circle.locator("body").innerText(), new RegExp(CIRCLE), "the signed-in account is named");
+  const avatar = circle.getByRole("banner").getByRole("button", { name: "帳號" });
+  await avatar.click();
+  await circle.getByRole("banner").getByText(CIRCLE, { exact: true }).waitFor();
+  await avatar.click();
   await journey.capture(circle, "portal-signed-in");
 
   // 2. Finding and claiming the circle. The fixture circle carries no links to
@@ -64,7 +67,6 @@ try {
 
   // 3. The admin is a different person with a different inbox.
   const admin = await signIn(journey, ADMIN, "circle");
-  await admin.getByRole("banner").getByRole("button", { name: "帳號", exact: true }).click();
   await admin.getByRole("link", { name: "網站管理", exact: true }).click();
   await admin.getByRole("heading", { name: "管理總覽", exact: true }).waitFor();
   await admin.locator('[aria-label="待審工作"]').getByRole("link", { name: /^社團認領/ }).click();
@@ -83,6 +85,19 @@ try {
   await panel.getByText(`已核准「${CIRCLE_NAME}」。`, { exact: true }).waitFor();
   await claimRow.waitFor({ state: "hidden" });
   await journey.capture(admin, "portal-claim-approved");
+
+  await circle.goto(`${base}/?event=sample`);
+  await circle.getByRole("button", { name: /^我的：/ }).click();
+  await circle.getByRole("link", { name: "地圖定位", exact: true }).click();
+  await circle.getByRole("link", { name: "這是你的社團 · 編輯這頁" }).waitFor();
+  await journey.capture(circle, "owned-map-booth");
+  await circle.goto(`${base}/events/sample/circles/${CIRCLE_ID}/`);
+  const editOwn = circle.getByRole("link", { name: "這是你的社團 · 編輯這頁" });
+  assert.equal(await editOwn.getAttribute("href"), `/circle?event=sample&circle=${CIRCLE_ID}`);
+  await editOwn.scrollIntoViewIfNeeded();
+  await journey.capture(circle, "owned-circle-edit");
+  await editOwn.click();
+  await circle.getByRole("heading", { name: `編輯：${CIRCLE_NAME}`, exact: true }).waitFor();
 
   // 4. The same session, reloaded: approval reaches the circle without a
   //    second login, which is also all the rate limit allows. Hold the saved
@@ -154,6 +169,8 @@ try {
   //    were — a keyboard user who looks and cancels must not be dropped at the
   //    top of a long form.
   await penField(circle).fill(PEN_NAME);
+  await circle.getByRole("banner").getByText("有未儲存的變更", { exact: true }).waitFor();
+  await journey.capture(circle, "workspace-unsaved");
   for (const rating of ["全年齡", "R15", "R18"]) await circle.getByRole("checkbox", { name: rating, exact: true }).check();
   await circle.locator('input[id^="specialTags-"]').fill("自由題材");
   await submit.focus();
@@ -186,6 +203,7 @@ try {
   await submit.click();
   await confirm.waitFor();
   await confirm.click();
+  await circle.getByRole("banner").getByText(/^已儲存 \d{2}:\d{2}$/).waitFor();
   await circle.locator('aside[aria-label="即時公開預覽"]').waitFor();
   await journey.capture(circle, "portal-saved");
 

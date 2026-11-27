@@ -1,3 +1,4 @@
+import { useEditorSaveStatus } from "../workspace-save-status";
 /** 攤位匯入：欄位對應、預覽逐列修正、已存清單與場館目錄新增。
  *
  * 由 `organizer-app.tsx` 拆出（#224）。該檔原本是 1870 行的單檔，面板
@@ -74,6 +75,7 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
   const readFeedback = useActionFeedback();
   const saveFeedback = useActionFeedback();
   const [bytes, setBytes] = useState<Uint8Array | null>(null);
+  useEditorSaveStatus(!!bytes, saveFeedback.notice.kind === "busy", detail.event.updatedAt);
   const [sheets, setSheets] = useState<OrganizerWorkbookSheet[]>([]);
   const [sheetName, setSheetName] = useState("");
   const [headerRow, setHeaderRow] = useState(1);

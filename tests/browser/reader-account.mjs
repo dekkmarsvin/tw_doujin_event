@@ -16,6 +16,7 @@ function account(asked, { session, claims = [], events = [], queue = null, servi
       const url = new URL(route.request().url());
       asked.push(url.pathname);
       const reply = (body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+      if (url.pathname === "/api/auth/session" && route.request().method() === "DELETE") return reply({ ok: true });
       if (url.pathname === "/api/auth/session") return session ? reply(session) : reply({ error: "尚未登入。" }, 401);
       if (url.pathname === "/api/claims") return reply({ eventId: url.searchParams.get("event"), claims });
       if (url.pathname === "/api/organizer/events") return reply({ events });
@@ -45,6 +46,22 @@ try {
     await page.close();
   }
 
+  {
+    let revision = 1;
+    const page = await journey.mapPage({ routes: async target => {
+      await target.route("**/data/events/sample/overrides.json", route => route.fulfill({ json: {
+        schema: "circle-overrides/1", eventId: "sample", generatedAt: "2026-09-01T00:00:00Z", revision, overrides: [],
+      } }));
+    } });
+    await page.waitForFunction(() => sessionStorage.getItem("reader-publication:sample") !== null);
+    revision++;
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    const update = page.getByRole("button", { name: "我的（需要留意）", exact: true });
+    await update.click();
+    await menu(page).click();
+    await page.getByRole("button", { name: "我的", exact: true }).waitFor();
+    await page.close();
+  }
   // A circle: its claims in this event, each with what it can do next.
   {
     const asked = [];
@@ -65,6 +82,11 @@ try {
     assert.equal(await panel.getByRole("link", { name: "重新認領", exact: true }).getAttribute("href"), "/circle?event=sample&circle=c-900002");
     assert.ok(!asked.includes("/api/organizer/events") && !asked.includes("/api/admin/review-queue"), "a circle is not asked about workspaces it cannot open");
     await journey.capture(page, "reader-account-circle");
+    const loggedOut = page.waitForRequest(req => req.method() === "DELETE" && new URL(req.url()).pathname === "/api/auth/session");
+    await panel.getByRole("button", { name: "登出", exact: true }).click();
+    await loggedOut;
+    await panel.getByRole("link", { name: "社團或主辦登入" }).waitFor();
+    assert.equal(await page.evaluate(key => localStorage.getItem(key), HINT), null);
     await page.close();
   }
 

@@ -1,3 +1,4 @@
+import { useEditorSaveStatus } from "../workspace-save-status";
 /** 地圖面板：底圖、版面編輯、儲存與確認對話框。
  *
  * 由 `organizer-app.tsx` 拆出（#224）。該檔原本是 1870 行的單檔，面板
@@ -145,6 +146,7 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location, onDi
   // A map that was never saved is entirely unsaved, edits or not: one built
   // from a plan and not touched since is still only on this screen.
   const unsaved = !!layout && (edited || !selected || !!pendingBackground);
+  useEditorSaveStatus(unsaved, savingMap, detail.event.updatedAt);
   useEffect(() => {
     onDirtyChange(unsaved);
     const warn = (event: BeforeUnloadEvent) => { if (unsaved) event.preventDefault(); };

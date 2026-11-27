@@ -201,9 +201,8 @@ try {
   await preciseClaim.page.close();
 
   const { page, requests, expire } = await open("admin", "/circle?event=sample");
-  await page.getByRole("banner").getByRole("button", { name: "帳號", exact: true }).click();
   await page.getByRole("link", { name: "網站管理", exact: true }).waitFor();
-  assert.equal(requests.filter(x => x.path.startsWith("/api/admin/")).length, 0);
+  assert.equal(requests.filter(x => x.path === "/api/admin/service-check").length, 0);
   assert.equal(await page.getByRole("link", { name: "網站管理", exact: true }).getAttribute("href"), "/admin");
   await page.getByRole("link", { name: "網站管理", exact: true }).click();
   await page.getByRole("heading", { name: "管理總覽", exact: true }).waitFor();

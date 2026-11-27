@@ -586,6 +586,7 @@ export function createCircle({ repository, lookupCircle, searchCircles, fetchEvi
     return json({
       fields: row ? JSON.parse(row.fields_json) as unknown : {},
       status: row?.status ?? "none",
+      updatedAt: row?.updated_at ?? null,
       postEventHidden: !!row?.post_event_hidden,
       // `null` reaches the client as `null`: the portal has to be able to tell
       // "has not answered" from "chose to keep" so it can ask.

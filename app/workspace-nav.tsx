@@ -37,15 +37,6 @@ export function WorkspaceEntries({ current, className }: { current: Workspace; c
   </div>;
 }
 
-/** Signed in: the same two by name only, beside the account they belong to. */
-export function WorkspaceSwitch({ current }: { current: Workspace }) {
-  const t = usePortalText();
-  const { locale } = useLocale();
-  return <nav aria-label={t("工作區")} className={styles.switch}>
-    {WORKSPACES.map((workspace) => <a key={workspace.id} href={localizedHref(workspace.href, locale)} aria-current={workspace.id === current ? "page" : undefined}>{t(workspace.label)}</a>)}
-  </nav>;
-}
-
 /** Both workspaces tell people to contact the maintainers; this is where. Set in Admin. */
 export function ContactLink({ url, className }: { url?: string; className?: string }) {
   const t = usePortalText();

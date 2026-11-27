@@ -28,14 +28,15 @@ import { PUBLISHED_EVENTS, getPublishedEvent, type EventDefinition } from "../ev
 import { eventCalendar, eventsByProximity, nearestEvent, taipeiDate } from "../event-calendar";
 import { AccountNotificationSettings } from "../account-notification-settings";
 import { adminLoginDestination } from "../notification-navigation";
-import { ContactLink, WorkspaceSwitch } from "../workspace-nav";
+import { ContactLink } from "../workspace-nav";
 import { SignInFinePrint, SignInScreen } from "../portal-sign-in";
 import { CirclePageShare } from "./circle-page-share";
 import { selectedCircleShareImage } from "../circle-share-image";
 import { CatalogImagesField } from "./catalog-images-field";
 import { pointTo } from "./point-to";
 import { useSessionExpiry } from "./session-status";
-import { AccountMenu } from "./account-menu";
+import { WorkspaceHeader } from "../workspace-header";
+import { useEditorSaveStatus } from "../workspace-save-status";
 import styles from "./portal.module.css";
 
 /**
@@ -359,45 +360,19 @@ export default function CirclePortalApp() {
   </SignInScreen>;
 
   return <div className={styles.page}>
-    <header className={styles.masthead}>
-      {/* Who is signed in, beside the page and its event when they fit and
-          above them when not (the stylesheet orders them). Everything else
-          about the account waits in one menu. */}
-      {session && <div className={styles.accountBar}>
-        {/* Shows which identity the server resolved, so a mismatch against
-            ADMIN_EMAILS is visible rather than silently hiding the panel. */}
-        <p className={styles.identityWho}>
-          <span>{session.email}{session.isAdmin ? t("・管理者") : ""}</span>
-        </p>
-        <LanguageSwitcher onChange={preferences.chooseLocale} />
-        <AccountMenu>
-          {/* Signing in here does not hide the way to the organizer workspace:
-              the same session opens it, and that page decides what it allows. */}
-          <WorkspaceSwitch current="circle" />
-          <AccountNotificationSettings key={session.email} session={session} preferences={preferences} />
-          <ContactLink url={session.contactUrl} />
-          {session.isAdmin && <a href="/admin">{t("網站管理")}</a>}
-          <button type="button" className={styles.accountMenuEnd} onClick={() => void signOut().then(forgetSession)}>{t("登出")}</button>
-        </AccountMenu>
-      </div>}
-      <div className={styles.titleRow}>
-        <h1>{t("社團資料")}</h1>
-        {/* The event is the page's context, not a task of its own: the picker
-            sits where its name would, and one event needs no picker at all. */}
-        {/* Signed out, no event is named: the browser's last event is only
-            where the session will open, and naming it on the sign-in read as
-            a sign-in for that event alone. */}
-        {session && (PUBLISHED_EVENTS.length > 1
+    <WorkspaceHeader eventId={event.id} current="circle" session={session} event={session && (PUBLISHED_EVENTS.length > 1
           ? <EventPicker
             eventId={event.id}
             claimsByEvent={claimsByEvent}
             onReach={() => readClaimsFor(PUBLISHED_EVENTS.map((item) => item.id).filter((id) => !(id in claimsByEvent)))}
             onChoose={(next) => { setEventId(next); setClaims([]); setClaimsLoadedFor(""); setClaimsFailedFor(""); setStatus(IDLE); }}
           />
-          : <p>{event.name}・{eventCalendar(event, locale).label}</p>)}
-        <a className={styles.backLink} href={localizedHref(mapHref(event.id), locale)}>{t("返回活動地圖")}</a>
-      </div>
-    </header>
+          : <p>{event.name}・{eventCalendar(event, locale).label}</p>)}>
+      <LanguageSwitcher onChange={preferences.chooseLocale} />
+      {session && <><AccountNotificationSettings key={session.email} session={session} preferences={preferences} /><ContactLink url={session.contactUrl} /></>}
+      <a href={localizedHref(mapHref(event.id), locale)}>{t("返回活動地圖")}</a>
+      <button type="button" onClick={() => void signOut().then(forgetSession).catch(error => setStatus({ kind: "error", message: errorMessage(error) }))}>{t("登出")}</button>
+    </WorkspaceHeader>
 
     {session && preferences.error && <p className={styles.error} role="alert">
       {preferences.unsavedLocale && t("通知語言尚未儲存。")} {portalNotice(preferences.error, locale)}
@@ -460,7 +435,7 @@ function EventPicker({ eventId, claimsByEvent, onReach, onChoose }: {
   const t = usePortalText();
   const { locale } = useLocale();
   const [today] = useState(() => taipeiDate(Date.now()));
-  const ordered = eventsByProximity(PUBLISHED_EVENTS, today, locale);
+  const ordered = eventsByProximity(PUBLISHED_EVENTS.filter(item => item.id === eventId || claimsByEvent[item.id]?.some(claim => claim.status !== "withdrawn")), today, locale);
   const groups = [
     { label: "即將舉辦、舉辦中", entries: ordered.filter((entry) => entry.group !== "past") },
     { label: "已結束", entries: ordered.filter((entry) => entry.group === "past") },
@@ -805,6 +780,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
   const [hydrationAttempt, setHydrationAttempt] = useState(0);
   // What the server holds, as opposed to the draft in `fields`: the deletion
   // summary has to describe what would actually be deleted, not unsaved edits.
+  const [savedAt, setSavedAt] = useState<number>();
   const [savedFields, setSavedFields] = useState<CircleOverrideFields>({});
   const [confirmText, setConfirmText] = useState("");
   // When the draft on this device differs from what the server holds. Shown as
@@ -860,6 +836,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     void readMyOverride(claim.circleId)
       .then((result) => {
         if (!active) return;
+        setSavedAt(result.updatedAt ?? undefined);
         const initialFields = result.fields ?? {};
         // The stored draft wins over the saved record: it is the newer of the
         // two by construction, and dropping it is one click away.
@@ -910,6 +887,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
   // Written on every edit rather than on a button: a draft that needs an action
   // to exist is one the author remembers only after losing the tab.
   const draftDiffersFromSaved = JSON.stringify(fields) !== JSON.stringify(savedFields);
+  useEditorSaveStatus(hydrated && draftDiffersFromSaved, status.kind === "busy" && status.message === "儲存中…", savedAt);
   useEffect(() => {
     if (!hydrated) return;
     if (!draftDiffersFromSaved) forgetStoredDraft(claim.circleId);
@@ -1443,6 +1421,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
                 setStatus({ kind: "busy", message: "儲存中…" });
                 void saveOverride(claim.circleId, savingFields, null, reviewedThumbnailKey ?? undefined)
                   .then(() => {
+                    setSavedAt(Date.now());
                     setSaved(true);
                     setSavedFields(savingFields);
                     forgetStoredDraft(claim.circleId);

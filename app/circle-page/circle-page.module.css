@@ -89,3 +89,5 @@
   .details div { grid-template-columns:1fr; gap:4px; }
 }
 @media (prefers-reduced-motion:reduce) { * { transition:none!important; } }
+
+:global(#circle-page-root):has(.owned) ~ :global(.claim) { display:none; }

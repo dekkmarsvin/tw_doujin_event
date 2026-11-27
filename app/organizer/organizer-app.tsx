@@ -1,4 +1,6 @@
 "use client";
+import { createPortal } from "react-dom";
+import { WorkspaceHeader } from "../workspace-header";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -25,7 +27,7 @@ import { ORGANIZER_GUIDED_TASKS, ORGANIZER_WORKSPACE_SECTIONS, type OrganizerGui
 
 import { useSessionExpiry } from "../circle-portal/session-status";
 import { AccountNotificationSettings } from "../account-notification-settings";
-import { ContactLink, WorkspaceSwitch } from "../workspace-nav";
+import { ContactLink } from "../workspace-nav";
 import { LoginLinkForm, SignInScreen } from "../portal-sign-in";
 
 
@@ -37,6 +39,8 @@ import styles from "./organizer.module.css";
 import { GUIDED_LABEL, IDLE, STATUS_LABEL, message, organizerGuidedDraftIssues, organizerIssueMessage, organizerSectionLabel, organizerSectionStateLabel, takeLoginToken, useDesktopViewport, type Notice, type PendingNavigation } from "./organizer-shared";
 
 export default function OrganizerApp() {
+  const [headerEvent, setHeaderEvent] = useState<OrganizerEventSummary>();
+  const [eventSlot, setEventSlot] = useState<HTMLDivElement | null>(null);
   const [session, setSession] = useState<PortalSession | null>(null);
   const [ready, setReady] = useState(false);
   const [notice, setNotice] = useState<Notice>(IDLE);
@@ -74,23 +78,17 @@ export default function OrganizerApp() {
   />;
 
   return <div className={styles.page}>
-    <header className={styles.header}>
-      <div><h1>主辦工作區</h1><p>場刊 Map 活動資料建置</p></div>
-      {session && <div className={styles.identity}>
-        <WorkspaceSwitch current="organizer" />
-        <span>{session.email}{session.isAdmin ? "・網站管理者" : ""}</span>
-        {session.isAdmin && <a href="/admin">管理</a>}
-        <AccountNotificationSettings key={session.email} session={session} className={styles.ghost} />
+    <WorkspaceHeader eventId={headerEvent?.eventId ?? undefined} candidateId={headerEvent?.id} current="organizer" session={session} event={<div ref={setEventSlot} />}>
+      {session && <><AccountNotificationSettings key={session.email} session={session} className={styles.ghost} />
         <ContactLink url={session.contactUrl} />
-        <button type="button" className={styles.ghost} onClick={() => void signOut().finally(() => setSession(null))}>登出</button>
-      </div>}
-    </header>
+        <button type="button" onClick={() => void signOut().then(() => setSession(null)).catch(error => setNotice({ kind: "error", message: message(error) }))}>登出</button></>}
+    </WorkspaceHeader>
     {notice.kind !== "idle" && <p role="status" className={notice.kind === "error" ? styles.error : styles.notice}>{notice.message}</p>}
     {!ready || !session ? <main className={styles.centerCard}><p>載入工作區…</p></main>
         : !session.isAdmin && !session.hasOrganizerAccess && !session.canApplyForEvent && !session.hasEventApplications
           ? <main><OrganizerNoAccess session={session} /></main>
         : !session.isAdmin && !session.hasOrganizerAccess ? <main className={styles.applicationMain}><OrganizerApplicationsPanel session={session} /></main>
-        : isDesktop ? <OrganizerWorkspace session={session} />
+        : isDesktop ? <OrganizerWorkspace onEvent={setHeaderEvent} eventSlot={eventSlot} session={session} />
           : new URLSearchParams(window.location.search).has("candidate") && !new URLSearchParams(window.location.search).has("application")
             ? <main className={styles.applicationMain}><MobileNotificationResult /></main>
           : session.isAdmin || session.canApplyForEvent || session.hasEventApplications ? <main className={styles.applicationMain}>
@@ -153,7 +151,7 @@ function OrganizerNoAccess({ session }: { session: PortalSession }) {
   </section>;
 }
 
-function OrganizerWorkspace({ session }: { session: PortalSession }) {
+function OrganizerWorkspace({ session, eventSlot, onEvent }: { onEvent: (event: OrganizerEventSummary | undefined) => void; session: PortalSession; eventSlot: HTMLDivElement | null }) {
   const [entry] = useState(() => new URLSearchParams(window.location.search));
   const [applicationsOpen, setApplicationsOpen] = useState(() => entry.has("application"));
   const [events, setEvents] = useState<OrganizerEventSummary[]>([]);
@@ -163,6 +161,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
     if (entry.has("candidate")) return entry.get("candidate");
     try { return localStorage.getItem(resumeKey); } catch { return null; }
   });
+  useEffect(() => { onEvent(events.find(item => item.id === selectedId)); return () => onEvent(undefined); }, [events, selectedId, onEvent]);
   const currentSelection = useRef(selectedId);
   useEffect(() => { currentSelection.current = selectedId; }, [selectedId]);
   const [detail, setDetail] = useState<OrganizerEventDetail | null>(null);
@@ -175,7 +174,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   const [eventListOpen, setEventListOpen] = useState(true);
   const [expandedEvents, setExpandedEvents] = useState<Record<string, boolean>>({});
   const [surface, setSurface] = useState<"data" | "members" | "circles" | "notice">(() =>
-    entry.has("candidate") && entry.get("section") === "members" ? "members" : "data");
+    entry.has("candidate") && entry.get("section") === "members" ? "members" : entry.get("section") === "notice" ? "notice" : entry.get("section") === "circles" ? "circles" : "data");
   const { pendingClaims, onQueueLoaded } = useOrganizerPendingClaims(
     detail?.claimReviewAvailable ? detail.event.id : null, detail?.event.eventId ?? null, surface === "circles",
   );
@@ -394,6 +393,9 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   const selectedGroup = groups.find(group => group.editions.some(event => event.id === selectedId));
 
   return <main className={eventListOpen ? styles.shell : `${styles.shell} ${styles.shellNarrow}`}>
+    {eventSlot && groups.length > 0 && createPortal(<select aria-label="頂欄活動" value={selectedGroup?.latest.id ?? ""} onChange={e => chooseEvent(e.target.value)}>
+      {!selectedGroup && <option value="">選擇活動</option>}{groups.map(group => <option key={group.id} value={group.latest.id}>{group.name}</option>)}
+    </select>, eventSlot)}
     <aside className={styles.sidebar}>
       <div className={styles.sidebarHead}>
         {eventListOpen && <div className={styles.sidebarTitle}><h2>活動列表</h2><p>切換活動與查看狀態</p></div>}

@@ -71,8 +71,9 @@ try {
   const canonical = await page.locator('link[rel="canonical"]').getAttribute("href");
   assert.equal(canonical, "https://map.kotoban.top/events/sample/");
   await journey.capture(page, "catalog-browse-desktop");
-  for (const width of [390, 760, 761, 1050, 1440]) {
+  for (const width of [360, 390, 760, 761, 1024, 1050, 1440]) {
     await page.setViewportSize({ width, height: 844 });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `browse fits ${width}px`);
     await journey.capture(page, `catalog-browse-${width}`);
   }
   // Circle page is a distinct document; its planning writes reappear on return.

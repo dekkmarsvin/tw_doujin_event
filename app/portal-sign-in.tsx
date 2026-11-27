@@ -1,3 +1,5 @@
+import { SiteTopbar } from "./site-topbar";
+import { AccountMenu } from "./circle-portal/account-menu";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { readTurnstileSitekey, requestLoginLink } from "./circle-editor-client";
 import { LanguageSwitcher } from "./i18n/language-switcher";
@@ -28,11 +30,10 @@ export function SignInScreen({ title, current, notice, circleId, children }: {
   const t = usePortalText();
   const { locale } = useLocale();
   return <div className={styles.screen}>
-    <header className={styles.head}>
-      <h1>{title}</h1>
-      {current === "circle" && <LanguageSwitcher />}
-      <a href={localizedHref("/", locale)}>{t("返回活動列表")}</a>
-    </header>
+    <SiteTopbar className={styles.head} brand={<h1>{title}</h1>}
+      event={current === "circle" && <LanguageSwitcher />}
+      navigation={<a href={localizedHref("/", locale)}>{t("返回活動列表")}</a>}
+      account={<AccountMenu><a href="#sign-in-title">{t("登入")}</a></AccountMenu>} />
     <main className={styles.column}>
       {notice && <p role="status" className={notice.kind === "error" ? styles.error : styles.notice}>{notice.message}</p>}
       <WorkspaceEntries current={current} />

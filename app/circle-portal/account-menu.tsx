@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { UiIcon } from "../ui-icons";
 import styles from "./portal.module.css";
 import { usePortalText } from "./portal-i18n";
 
@@ -11,7 +12,7 @@ import { usePortalText } from "./portal-i18n";
  * reason a click or Escape inside that dialog is not a dismissal of the menu,
  * and closing the dialog hands focus back to the item that opened it.
  */
-export function AccountMenu({ children }: { children: ReactNode }) {
+export function AccountMenu({ email, attention, onOpen, children }: { email?: string; attention?: "bad" | "warn" | "info" | null; onOpen?: () => void; children: ReactNode }) {
   const t = usePortalText();
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -47,7 +48,7 @@ export function AccountMenu({ children }: { children: ReactNode }) {
   }, [open]);
 
   return <div ref={root} className={styles.accountMenu}>
-    <button ref={trigger} type="button" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen(!open)}>{t("帳號")}</button>
+    <button ref={trigger} type="button" aria-label={email ? t("帳號") : t("登入")} title={t("帳號")} aria-expanded={open} aria-controls={panelId} data-attention={attention ?? undefined} onClick={() => { if (!open) onOpen?.(); setOpen(!open); }}>{email ? email.slice(0, 1).toUpperCase() : <UiIcon name="user" />}</button>
     <div id={panelId} className={styles.accountMenuPanel} hidden={!open}>{children}</div>
   </div>;
 }

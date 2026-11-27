@@ -32,6 +32,7 @@ try {
     const page = await journey.page({ url: `${base}/${entry}${entry === "admin" ? "?section=circles&view=claims&event=sample" : ""}`, routes: page => routes(page, { isAdmin }) });
     currentPage = page;
     // The account is shown while signed in; expiry still returns to login on every surface.
+    await page.getByRole("banner").getByRole("button", { name: "帳號" }).click();
     await page.getByRole("banner").getByText(/session@example.test/).waitFor();
     await journey.capture(page, `${name}-signed-in`);
     await page.clock.fastForward(week);
@@ -78,7 +79,7 @@ try {
     } });
     currentPage = page;
     await page.getByRole("heading", { name: "請先登入", exact: true }).waitFor();
-    await page.locator('a[href^="/circle?"]').click();
+    await page.getByRole("link", { name: "前往社團入口登入", exact: true }).click();
     await page.getByLabel("Email", { exact: true }).fill("session@example.test");
     await page.waitForFunction(() => [...document.querySelectorAll("button")].some(button => button.textContent === "寄出登入連結" && !button.disabled));
     await page.getByRole("button", { name: "寄出登入連結", exact: true }).click();
@@ -98,6 +99,17 @@ try {
     await page.close();
   }
 
+  const signedOut = await journey.page({ url: `${base}/admin`, routes: page => routes(page, { isAdmin: true }) });
+  await signedOut.getByRole("banner").getByRole("button", { name: "帳號" }).click();
+  await signedOut.getByText("session@example.test", { exact: true }).first().waitFor();
+  await signedOut.evaluate(() => {
+    const key = "tw-doujin:signed-in";
+    localStorage.removeItem(key);
+    window.dispatchEvent(new StorageEvent("storage", { key, newValue: null, storageArea: localStorage }));
+  });
+  await signedOut.getByRole("link", { name: "前往社團入口登入" }).waitFor();
+  assert.equal(await signedOut.getByText("session@example.test", { exact: true }).count(), 0);
+  await signedOut.close();
   // An early server revocation updates the login display; a role denial does not.
   for (const failure of [401, 403]) {
     const page = await journey.page({ url: `${base}/organizer`, routes: page => routes(page, { isAdmin: true, failure }) });
@@ -107,6 +119,7 @@ try {
       await page.getByRole("button", { name: "寄出登入連結", exact: true }).waitFor();
     } else {
       await page.getByText("沒有權限。", { exact: true }).waitFor();
+      await page.getByRole("banner").getByRole("button", { name: "帳號" }).click();
       await page.getByRole("button", { name: "登出", exact: true }).waitFor();
     }
     await journey.capture(page, `organizer-session-response-${failure}`);

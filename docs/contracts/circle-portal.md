@@ -1,5 +1,10 @@
 # 社團入口契約
 
+## 工作區頂欄
+
+社團可切換本帳號有認領的活動，直接進入其他場認領時保留連結指定的活動。頭像面板提供認領狀態、語言、通知設定、完整帳號、到期時間與登出。編輯社團時，頂欄顯示未儲存、儲存中或最近成功儲存的時間。
+
+
 **實作**：[`app/booth-guide/`](../../app/booth-guide)
 **測試**：`tests/booth-guide.test.mjs`、`tests/browser/portal-circle-claim.mjs`
 
@@ -27,11 +32,11 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 ## 入口分離
 
 - **社團登入與編輯只存在於 `/circle`，不與閱讀端共用 bundle。** 閱讀端不得出現登入介面、社團資料寫入 route 或 session cookie 名稱，由 `tests/public-artifact.test.mjs` 以建置產物比對把關。匿名行程分享另依[收藏與走訪規劃契約](./reader.md#分享行程)。
-- **入口分離指的是程式邊界，不是把 `/circle` 藏起來。** 公開閱讀端不嵌入登入表單、session 邏輯或資料寫入控制，但頁首固定提供前往控制面的「登入」入口；公開瀏覽、搜尋、收藏與行程仍不要求登入。活動選擇頁、活動介紹與社團公開頁的頁首「登入」分別連到 `/circle`、`/circle?event=<eventId>`、`/circle?event=<eventId>&circle=<circleId>`，值取自該頁的資料，由 `tests/public-artifact.test.mjs` 核對建置產物。控制面因此開在同一場、同一個社團，不落到瀏覽器上次維護或依日期選出的那場；沒有指名社團時不猜測。「使用說明」面板的「你是參展社團嗎？」段落與社團頁的「認領／管理資料」保留，仍是針對眼前活動或社團的入口；面板另有「你是活動主辦嗎？」段落，與前者一起連到 `/portal/` 介紹頁的對應段落。這些連結是純靜態 `href`：不查詢 session、不載入 Turnstile、不呼叫任何寫入 route，因此不牴觸上一條。
+- **入口分離指的是程式邊界，不是把 `/circle` 藏起來。** 公開閱讀端依登入標記讀取 session，可在「我的」登出或前往工作區編輯；公開瀏覽、搜尋、收藏與行程仍不要求登入。活動選擇頁、活動介紹與社團公開頁的頁首「登入」分別連到 `/circle`、`/circle?event=<eventId>`、`/circle?event=<eventId>&circle=<circleId>`，值取自該頁的資料，由 `tests/public-artifact.test.mjs` 核對建置產物。控制面因此開在同一場、同一個社團，不落到瀏覽器上次維護或依日期選出的那場；沒有指名社團時不猜測。「使用說明」面板的「你是參展社團嗎？」段落與社團頁的「認領／管理資料」保留，仍是針對眼前活動或社團的入口；面板另有「你是活動主辦嗎？」段落，與前者一起連到 `/portal/` 介紹頁的對應段落。這些連結是純靜態 `href`：不查詢 session、不載入 Turnstile、不呼叫任何寫入 route，因此不牴觸上一條。
 - 一般參觀者公開瀏覽、不需登入。社團登入**不介入**參觀者的收藏與行程。
-- [主辦單位工作區](./organizer-workspace.md)的 `/organizer` 是第三個入口：與 `/circle` 共用帳號、session cookie 與本節的登入機制，各有獨立的工作區 bundle。公開頁不直接連到 `/organizer`，唯一例外是 `/portal/` 介紹頁主辦段落的「前往主辦工作區」；`/circle` 與 `/organizer` 在未登入與已登入時都提供「社團資料」「主辦工作區」導覽。導覽與登入畫面使用共用元件，不 import 任一工作區；登入表單以 audience 保留各自的目的地。未登入時不顯示活動選單或工作區內容，登入後才依既有目標與授權開啟。選擇工作區只是導覽，不是註冊另一種帳號，也不授予權限；同一個有效 session 進入另一邊時不再索取登入信。
-- `/admin` 是獨立且 noindex 的管理入口，沿用同一 session；沒有登入表單，未登入時連向 `/circle`。非管理者不載入管理內容。`/circle` 只保留管理者身分與管理連結，不掛載管理面板或發出其管理 API 呼叫。管理資產不進 Reader precache，Reader 不新增管理導覽。
-- 社團入口不下載場刊：認領時的社團搜尋走 `/api/circle/search`，需要 session 且只回傳比對到的社團。
+- [主辦單位工作區](./organizer-workspace.md)的 `/organizer` 是第三個入口：與 `/circle` 共用帳號、session cookie 與本節的登入機制，各有獨立的工作區 bundle。公開介紹頁提供工作區入口；登入後的閱讀頁也為可進入主辦工作區的帳號提供連結。未登入時可從兩個入口登入，登入後頂欄依 session 顯示可用的工作區。導覽與登入畫面使用共用元件，不 import 任一工作區；登入表單以 audience 保留各自的目的地。未登入時不顯示活動選單或工作區內容，登入後才依既有目標與授權開啟。選擇工作區只是導覽，不是註冊另一種帳號，也不授予權限；同一個有效 session 進入另一邊時不再索取登入信。
+- `/admin` 是獨立且 noindex 的管理入口，沿用同一 session；沒有登入表單，未登入時連向 `/circle`。非管理者不載入管理內容。`/circle` 與閱讀頁為管理者顯示待審數、上次服務檢查與管理連結；管理編輯資產不進 Reader precache。
+- 認領時的社團搜尋走 `/api/circle/search`，需要 session 且只回傳比對到的社團。
 
 ## 登入有效期
 

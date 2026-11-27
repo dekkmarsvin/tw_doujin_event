@@ -62,6 +62,8 @@ import { defaultEventUrlState, historyMethod, parseEventUrlState, serializeEvent
 import { projectEventWorkspace } from "./event-workspace-projection";
 import { OfflinePrepDialog } from "./offline-prep-dialog";
 import { ShareItineraryDialog } from "./planning-share-panel";
+import { useReaderAccount } from "./use-reader-account";
+import { SiteTopbar } from "./site-topbar";
 import ReaderAccountMenu from "./reader-account";
 import { dayDateLabel, eventCalendar, eventDayCalendarDate } from "./event-calendar";
 import { PUBLIC_HEADER_MESSAGES } from "./public-header";
@@ -892,8 +894,10 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   // Saying "已加入行程" while the write failed would be a lie, so a storage error
   // silences the notice and leaves the error banner to speak.
   const mobileSummaryNotice = selected && planNotice?.recordId === selected.recordId && !planningStorageError ? planNotice.text : "";
-  const detailsPanel = <CircleDetails record={selected} sharedRecords={sharedRecords} movedDestination={selectedMovedDestination} favorite={selectedFavorite} plan={selectedPlan} groups={planning.favoriteGroups} compact floating={desktop} onClose={closeDetails} onOpenFull={() => setShowFullDetail(true)} {...detailActions} />;
-  const fullDetailsPanel = <CircleDetails record={selected} sharedRecords={sharedRecords} movedDestination={selectedMovedDestination} favorite={selectedFavorite} plan={selectedPlan} groups={planning.favoriteGroups} onClose={() => setShowFullDetail(false)} {...detailActions} />;
+  const account = useReaderAccount(event.id);
+  const owned = !!account?.claims?.some(claim => claim.status === "verified" && claim.circleId === selected?.circle.id);
+  const detailsPanel = <CircleDetails owned={owned} record={selected} sharedRecords={sharedRecords} movedDestination={selectedMovedDestination} favorite={selectedFavorite} plan={selectedPlan} groups={planning.favoriteGroups} compact floating={desktop} onClose={closeDetails} onOpenFull={() => setShowFullDetail(true)} {...detailActions} />;
+  const fullDetailsPanel = <CircleDetails owned={owned} record={selected} sharedRecords={sharedRecords} movedDestination={selectedMovedDestination} favorite={selectedFavorite} plan={selectedPlan} groups={planning.favoriteGroups} onClose={() => setShowFullDetail(false)} {...detailActions} />;
   const clearFiltersClassName = `${styles.clearFilters} ${genre !== event.genres[0] ? styles.clearFiltersActive : ""}`;
   const mobileFiltersPanel = <section className={styles.mobileFilters} aria-label={t("filtersRegion")}>
     <header><div><b>{t("filtersTitle")}</b></div><button className={clearFiltersClassName} onClick={clearFilters}>{t("clearAll")}</button></header>
@@ -967,7 +971,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   </>;
 
   // Everything about the reader that is not the event sits behind one button (#581).
-  const readerMenu = <ReaderAccountMenu className={styles.readerMenu} event={event} day={day} textScale={textScale} onTextScale={changeTextScale} onCheckOffline={() => setOfflinePrepOpen(true)} />;
+  const readerMenu = <ReaderAccountMenu key={event.id} account={account} className={styles.readerMenu} event={event} day={day} textScale={textScale} onTextScale={changeTextScale} onCheckOffline={() => setOfflinePrepOpen(true)} />;
 
   // The map as the reader sees it, without a selection: what the map/browse
   // switch carries over into the browse view.
@@ -985,13 +989,12 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   const showOverviewTrigger = Boolean(venueOverview) && !venueOverviewOpen && isAtMinimumZoom(zoom, mapMinZoom);
 
   return <main className={`app-shell ${styles.shell}`} style={mobileShellStyle} data-mobile-summary={mobileSummary || undefined} data-text-scale={textScale} data-mobile-sheet-level={mobileSheetLevel} data-mobile-sheet-dragging={mobileSheetDragging || undefined} data-notice={overrides?.notice ? "" : undefined}>
-    <header className="topbar">
-      <div className="brand"><span aria-hidden="true">場</span><div><b>場刊 Map</b>{desktop && <small>{header("tagline")}</small>}</div></div>
-      <div className="event">{eventIdentity}</div>
-      <label className="search"><span aria-hidden="true"><UiIcon name="search" /></span><input ref={searchRef} value={query} onChange={(event) => { autoSelectSearch.current = true; if (desktop && !leftRailRef.current?.getClientRects().length) setDesktopDetailsOpen(false); setQuery(event.target.value); setDesktopPanel("explore"); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); }} placeholder={t("search")} aria-label={t("search")} />{!desktop && query && <button className={styles.searchClear} onClick={() => { setQuery(""); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); searchRef.current?.focus(); }} aria-label={t("clearSearch")}><UiIcon name="close" /></button>}<kbd>⌘ K</kbd></label>
-      <ReaderViewTabs className={styles.viewSwitch} event={event} view="map" url={readerUrl} />
-      {readerMenu}
-    </header>
+    <SiteTopbar className="topbar"
+      brand={<div className="brand"><span aria-hidden="true">場</span><div><b>場刊 Map</b>{desktop && <small>{header("tagline")}</small>}</div></div>}
+      event={<div className="event">{eventIdentity}</div>}
+      search={<label className="search"><span aria-hidden="true"><UiIcon name="search" /></span><input ref={searchRef} value={query} onChange={(event) => { autoSelectSearch.current = true; if (desktop && !leftRailRef.current?.getClientRects().length) setDesktopDetailsOpen(false); setQuery(event.target.value); setDesktopPanel("explore"); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); }} placeholder={t("search")} aria-label={t("search")} />{!desktop && query && <button className={styles.searchClear} onClick={() => { setQuery(""); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); searchRef.current?.focus(); }} aria-label={t("clearSearch")}><UiIcon name="close" /></button>}<kbd>⌘ K</kbd></label>}
+      navigation={<ReaderViewTabs className={styles.viewSwitch} event={event} view="map" url={readerUrl} />}
+      account={readerMenu} />
     <EventNoticeBanner notice={overrides?.notice} />
     <div className={`workspace ${styles.workspace}`} data-details-open={desktop && desktopDetailsOpen && Boolean(selected) || undefined}>
       <aside ref={leftRailRef} className={`filters ${styles.leftRail}`}>
@@ -1053,7 +1056,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
               <button onClick={() => { setMobileSheetLevel("full"); requestAnimationFrame(() => mobileDockRef.current?.querySelector<HTMLButtonElement>(`button.${styles.mobileSheetHandle}`)?.focus({ preventScroll: true })); }}>{selected.placement.status === "active" ? t("fullInfo") : t("statusFullInfo", { status: placementStatusLabel(selected.placement.status, locale) })}</button>
             </div>
           </section>}
-          {mobileSummary && mobileSheetLevel === "full" && <div className={styles.mobilePanel} onFocusCapture={handleMobilePanelFocus}><CircleDetails record={selected} sharedRecords={sharedRecords} movedDestination={selectedMovedDestination} favorite={selectedFavorite} plan={selectedPlan} groups={planning.favoriteGroups} embedded onClose={closeDetails} {...detailActions} /></div>}
+          {mobileSummary && mobileSheetLevel === "full" && <div className={styles.mobilePanel} onFocusCapture={handleMobilePanelFocus}><CircleDetails owned={owned} record={selected} sharedRecords={sharedRecords} movedDestination={selectedMovedDestination} favorite={selectedFavorite} plan={selectedPlan} groups={planning.favoriteGroups} embedded onClose={closeDetails} {...detailActions} /></div>}
           <div ref={mobileResultsRef} className={styles.mobilePanel} hidden={mobilePanel !== "results" && !(mobilePanel === "details" && !selected)} tabIndex={-1} aria-label={t("exploreResults")} data-results-panel onFocusCapture={handleMobilePanelFocus}><button className={styles.mobileFilterButton} onClick={() => { rememberMobileResultScroll(); setMobilePanel("filters"); }}>{activeResultFilters.length > 0 ? t("filterCount", { count: activeResultFilters.length }) : t("filtersTitle")}</button>{resultsPanel}</div>
           <div className={styles.mobilePanel} hidden={mobilePanel !== "filters"} onFocusCapture={handleMobilePanelFocus}>{mobileFiltersPanel}</div>
           <div key={day} className={styles.mobilePanel} hidden={mobilePanel !== "plan"} onFocusCapture={handleMobilePanelFocus}>{navigationButton}{planningPanel}</div>
