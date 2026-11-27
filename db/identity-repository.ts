@@ -643,12 +643,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     evidenceUrl: string | null; evidenceNote: string | null; now: number;
   }) {
     await ensureTables();
-    // One row per (event, circle, account) is a unique index, so a resubmission
-    // after a withdrawal reuses the row rather than adding one. The guard is
-    // the point: only a claim the account itself withdrew may be overwritten,
-    // and `created_at` moves to now so a resubmission counts against the daily
-    // limit exactly like a first submission — withdrawing is not a way to buy
-    // more attempts. Everything else conflicts and reports no change.
+    // Reuse a withdrawn row. A rejected submission stays in the review history.
     const notificationSubmissionId = crypto.randomUUID();
     const results = await database.batch([database.prepare(
       `INSERT INTO circle_claims (
@@ -657,7 +652,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
          evidence_url, evidence_note, created_at, verified_at, notification_submission_id
        ) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17
          FROM accounts WHERE id = ?2 AND disabled_at IS NULL AND deletion_started_at IS NULL
-       ON CONFLICT(event_id, circle_id, account_id) DO UPDATE SET
+       ON CONFLICT(event_id, circle_id, account_id) WHERE status <> 'rejected' DO UPDATE SET
          circle_name_key = excluded.circle_name_key,
          circle_name_at_claim = excluded.circle_name_at_claim,
          source_row_at_claim = excluded.source_row_at_claim,
@@ -709,7 +704,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   async function listClaimsForAccount(accountId: string, eventId: string) {
     await ensureTables();
     const result = await database.prepare(
-      `SELECT * FROM circle_claims WHERE account_id = ?1 AND event_id = ?2 ORDER BY created_at DESC`,
+      `SELECT * FROM circle_claims WHERE account_id = ?1 AND event_id = ?2 ORDER BY created_at DESC, rowid DESC`,
     ).bind(accountId, eventId).all<ClaimRow>();
     return result.results;
   }
@@ -835,7 +830,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       ).all<{ event_id: string; pending: number }>(),
       database.prepare(
         `SELECT (SELECT COUNT(*) FROM organizer_applications WHERE status = 'pending') AS applications,
-                (SELECT COUNT(*) FROM organizer_event_candidates WHERE status = 'submitted') AS submissions`,
+                -- An approval whose publishing did not finish stays 'approved' until
+                -- approved again (#569), so it still waits for an admin (#581).
+                (SELECT COUNT(*) FROM organizer_event_candidates WHERE status IN ('submitted', 'approved')) AS submissions`,
       ).first<{ applications: number; submissions: number }>(),
     ]);
     return {
@@ -1488,14 +1485,18 @@ export function createIdentityRepository(database: D1Database, options: { bootst
                 (SELECT json_extract(settings_json, '$.days') FROM organizer_amendment_changes
                  WHERE candidate_id = c.id ORDER BY version DESC LIMIT 1) AS amendment_days_json,
                 ${organizerCandidateEdition} AS edition, 'admin' AS role,
+                EXISTS (
+                  SELECT 1 FROM organizer_event_grants g
+                  WHERE g.candidate_id = c.id AND g.account_id = ?1 AND g.role = 'owner' AND g.revoked_at IS NULL
+                ) AS is_member,
                 CASE WHEN w.candidate_id IS NULL OR w.onboarding_completed_at IS NOT NULL
                   THEN 'binder' ELSE 'guided' END AS workspace_mode
          FROM organizer_event_candidates c
          LEFT JOIN organizer_workspace_state w ON w.candidate_id = c.id
          ORDER BY c.updated_at DESC, c.id`,
-      ).all<{
+      ).bind(accountId).all<{
         id: string; tentative_name: string; event_id: string | null; status: OrganizerCandidateStatus;
-        current_version: number; updated_at: number; last_updated_role: string; role: "admin";
+        current_version: number; updated_at: number; last_updated_role: string; role: "admin"; is_member: number;
         workspace_mode: "guided" | "binder"; publication_operation: "CREATE" | "AMEND"; created_at: number; edition: number;
         event_days_json: string | null; amendment_days_json: string | null;
       }>();

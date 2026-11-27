@@ -1,6 +1,5 @@
-/* The phone's bottom navigation, shared by the map dock and the browse page:
-   探索 and 行程 are the map's panels, 逛品書 is the browse view. The marked item
-   is aria-pressed on the map's panel buttons and aria-current on view links. */
+/* The map dock's bottom navigation on phones: 探索 and 行程 are the map's
+   panels; the map/browse switch lives in the header (#581). */
 .tab { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-width:0; padding:3px 0 8px; border:0; border-radius:0; background:transparent; color:#59626c; font-size:calc(14px * var(--ui-font-scale,1)); font-weight:700; line-height:1.2; text-decoration:none; cursor:pointer; }
 .tab svg { width:24px; height:24px; }
 .tab>span { display:flex; align-items:center; gap:4px; }

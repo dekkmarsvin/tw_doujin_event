@@ -69,6 +69,8 @@ export type OrganizerEventSummary = {
   updatedAt: number;
   updatedByRole: string;
   role: OrganizerRole | "admin";
+  /** Whether the signed-in account holds an active owner grant on this candidate. */
+  isMember?: boolean;
   workspaceMode: "guided" | "binder";
   /** A small Admin list projection; full workspace reads keep their existing shape. */
   dateRange?: { start: string; end: string } | null;

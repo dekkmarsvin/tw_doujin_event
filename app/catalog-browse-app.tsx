@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useReaderTextScale } from "./use-reader-text-scale";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EventDefinition } from "./event-catalog";
 import { venueAssignmentForArea } from "./event-catalog";
 import { dayDateLabel, eventCalendar, eventDayCalendarDate, shortDate } from "./event-calendar";
@@ -6,7 +7,7 @@ import { placementStatusLabel } from "./circle-records";
 import { DEFAULT_ADVANCED_CIRCLE_SEARCH, normalizeWorkTopics } from "./circle-search";
 import { circleOptionLabel } from "./circle-overrides";
 import { catalogPreviewSize } from "./catalog-image-prepare";
-import { catalogBrowseUrl, parseCatalogBrowseUrl, switchReaderViewUrl, type CatalogBrowseState } from "./catalog-browse-url";
+import { catalogBrowseUrl, parseCatalogBrowseUrl, type CatalogBrowseState } from "./catalog-browse-url";
 import { projectCatalogBrowse, type CatalogBrowseCard } from "./catalog-browse-projection";
 import { BROWSE_BATCH_SIZE, readBrowseHistory, saveBrowseHistory } from "./catalog-browse-history";
 import { useCircleCatalog } from "./use-circle-catalog";
@@ -14,13 +15,10 @@ import { EventNoticeBanner } from "./event-notice-banner";
 import { useReaderPlanning } from "./reader-planning";
 import { restoreFavorite, toggleFavorite } from "./planning-store";
 import { applyReaderMetadata, circlePath, pageMetadata, readerLink } from "./seo";
-import ReaderViewTabs, { navigateReader, openMapOnPlan, ordinaryLinkClick } from "./reader-navigation";
-import tabStyles from "./reader-mobile-tabs.module.css";
+import ReaderViewTabs, { navigateReader, ordinaryLinkClick } from "./reader-navigation";
 import AdvancedCircleSearchControls from "./advanced-circle-search";
-import PlanningTools from "./planning-tools";
-import { PUBLIC_HEADER_MESSAGES, publicLoginHref } from "./public-header";
+import ReaderAccountMenu from "./reader-account";
 import { localizedHref } from "./i18n/locale";
-import { LanguageSwitcher } from "./i18n/language-switcher";
 import { useDocumentLanguage, useLocale, useMessages } from "./i18n/locale-context";
 import { CATALOG_BROWSE_MESSAGES } from "./catalog-browse-app.messages";
 import { UiIcon } from "./ui-icons";
@@ -31,9 +29,9 @@ import styles from "./catalog-browse-app.module.css";
 export default function CatalogBrowseApp({ event, onChooseEvent }: { event: EventDefinition; onChooseEvent?: () => void }) {
   const publication = useCircleCatalog(event.id);
   const planning = useReaderPlanning();
+  const { textScale, changeTextScale, fontScale } = useReaderTextScale();
   const { locale } = useLocale();
   const t = useMessages(CATALOG_BROWSE_MESSAGES);
-  const header = useMessages(PUBLIC_HEADER_MESSAGES);
   useDocumentLanguage();
   const [state, setState] = useState(() => parseCatalogBrowseUrl(event, new URL(window.location.href)));
   const [initial] = useState(() => readBrowseHistory(window.history.state, window.location.href));
@@ -48,7 +46,6 @@ export default function CatalogBrowseApp({ event, onChooseEvent }: { event: Even
   const [manualShare, setManualShare] = useState("");
   const url = catalogBrowseUrl(event, state, window.location.origin, locale);
   const key = url.toString();
-  const mapUrl = useMemo(() => switchReaderViewUrl(event, new URL(key)), [event, key]);
   const ready = publication.status === "ready" && publication.overlayStatus === "applied";
   const projection = useMemo(() => projectCatalogBrowse(event, publication.catalog.records, state, locale), [event, publication.catalog, state, locale]);
   const savePosition = useCallback(() => {
@@ -175,9 +172,9 @@ export default function CatalogBrowseApp({ event, onChooseEvent }: { event: Even
   const hasFilters = Boolean(state.query.trim() || projection.filters.length);
   const failed = publication.status === "error" || publication.overlayStatus === "unavailable";
   const allScope = state.day === null && state.venueSpaceId === null;
-  return <div className={styles.page}>
+  return <div className={styles.page} style={{ "--ui-font-scale": fontScale } as CSSProperties}>
     <header className={styles.header}>
-      <div className={styles.identity}><div className={`brand ${styles.brand}`}><span aria-hidden="true">場</span>場刊 Map</div>{/* As on the map: the event name leads back to the chooser only when there is another event to choose. */}{onChooseEvent ? <a className={styles.event} href={localizedHref("/", locale)} onClick={(pressed) => { if (!ordinaryLinkClick(pressed)) return; pressed.preventDefault(); savePosition(); onChooseEvent(); }}><span>{event.name}<small>{eventCalendar(event, locale).label}</small></span><span className={styles.eventSwitch}>{t("switchEvent")}<UiIcon name="chevron-right" /></span></a> : <div className={styles.event}><span>{event.name}<small>{eventCalendar(event, locale).label}</small></span></div>}<ReaderViewTabs className={styles.viewSwitch} event={event} view="browse" url={url} beforeNavigate={savePosition} /><PlanningTools eventId={event.id} /><LanguageSwitcher className={styles.languageSwitcher} narrow /><a className={`site-header-login reader-login ${styles.readerLogin}`} href={localizedHref(publicLoginHref({ eventId: event.id }), locale)}>{header("login")}</a></div>
+      <div className={styles.identity}><div className={`brand ${styles.brand}`}><span aria-hidden="true">場</span>場刊 Map</div>{/* As on the map: the event name leads back to the chooser only when there is another event to choose. */}{onChooseEvent ? <a className={styles.event} href={localizedHref("/", locale)} onClick={(pressed) => { if (!ordinaryLinkClick(pressed)) return; pressed.preventDefault(); savePosition(); onChooseEvent(); }}><span>{event.name}<small>{eventCalendar(event, locale).label}</small></span><span className={styles.eventSwitch}>{t("switchEvent")}<UiIcon name="chevron-right" /></span></a> : <div className={styles.event}><span>{event.name}<small>{eventCalendar(event, locale).label}</small></span></div>}<ReaderViewTabs className={styles.viewSwitch} event={event} view="browse" url={url} beforeNavigate={savePosition} /><ReaderAccountMenu className={styles.readerMenu} event={event} day={state.day} textScale={textScale} onTextScale={changeTextScale} /></div>
     </header>
     <EventNoticeBanner notice={publication.overrides?.notice} className={styles.notice} />
     <main className={styles.main}>
@@ -224,22 +221,6 @@ export default function CatalogBrowseApp({ event, onChooseEvent }: { event: Even
         </>}
       </>}
     </main>
-    {/* Phones: the same bottom navigation as the map. 探索 returns to the map at rest,
-        行程 opens it on today's plan, and 逛品書 again goes back to the top. */}
-    <nav className={styles.mobileNav} aria-label={t("readingMode")}>
-      <a className={tabStyles.tab} href={mapUrl.toString()} onClick={(pressed) => {
-        if (!ordinaryLinkClick(pressed)) return;
-        pressed.preventDefault(); savePosition(); navigateReader(mapUrl);
-      }}><UiIcon name="search" /><span>{t("explore")}</span></a>
-      <a className={tabStyles.tab} href={mapUrl.toString()} onClick={(pressed) => {
-        if (!ordinaryLinkClick(pressed)) return;
-        pressed.preventDefault(); savePosition(); openMapOnPlan(mapUrl);
-      }}><UiIcon name="check-square" /><span>{t("plan")}</span></a>
-      <a className={tabStyles.tab} href={key} aria-current="page" onClick={(pressed) => {
-        if (!ordinaryLinkClick(pressed)) return;
-        pressed.preventDefault(); window.scrollTo({ top: 0 });
-      }}><UiIcon name="book" /><span>{t("browseTab")}</span></a>
-    </nav>
     {planning.favoriteUndo && <div className={styles.undo} role="status"><span>{t("unfavorited", { name: planning.favoriteUndo.circleName })}</span><button onClick={() => {
       const undo = planning.favoriteUndo;
       if (undo) planning.update((current) => restoreFavorite(current, undo.favorite));

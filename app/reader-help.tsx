@@ -19,7 +19,6 @@ const MESSAGES = defineMessages({
     plan: "行程建立後可使用「導航模式」只看當日預定攤位並標記已走訪。",
     offlineTitle: "離線使用",
     offline: "開過的活動，斷網後仍可查看場刊與地圖；社團自填內容、品書圖與外部連結需要網路。",
-    checkOffline: "確認這天可離線使用",
     backupTitle: "完整備份",
     backup: "收藏、備註、群組、購買項目與預算只存在此瀏覽器。在「資料管理」匯出備份；換瀏覽器或裝置時用「從備份復原」。",
     circleTitle: "你是參展社團嗎？",
@@ -44,7 +43,6 @@ const MESSAGES = defineMessages({
     plan: "Once you have a plan, “Navigation mode” shows only the day’s planned booths and lets you mark them visited.",
     offlineTitle: "Offline use",
     offline: "Events you have opened can still show their catalog and map offline. Circle-added details, item list images and external links need a connection.",
-    checkOffline: "Check this day works offline",
     backupTitle: "Full backup",
     backup: "Favorites, notes, groups, items to buy and budgets are stored only in this browser. Export a backup from “Manage data”, and use “Restore from backup” on another browser or device.",
     circleTitle: "Are you an exhibiting circle?",
@@ -69,7 +67,6 @@ const MESSAGES = defineMessages({
     plan: "巡回プランを作ると、「ナビゲーションモード」でその日の予定スペースだけを表示し、訪問済みにできます。",
     offlineTitle: "オフライン利用",
     offline: "一度開いたイベントは、オフラインでもカタログとマップを見られます。サークル記入の情報、お品書き画像、外部リンクにはネット接続が必要です。",
-    checkOffline: "この日をオフラインで使えるか確認",
     backupTitle: "バックアップ",
     backup: "お気に入り、メモ、グループ、購入予定、予算はこのブラウザにのみ保存されます。「データ管理」でバックアップを書き出し、ブラウザや端末を変えるときは「バックアップから復元」を使ってください。",
     circleTitle: "サークル参加の方ですか？",
@@ -85,7 +82,8 @@ const MESSAGES = defineMessages({
   },
 });
 
-export default function ReaderHelp({ eventId, dataLastUpdatedLabel, onCheckOffline }: { eventId: string; dataLastUpdatedLabel: string; onCheckOffline?: () => void }) {
+/** `inline` unfolds the help in place, for a host that is itself a scrolling panel. */
+export default function ReaderHelp({ eventId, dataLastUpdatedLabel, inline = false }: { eventId: string; dataLastUpdatedLabel: string; inline?: boolean }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
@@ -114,7 +112,7 @@ export default function ReaderHelp({ eventId, dataLastUpdatedLabel, onCheckOffli
     };
   }, [open]);
 
-  return <div ref={menuRef} className={styles.menu}>
+  return <div ref={menuRef} className={inline ? `${styles.menu} ${styles.inline}` : styles.menu}>
     <button
       ref={buttonRef}
       type="button"
@@ -133,7 +131,7 @@ export default function ReaderHelp({ eventId, dataLastUpdatedLabel, onCheckOffli
         <li><strong>{t("searchTitle")}</strong><span>{t("search")}</span></li>
         <li><strong>{t("mapTitle")}</strong><span>{t("map")}</span></li>
         <li><strong>{t("planTitle")}</strong><span>{t("plan")}</span></li>
-        <li><strong>{t("offlineTitle")}</strong><span>{t("offline")}{onCheckOffline && <button type="button" className={styles.inlineAction} onClick={() => { setOpen(false); onCheckOffline(); }}>{t("checkOffline")}</button>}</span></li>
+        <li><strong>{t("offlineTitle")}</strong><span>{t("offline")}</span></li>
         <li><strong>{t("backupTitle")}</strong><span>{t("backup")}</span></li>
       </ol>
       <section className={styles.circleEntry} aria-labelledby="reader-circle-entry-title">

@@ -62,6 +62,15 @@ test("a rejected claim grants nothing", async () => {
   assert.equal((await save(member, SOUTH, "被婉拒")).status, 403);
   const mine = await (await api.call("GET", "/api/claims", { cookie: member })).json();
   assert.equal(mine.claims.find((entry) => entry.id === claimId).status, "rejected");
+  const retry = await api.call("POST", "/api/claims", { cookie: member, body: { circleId: SOUTH, evidenceNote: "補充資料" } });
+  assert.equal(retry.status, 201);
+  const resubmitted = await retry.json();
+  assert.notEqual(resubmitted.id, claimId);
+  assert.equal((await decide(claimId, "approve")).status, 409);
+  const refreshed = await (await api.call("GET", "/api/claims", { cookie: member })).json();
+  assert.deepEqual(refreshed.claims.filter(entry => entry.circleId === SOUTH).map(entry => entry.id), [resubmitted.id]);
+  assert.equal(resubmitted.status, "pending");
+  assert.equal((await save(member, SOUTH, "仍在審核")).status, 403);
 });
 
 test("a takedown removes a circle's content from readers at once", async () => {

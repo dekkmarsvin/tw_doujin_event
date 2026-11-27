@@ -22,7 +22,8 @@ type UiIconName =
   | "search"
   | "square"
   | "check-square"
-  | "upload";
+  | "upload"
+  | "user";
 
 export function UiIcon({ name, ...props }: { name: UiIconName } & SVGProps<SVGSVGElement>) {
   const shared: SVGProps<SVGSVGElement> = {
@@ -64,6 +65,7 @@ export function UiIcon({ name, ...props }: { name: UiIconName } & SVGProps<SVGSV
     {name === "book" && <><path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H19v14H7.5A2.5 2.5 0 0 0 5 19.5Z" /><path d="M5 19.5A2.5 2.5 0 0 0 7.5 22H19v-5" /></>}
     {name === "check" && <path d="m5 12 4 4L19 6" />}
     {name === "square" && <rect x="4.5" y="4.5" width="15" height="15" rx="2.5" />}
+    {name === "user" && <><circle cx="12" cy="8.5" r="3.8" /><path d="M4.5 20c.9-3.6 3.9-5.6 7.5-5.6s6.6 2 7.5 5.6" /></>}
     {name === "check-square" && <><rect x="4.5" y="4.5" width="15" height="15" rx="2.5" /><path d="m8 12 2.6 2.7L16.5 9" /></>}
   </svg>;
 }

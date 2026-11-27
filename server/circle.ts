@@ -53,9 +53,16 @@ export function createCircle({ repository, lookupCircle, searchCircles, fetchEvi
     const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。", code: errorCode("unauthenticated") }, 401);
     const claims = await repository.listClaimsForAccount(current.accountId, config.eventId);
+    // The account sees its latest submission per circle. Review history keeps every decision.
+    const seen = new Set<string>();
+    const latest = claims.filter((claim) => {
+      if (seen.has(claim.circle_id)) return false;
+      seen.add(claim.circle_id);
+      return true;
+    });
     return json({
       eventId: config.eventId,
-      claims: claims.map((claim) => ({
+      claims: latest.map((claim) => ({
         id: claim.id,
         circleId: claim.circle_id,
         circleName: claim.circle_name_at_claim,

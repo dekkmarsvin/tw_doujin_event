@@ -1,5 +1,7 @@
 "use client";
 
+import { useReaderTextScale } from "./use-reader-text-scale";
+
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type FocusEvent as ReactFocusEvent } from "react";
 import { createPortal } from "react-dom";
 import { useMapViewport } from "./use-map-viewport";
@@ -33,8 +35,7 @@ import {
   updateVisitPlanPurchase,
 } from "./planning-store";
 import { ReaderPlanningBoundary, useReaderPlanning } from "./reader-planning";
-import ReaderViewTabs, { arrivedOnPlan, forgetArrivalPanel, navigateReader, ordinaryLinkClick } from "./reader-navigation";
-import { switchReaderViewUrl } from "./catalog-browse-url";
+import ReaderViewTabs from "./reader-navigation";
 import tabStyles from "./reader-mobile-tabs.module.css";
 import { useModalFocus } from "./use-modal-focus";
 import { UiIcon } from "./ui-icons";
@@ -59,13 +60,11 @@ import {
 } from "./event-catalog";
 import { defaultEventUrlState, historyMethod, parseEventUrlState, serializeEventUrlState, shouldWriteEventUrl, type PendingCircleSelection } from "./event-url-state";
 import { projectEventWorkspace } from "./event-workspace-projection";
-import PlanningTools from "./planning-tools";
 import { OfflinePrepDialog } from "./offline-prep-dialog";
 import { ShareItineraryDialog } from "./planning-share-panel";
-import ReaderHelp from "./reader-help";
+import ReaderAccountMenu from "./reader-account";
 import { dayDateLabel, eventCalendar, eventDayCalendarDate } from "./event-calendar";
-import { PUBLIC_HEADER_MESSAGES, publicLoginHref } from "./public-header";
-import { LanguageSwitcher } from "./i18n/language-switcher";
+import { PUBLIC_HEADER_MESSAGES } from "./public-header";
 import { localizedHref, type Locale } from "./i18n/locale";
 import { useDocumentLanguage, useLocale, useMessages } from "./i18n/locale-context";
 import { EVENT_MAP_MESSAGES } from "./event-map-app.messages";
@@ -77,10 +76,6 @@ import styles from "./event-map-app.module.css";
 type EventDay = EventDayDefinition["id"];
 type MobilePanel = "filters" | "results" | "details" | "plan";
 type MobileSheetLevel = "peek" | "half" | "full";
-type TextScale = "standard" | "large" | "extra";
-
-const TEXT_SCALE_STORAGE_KEY = "event-map-text-scale";
-const LEGACY_TEXT_SCALE_STORAGE_KEY = "ff47-event-map-text-scale";
 const CATEGORY_DOT_COLORS = ["var(--mint)", "var(--lilac)", "var(--blue)", "var(--amber)", "#4ba9a0", "var(--coral)"] as const;
 
 /** Presentation cycles through a fixed semantic palette; category labels stay
@@ -138,16 +133,14 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   const [planningDisplay, setPlanningDisplay] = useState<PlanningDisplayFilters>(DEFAULT_PLANNING_DISPLAY_FILTERS);
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
   // The browse view's 行程 tab lands here with the plan open; 探索 lands on the map at rest.
-  const [openedOnPlan] = useState(arrivedOnPlan);
-  const keepLandingPanel = useRef(openedOnPlan);
-  const [mobileWorkspace, setMobileWorkspace] = useState<"explore" | "plan">(openedOnPlan ? "plan" : "explore");
-  const [mobilePanel, setMobilePanel] = useState<MobilePanel>(openedOnPlan ? "plan" : "results");
-  const [mobileSheetLevel, setMobileSheetLevel] = useState<MobileSheetLevel>(openedOnPlan ? "half" : "peek");
+  const [mobileWorkspace, setMobileWorkspace] = useState<"explore" | "plan">("explore");
+  const [mobilePanel, setMobilePanel] = useState<MobilePanel>("results");
+  const [mobileSheetLevel, setMobileSheetLevel] = useState<MobileSheetLevel>("peek");
   const [mobileSheetDragHeight, setMobileSheetDragHeight] = useState<number | null>(null);
   const [mobileSheetDragging, setMobileSheetDragging] = useState(false);
   const [navigationMode, setNavigationMode] = useState(false);
   const [desktop, setDesktop] = useState(false);
-  const [desktopPanel, setDesktopPanel] = useState<"explore" | "plan">(openedOnPlan ? "plan" : "explore");
+  const [desktopPanel, setDesktopPanel] = useState<"explore" | "plan">("explore");
   const [desktopDetailsOpen, setDesktopDetailsOpen] = useState(false);
   const [focusedCode, setFocusedCode] = useState<string | null>(null);
   const [restoreVersion, setRestoreVersion] = useState(0);
@@ -181,7 +174,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   const [showFullDetail, setShowFullDetail] = useState(false);
   const [offlinePrepOpen, setOfflinePrepOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-  const [textScale, setTextScale] = useState<TextScale>("standard");
+  const { textScale, changeTextScale, fontScale } = useReaderTextScale();
   const [planNotice, setPlanNotice] = useState<{ recordId: string; text: string } | null>(null);
   const [urlReady, setUrlReady] = useState(false);
   const { document: planning, update: updatePlanning, storageError: planningStorageError, favoriteUndo, setFavoriteUndo } = useReaderPlanning();
@@ -212,7 +205,6 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   const mobileResultsRef = useRef<HTMLDivElement | null>(null);
   const mobileResultScroll = useRef<{ element: HTMLElement; top: number }[]>([]);
   const mobileSummaryRef = useRef<HTMLButtonElement | null>(null);
-  const toolsMenuRef = useRef<HTMLDetailsElement | null>(null);
   const rememberMobileResultScroll = useCallback(() => {
     if (!mobileResultsRef.current?.getClientRects().length) return;
     mobileResultScroll.current = [...mobileResultsRef.current.querySelectorAll<HTMLElement>("*")].filter((element) => element.scrollHeight > element.clientHeight && element.clientHeight > 0).map((element) => ({ element, top: element.scrollTop }));
@@ -293,7 +285,6 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     if (restoreFocus) restoreFocusAfterOverviewExit();
   }, [fitInVisibleRect, restoreFocusAfterOverviewExit]);
   const facilityDirectory = useMemo(() => publishedMap ? mapFacilityDirectory(publishedMap.layout) : null, [publishedMap]);
-  const fontScale = textScale === "extra" ? 1.24 : textScale === "large" ? 1.12 : 1;
   const previousDesktop = useRef<boolean | null>(null);
   useEffect(() => {
     const moveHiddenFocus = () => {
@@ -330,20 +321,6 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   useEffect(() => {
     planPanelRef.current?.querySelectorAll<HTMLElement>("*").forEach((node) => { if (node.scrollTop) node.scrollTop = 0; });
   }, [day]);
-
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(TEXT_SCALE_STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_TEXT_SCALE_STORAGE_KEY);
-      if (stored === "standard" || stored === "large" || stored === "extra") queueMicrotask(() => setTextScale(stored));
-    } catch {
-      // Font scaling remains available for this session when storage is blocked.
-    }
-  }, []);
-
-  const changeTextScale = (next: TextScale) => {
-    setTextScale(next);
-    try { window.localStorage.setItem(TEXT_SCALE_STORAGE_KEY, next); } catch { /* Keep the in-memory preference. */ }
-  };
 
   useEffect(() => () => {
     if (mapGestureFrame.current !== null) cancelAnimationFrame(mapGestureFrame.current);
@@ -393,13 +370,8 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
       (circleId) => resolveCircleIdAliases(circleId, eventId),
     );
     setSelectedRecordId(selected?.recordId ?? null);
-    // Arriving from the browse view's 行程 tab there is no selection to show;
-    // that first resolution leaves the plan open instead of resetting it.
-    if (selected || !keepLandingPanel.current) {
-      setMobilePanel(selected ? "details" : "results");
-      setMobileSheetLevel(selected ? "half" : "peek");
-    }
-    keepLandingPanel.current = false;
+    setMobilePanel(selected ? "details" : "results");
+    setMobileSheetLevel(selected ? "half" : "peek");
     setDesktopDetailsOpen(Boolean(selected));
     pendingRestoreCode.current = !restoreInterrupted.current ? selected?.code ?? null : null;
   }, [catalogReady, circleRecords, circleRecordsById, eventId, restoreVersion]);
@@ -422,45 +394,18 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     return () => { cancelled = true; };
   }, [day, event, eventId, venueAssignment, mapScopeKey, mapRetry]);
 
-  // Opening on the plan is a one-time landing; a reload of this entry starts at rest.
-  useEffect(() => { if (openedOnPlan) forgetArrivalPanel(); }, [openedOnPlan]);
-
   useEffect(() => {
     if (!planNotice) return;
     const timeout = window.setTimeout(() => setPlanNotice(null), 4000);
     return () => window.clearTimeout(timeout);
   }, [planNotice]);
 
-  // The tools menu is a bare <details>, so it needs the two exits every menu
-  // owes a reader. Closing on an outside press must not steal that press: the
-  // map keeps the pan or the tap that happened to dismiss the menu.
-  useEffect(() => {
-    const closeOnOutsidePress = (event: PointerEvent) => {
-      const menu = toolsMenuRef.current;
-      if (!menu?.open || (event.target instanceof Node && menu.contains(event.target))) return;
-      menu.open = false;
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      const menu = toolsMenuRef.current;
-      if (event.key !== "Escape" || !menu?.open || !menu.contains(document.activeElement)) return;
-      event.stopPropagation();
-      menu.open = false;
-      menu.querySelector("summary")?.focus();
-    };
-    document.addEventListener("pointerdown", closeOnOutsidePress);
-    document.addEventListener("keydown", closeOnEscape, true);
-    return () => {
-      document.removeEventListener("pointerdown", closeOnOutsidePress);
-      document.removeEventListener("keydown", closeOnEscape, true);
-    };
-  }, []);
-
   useModalFocus(showFullDetail, fullDetailRef, () => setShowFullDetail(false));
 
   useEffect(() => {
     if (!venueOverviewOpen) return;
     const closeOverviewOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || showFullDetail || toolsMenuRef.current?.open) return;
+      if (event.key !== "Escape" || showFullDetail || (document.activeElement instanceof Element && document.activeElement.closest("[data-reader-menu]"))) return;
       event.preventDefault();
       event.stopPropagation();
       exitVenueOverview(true);
@@ -1021,17 +966,15 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     <div className={styles.codeHint} aria-live={measurement ? undefined : "polite"}>{hintedCode ? t("selectedCode", { code: hintedCode }) : t("selectHint")}</div>
   </>;
 
-  // Every public page ends its header with the same "登入" (#439, #488).
-  const readerLogin = <a className={`site-header-login reader-login ${styles.readerLogin}`} href={localizedHref(publicLoginHref({ eventId }), locale)}>{header("login")}</a>;
-  const readerTools = <><div className={styles.textScale} role="group" aria-label={t("textScaleGroup")}><span>{t("textScale")}</span>{(["standard", "large", "extra"] as const).map((value, index) => <button key={value} aria-pressed={textScale === value} aria-label={index === 0 ? t("textScaleStandard") : index === 1 ? t("textScaleLarge") : t("textScaleExtra")} onClick={() => changeTextScale(value)}>{index === 0 ? t("textScaleStandardShort") : index === 1 ? t("textScaleLargeShort") : t("textScaleExtraShort")}</button>)}</div>{!desktop && <LanguageSwitcher />}<PlanningTools eventId={eventId} />{planningStorageError && <span className={styles.storageError} role="status">{t("storageError")}</span>}<ReaderHelp eventId={eventId} dataLastUpdatedLabel={event.dataLastUpdatedLabel} onCheckOffline={() => setOfflinePrepOpen(true)} /></>;
+  // Everything about the reader that is not the event sits behind one button (#581).
+  const readerMenu = <ReaderAccountMenu className={styles.readerMenu} event={event} day={day} textScale={textScale} onTextScale={changeTextScale} onCheckOffline={() => setOfflinePrepOpen(true)} />;
 
-  // The map as the reader sees it, without a selection: what the switch and the
-  // phone's 逛品書 tab carry over into the browse view.
+  // The map as the reader sees it, without a selection: what the map/browse
+  // switch carries over into the browse view.
   const readerUrl = serializeEventUrlState(event, {
     eventId, day, venueSpaceId, genre, query, favoriteOnly, advancedSearch, planningDisplay,
     selection: { day, circleId: null, boothCode: null },
   }, typeof window === "undefined" ? "https://event.invalid/" : window.location.href);
-  const browseUrl = switchReaderViewUrl(event, readerUrl);
   const eventInfo = <div className={styles.eventInfo}><h1>{event.name}</h1>{desktop && <div className={styles.eventMeta}><span>{eventCalendar(event, locale).label}</span><span>{event.venue}</span></div>}</div>;
   const eventIdentity = onChooseEvent ? <a className={styles.eventLink} href={localizedHref("/", locale)} onClick={(click) => {
     if (click.button !== 0 || click.metaKey || click.ctrlKey || click.shiftKey || click.altKey) return;
@@ -1047,8 +990,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
       <div className="event">{eventIdentity}</div>
       <label className="search"><span aria-hidden="true"><UiIcon name="search" /></span><input ref={searchRef} value={query} onChange={(event) => { autoSelectSearch.current = true; if (desktop && !leftRailRef.current?.getClientRects().length) setDesktopDetailsOpen(false); setQuery(event.target.value); setDesktopPanel("explore"); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); }} placeholder={t("search")} aria-label={t("search")} />{!desktop && query && <button className={styles.searchClear} onClick={() => { setQuery(""); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); searchRef.current?.focus(); }} aria-label={t("clearSearch")}><UiIcon name="close" /></button>}<kbd>⌘ K</kbd></label>
       <ReaderViewTabs className={styles.viewSwitch} event={event} view="map" url={readerUrl} />
-      {desktop && <div className={styles.languageSlot}><LanguageSwitcher /></div>}
-      {desktop ? <div className={styles.topbarActions}>{readerTools}{readerLogin}</div> : <><details ref={toolsMenuRef} className={styles.mobileToolsMenu}><summary>{t("tools")}</summary><div>{readerTools}</div></details>{readerLogin}</>}
+      {readerMenu}
     </header>
     <EventNoticeBanner notice={overrides?.notice} />
     <div className={`workspace ${styles.workspace}`} data-details-open={desktop && desktopDetailsOpen && Boolean(selected) || undefined}>
@@ -1119,11 +1061,6 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
         <div ref={mobileNavRef} className={styles.mobileTabs} role="group" aria-label={t("mobileWorkspace")}>
           <button className={tabStyles.tab} aria-pressed={mobileWorkspace === "explore"} aria-expanded={!mobileSummary && mobilePanel !== "plan" && mobileSheetLevel !== "peek"} onClick={() => selectMobilePanel("results")}><UiIcon name="search" /><span>{t("explore")}</span></button>
           <button className={tabStyles.tab} aria-pressed={mobileWorkspace === "plan"} aria-expanded={mobilePanel === "plan" && mobileSheetLevel !== "peek"} onClick={() => selectMobilePanel("plan")}><UiIcon name="check-square" /><span>{t("plan")}{dayPlan.length > 0 && <small>{dayPlan.length}</small>}</span></button>
-          <a className={tabStyles.tab} href={browseUrl.toString()} onClick={(pressed) => {
-            if (!ordinaryLinkClick(pressed)) return;
-            pressed.preventDefault();
-            navigateReader(browseUrl);
-          }}><UiIcon name="book" /><span>{t("browse")}</span></a>
         </div>
       </aside>
     </div>
@@ -1131,6 +1068,6 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     {/* Keyed on the scope: a day or venue change (e.g. browser Back) starts a fresh check, and an earlier day's result cannot land on it. */}
     {offlinePrepOpen && <OfflinePrepDialog key={`${eventId} ${String(day)} ${venueAssignment.venueSpaceId}`} event={event} day={day} venueSpaceId={venueAssignment.venueSpaceId} onClose={() => setOfflinePrepOpen(false)} />}
     {shareOpen && <ShareItineraryDialog eventId={eventId} document={planning} onClose={() => setShareOpen(false)} />}
-    {showFullDetail && selected && createPortal(<div className={styles.fullDetailBackdrop} style={{ "--ui-font-scale": textScale === "extra" ? 1.24 : textScale === "large" ? 1.12 : 1 } as CSSProperties} role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) { event.preventDefault(); setShowFullDetail(false); } }}><div ref={fullDetailRef} className={styles.fullDetailDialog} role="dialog" aria-modal="true" aria-label={t("fullDetail", { name: selected.name })} tabIndex={-1}>{fullDetailsPanel}</div></div>, document.body)}
+    {showFullDetail && selected && createPortal(<div className={styles.fullDetailBackdrop} style={{ "--ui-font-scale": fontScale } as CSSProperties} role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) { event.preventDefault(); setShowFullDetail(false); } }}><div ref={fullDetailRef} className={styles.fullDetailDialog} role="dialog" aria-modal="true" aria-label={t("fullDetail", { name: selected.name })} tabIndex={-1}>{fullDetailsPanel}</div></div>, document.body)}
   </main>;
 }

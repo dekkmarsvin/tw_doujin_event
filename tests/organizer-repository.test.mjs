@@ -160,6 +160,7 @@ test("an admin creates an empty event entry and its invited owner gains only tha
   const adminEvents = await repository.listOrganizerCandidatesForAccount(adminId, true);
   assert.equal(adminEvents.length, 1);
   assert.equal(adminEvents[0].role, "admin");
+  assert.equal(adminEvents[0].is_member, 0);
 });
 
 test("an admin named as their own event's owner is granted it in the creating transaction", async () => {
@@ -178,6 +179,8 @@ test("an admin named as their own event's owner is granted it in the creating tr
   });
   assert.deepEqual(created, { ok: true, version: 1 });
   assert.equal(await repository.organizerRole("candidate-self-owned", adminId), "owner");
+  const adminListed = await repository.listOrganizerCandidatesForAccount(adminId, true);
+  assert.equal(adminListed.find((row) => row.id === "candidate-self-owned")?.is_member, 1);
 
   // The grant and the audit row that explains it are in the same batch: an
   // account holding owner with nothing saying why is not an outcome to allow.

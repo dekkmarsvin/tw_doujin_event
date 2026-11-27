@@ -11,6 +11,7 @@ export function requestAdminServiceCheck() {
   return call<{ services: ServiceChecks }>("/api/admin/service-check", { method: "POST", body: "{}" });
 }
 import { notificationParameters } from "./notification-navigation";
+import { forgetSignedIn, rememberSignedIn } from "./session-hint";
 import type { AdminCircleDetail } from "./admin-circle-detail";
 export type { AdminCircleDetail, AdminCircleClaim, AdminCircleHistory } from "./admin-circle-detail";
 import type { AdminAccountCircleSearchResponse, AdminAccountDetailResponse } from "./admin-account-detail";
@@ -75,6 +76,7 @@ export const SESSION_EXPIRED_EVENT = "portal-session-expired";
 
 export function reportSessionResponse(status: number) {
   if (status === 401 && typeof window !== "undefined") {
+    forgetSignedIn();
     window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
   }
 }
@@ -157,20 +159,23 @@ export function requestLoginLink(email: string, turnstileToken: string, audience
   return call<{ ok: true }>("/api/auth/request-link", { method: "POST", body: JSON.stringify({ email, turnstileToken, audience, circleId, destination, locale }) });
 }
 
+/** Every signed-in answer marks the device, so the reader knows to ask who it is (#581). */
+const signedIn = (session: PortalSession) => { rememberSignedIn(); return session; };
+
 export function verifyLoginToken(token: string) {
-  return call<PortalSession>("/api/auth/verify", { method: "POST", body: JSON.stringify({ token }) });
+  return call<PortalSession>("/api/auth/verify", { method: "POST", body: JSON.stringify({ token }) }).then(signedIn);
 }
 
 export function readSession() {
-  return call<PortalSession>("/api/auth/session");
+  return call<PortalSession>("/api/auth/session").then(signedIn);
 }
 
 export function signOut() {
-  return call<{ ok: true }>("/api/auth/session", { method: "DELETE" });
+  return call<{ ok: true }>("/api/auth/session", { method: "DELETE" }).then((answer) => { forgetSignedIn(); return answer; });
 }
 
 export function deleteMyAccount(email: string) {
-  return call<{ ok: true }>("/api/account", { method: "DELETE", body: JSON.stringify({ confirm: email }) });
+  return call<{ ok: true }>("/api/account", { method: "DELETE", body: JSON.stringify({ confirm: email }) }).then((answer) => { forgetSignedIn(); return answer; });
 }
 
 export type CircleMatch = {

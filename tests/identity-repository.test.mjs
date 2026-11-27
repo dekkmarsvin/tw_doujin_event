@@ -128,7 +128,7 @@ const verifiedOwner = async (circleId, label) => {
   return accountId;
 };
 
-test("only a withdrawn claim can be resubmitted over", async () => {
+test("a pending claim can be withdrawn and resubmitted", async () => {
   const accountId = await repository.upsertAccount("resubmit@example.com", NOW);
   const submit = (id, status, now) => repository.createClaim({
     id, accountId, eventId: "ff47", circleId: "ff47-resubmit",

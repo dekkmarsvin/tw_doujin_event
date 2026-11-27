@@ -17,6 +17,8 @@ const sheetRoutes = async (page) => {
 };
 const content = routes(overridesRoute("sample", [authored()]), sheetRoutes);
 const browseNav = (page) => page.getByRole("navigation", { name: "閱讀方式" });
+// 資料管理 and the rest of the reader's tools sit in the header's 我的 menu (#581).
+const openMenu = (page) => page.getByRole("button", { name: /^我的/ }).click();
 const ready = (page, count = 1) => page.getByRole("heading", { name: `${count} 個社團有品書`, exact: true }).waitFor();
 const journey = await start("catalog-browse");
 try {
@@ -78,6 +80,16 @@ try {
   await page.getByRole("heading", { name: "本次品書", exact: true }).waitFor();
   await page.getByRole("button", { name: "加入這天行程（9月2日（三））", exact: true }).click();
   await page.goBack(); await ready(page);
+  await openMenu(page);
+  await page.getByText("1 站，已逛 0", { exact: true }).waitFor();
+  await openMenu(page);
+  const daySelect = page.getByRole("combobox", { name: "活動日期" });
+  await daySelect.selectOption("1");
+  await openMenu(page);
+  await page.getByText("0 站，已逛 0", { exact: true }).waitFor();
+  await journey.capture(page, "catalog-browse-day-one-plan");
+  await openMenu(page);
+  await daySelect.selectOption("2");
   await card.getByRole("link", { name: /在地圖查看/ }).click();
   await page.locator("[data-slot-code]").first().waitFor();
   assert.equal(new URL(page.url()).searchParams.get("day"), "2");
@@ -89,25 +101,32 @@ try {
   assert.equal(await page.locator('meta[name="robots"][content*="noindex"]').count(), 0);
   await page.close();
 
-  // Phones switch views from the bottom bar: 探索 lands on the map at rest,
-  // 行程 opens today's plan once, and the map's own 逛品書 comes back here.
+  // Phones switch views from the header too (#581): the browse view has no
+  // bottom bar, and the map's dock keeps only its own 探索 and 行程.
   const phone = await journey.page({ params: "&view=browse", routes: content, viewport: { width: 390, height: 844 } });
   await ready(phone);
-  const sheet = () => phone.locator("main.app-shell").getAttribute("data-mobile-sheet-level");
   assert.equal(await browseNav(phone).getByRole("link", { name: "逛品書", exact: true }).getAttribute("aria-current"), "page");
-  await browseNav(phone).getByRole("link", { name: "行程", exact: true }).click();
+  assert.equal(await phone.getByRole("link", { name: "探索", exact: true }).count(), 0, "no bottom bar on the browse view");
+  const heading = phone.getByRole("heading", { name: "1 個社團有品書", exact: true });
+  const fontSize = () => heading.evaluate(node => parseFloat(getComputedStyle(node).fontSize));
+  const before = await fontSize();
+  await openMenu(phone);
+  await phone.getByRole("button", { name: "最大字級" }).click();
+  assert.ok(await fontSize() > before);
+  await journey.capture(phone, "catalog-browse-large-text");
+  await openMenu(phone);
+  await browseNav(phone).getByRole("link", { name: "地圖", exact: true }).click();
+  await openMenu(phone);
+  assert.equal(await phone.getByRole("button", { name: "最大字級" }).getAttribute("aria-pressed"), "true");
+  await phone.getByRole("button", { name: "標準字級" }).click();
+  await openMenu(phone);
   await phone.locator("[data-slot-code]").first().waitFor(); await phone.waitForTimeout(300);
   const dock = phone.getByRole("group", { name: "行動版工作區" });
-  assert.equal(await dock.getByRole("button", { name: /^行程/ }).getAttribute("aria-pressed"), "true");
-  assert.equal(await sheet(), "half", "行程 opens today's plan");
-  assert.equal(await phone.evaluate(() => history.state?.readerMobilePanel), undefined, "the landing is used once");
-  await journey.capture(phone, "catalog-browse-phone-plan");
-  await dock.getByRole("link", { name: "逛品書", exact: true }).click(); await ready(phone);
-  await browseNav(phone).getByRole("link", { name: "探索", exact: true }).click();
-  await phone.locator("[data-slot-code]").first().waitFor(); await phone.waitForTimeout(300);
-  assert.equal(await sheet(), "peek", "探索 returns to the map at rest");
-  assert.equal(await dock.getByRole("button", { name: "探索", exact: true }).getAttribute("aria-pressed"), "true");
+  assert.equal(await dock.getByRole("link", { name: "逛品書", exact: true }).count(), 0, "the dock no longer switches views");
+  assert.equal(await phone.locator("main.app-shell").getAttribute("data-mobile-sheet-level"), "peek", "the map opens at rest");
   await journey.capture(phone, "catalog-browse-phone-map");
+  await browseNav(phone).getByRole("link", { name: "逛品書", exact: true }).click(); await ready(phone);
+  await journey.capture(phone, "catalog-browse-phone-browse");
   await phone.close();
   // Failed storage stays in the event owner, including undo and the export surface.
   const failedStorage = await journey.page({ params: "&view=browse", routes: async (target) => {
@@ -121,13 +140,14 @@ try {
   await failedStorage.getByRole("button", { name: "收藏 北風畫室", exact: true }).click();
   await browseNav(failedStorage).getByRole("link", { name: "地圖", exact: true }).click();
   await failedStorage.locator("[data-slot-code]").first().waitFor();
-  await failedStorage.getByText("儲存異常，請開啟資料管理", { exact: true }).waitFor();
+  await failedStorage.getByText("無法儲存", { exact: true }).filter({ visible: true }).waitFor();
   await browseNav(failedStorage).getByRole("link", { name: "逛品書", exact: true }).click(); await ready(failedStorage);
   await failedStorage.getByRole("button", { name: "取消收藏 北風畫室", exact: true }).click();
   await browseNav(failedStorage).getByRole("link", { name: "地圖", exact: true }).click();
   await failedStorage.getByRole("button", { name: "復原收藏", exact: true }).click();
   await browseNav(failedStorage).getByRole("link", { name: "逛品書", exact: true }).click(); await ready(failedStorage);
   await failedStorage.getByRole("button", { name: "取消收藏 北風畫室", exact: true }).waitFor();
+  await openMenu(failedStorage);
   await failedStorage.getByRole("button", { name: "資料管理", exact: true }).click();
   const download = failedStorage.waitForEvent("download");
   await failedStorage.getByRole("button", { name: "匯出備份", exact: true }).click();
@@ -137,6 +157,7 @@ try {
   const exported = JSON.parse(await readFile(backupPath, "utf8"));
   assert.equal(exported.planning.favorites[0].circleId, CIRCLE);
   await failedStorage.getByRole("button", { name: "關閉規劃資料管理", exact: true }).click();
+  await failedStorage.keyboard.press("Escape");
   await journey.capture(failedStorage, "catalog-browse-storage-recovery");
   await failedStorage.close();
 
@@ -145,6 +166,7 @@ try {
   const otherDevice = await journey.page({ params: "&view=browse", routes: content });
   await ready(otherDevice);
   await otherDevice.getByRole("button", { name: "收藏 北風畫室", exact: true }).waitFor();
+  await openMenu(otherDevice);
   await otherDevice.getByRole("button", { name: "資料管理", exact: true }).click();
   const chooser = otherDevice.waitForEvent("filechooser");
   await otherDevice.getByRole("button", { name: "從備份復原…", exact: true }).click();
@@ -155,6 +177,7 @@ try {
   await preview.getByRole("button", { name: "確認復原", exact: true }).click();
   await otherDevice.getByText("已從備份復原：新增 1 筆。", { exact: true }).waitFor();
   await otherDevice.getByRole("button", { name: "關閉規劃資料管理", exact: true }).click();
+  await otherDevice.keyboard.press("Escape");
   await otherDevice.getByRole("button", { name: "取消收藏 北風畫室", exact: true }).waitFor();
   await otherDevice.close();
 
