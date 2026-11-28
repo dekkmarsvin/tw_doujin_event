@@ -121,7 +121,11 @@ test("without a published index, pages say the data is unavailable instead of se
   const env = { EVENT_DATA: { get: async () => null } };
   const response = await withPublishedEvents(env, "/", new Response("<head></head><script></script>", { headers: { "content-type": "text/html" } }));
   assert.equal(response.status, 503);
-  assert.match(await response.text(), /暫時無法載入活動資料/);
+  const unavailable = await response.text();
+  assert.match(unavailable, /暫時無法載入活動資料/);
+  assert.match(unavailable, /class="site-header-login" href="\/circle"/u);
+  const notice = new Response('<script src="/public-account.js"></script><main>Privacy notice</main>', { headers: { "content-type": "text/html" } });
+  assert.equal(await withPublishedEvents(env, "/privacy/en/", notice), notice);
   const page = await discoveryResponse({ ...env, ASSETS: assets }, new Request("https://example.com/events/sample/"));
   assert.equal(page.status, 503);
 });

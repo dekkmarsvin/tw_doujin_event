@@ -39,7 +39,11 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
     rollupOptions: {
+      output: {
+        entryFileNames: chunk => chunk.name === "publicAccount" ? "public-account.js" : "assets/[name]-[hash].js",
+      },
       input: {
+        publicAccount: resolve(import.meta.dirname, "public-account-main.ts"),
         // The reader. Static, offline-capable, no identity.
         index: resolve(import.meta.dirname, "index.html"),
         // The circle control surface. Separate entry so the reader's bundle

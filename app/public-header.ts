@@ -1,4 +1,5 @@
-import { defineMessages } from "./i18n/messages";
+import { DEFAULT_LOCALE, localizedHref, type Locale } from "./i18n/locale";
+import { defineMessages, translate } from "./i18n/messages";
 
 /**
  * The header every public page opens with (#439): the brand leading home and
@@ -51,7 +52,11 @@ const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => (
  * actions group is where the chooser's language switcher sits; a static page
  * keeps the same slot so one stylesheet lays out both.
  */
-export function publicHeaderHtml(loginHref: string) {
-  const { home, mark, name, tagline, login } = PUBLIC_HEADER;
-  return `<header class="site-header"><a class="site-header-brand" href="${home}"><span class="site-header-mark" aria-hidden="true">${mark}</span><span class="site-header-name"><b>${name}</b><small data-i18n="header.tagline">${tagline}</small></span></a><div class="site-header-actions"><div id="public-workspace-menu" data-circle-href="${escapeHtml(loginHref)}"></div><a class="site-header-login" href="${escapeHtml(loginHref)}" data-i18n="header.login">${login}</a></div></header>`;
+export const accountHeaderAssets = `<link rel="stylesheet" href="${PUBLIC_HEADER.stylesheet}"><script type="module" src="/public-account.js"></script>`;
+
+export function publicHeaderHtml(loginHref: string, locale: Locale = DEFAULT_LOCALE) {
+  const { home, mark, name } = PUBLIC_HEADER;
+  const tagline = translate(PUBLIC_HEADER_MESSAGES, locale, "tagline");
+  const login = translate(PUBLIC_HEADER_MESSAGES, locale, "login");
+  return `<header class="site-header"><a class="site-header-brand" href="${localizedHref(home, locale)}"><span class="site-header-mark" aria-hidden="true">${mark}</span><span class="site-header-name"><b>${name}</b><small data-i18n="header.tagline">${tagline}</small></span></a><div class="site-header-actions"><div id="public-workspace-menu" data-circle-href="${escapeHtml(loginHref)}"></div><a class="site-header-login" href="${escapeHtml(localizedHref(loginHref, locale))}" data-i18n="header.login">${login}</a></div></header>`;
 }

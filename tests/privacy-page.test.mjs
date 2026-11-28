@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { parse } from "parse5";
-import { PAGES, buildPrivacyPage, lastUpdatedFrom, renderInline, renderMarkdown } from "../scripts/build-privacy-page.mjs";
+import { PAGES, lastUpdatedFrom, renderInline, renderMarkdown } from "../scripts/build-privacy-page.mjs";
 
 /** The original and each translation, built exactly as the published pages are. */
 const notices = await Promise.all(Object.entries(PAGES).map(async ([locale, { source }]) => {
   const markdown = await readFile(new URL(`../docs/policy/${source}`, import.meta.url), "utf8");
-  return { locale, markdown, page: buildPrivacyPage(markdown, locale) };
+  return { locale, markdown, page: await readFile(new URL(`../dist${PAGES[locale].path}index.html`, import.meta.url), "utf8") };
 }));
 const { markdown, page } = notices.find(({ locale }) => locale === "zh-Hant");
 
@@ -123,12 +123,10 @@ test("claims no research-use exception, because no terms grant one", () => {
   assert.doesNotMatch(page, /研究用途|學術/);
 });
 
-test("is a static document: no script, no bundle, nothing to execute", () => {
-  // The public reading path is static (ADR-0008) and the overlay owns the free
-  // plan's Function budget (#48), so this page must cost neither.
-  for (const { page: built } of notices) {
-    assert.doesNotMatch(built, /<script/i);
-    assert.doesNotMatch(built, /\/assets\//);
+test("each notice offers a sign-in link in its own language before JavaScript runs", () => {
+  for (const { locale, page: built } of notices) {
+    const link = nodes(parse(built)).find(node => attr(node, "class") === "site-header-login");
+    assert.equal(attr(link, "href"), locale === "zh-Hant" ? "/circle" : "/circle?lang=" + locale);
   }
 });
 

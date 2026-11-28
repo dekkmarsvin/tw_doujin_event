@@ -2,6 +2,7 @@ import type { EventDefinition } from "../app/event-catalog";
 import { parseShareSnapshot, type ShareSnapshot } from "../app/planning-share-snapshot";
 import { peppered, randomToken } from "../app/portal-crypto";
 import { SHARE_IMAGE } from "../app/seo";
+import { accountHeaderAssets, publicHeaderHtml } from "../app/public-header";
 import { escapeHtml, metadataHtml } from "../app/static-discovery";
 import type { createPlanningShareRepository } from "../db/planning-share-repository";
 import { canonicalLocale, localizedHref, type Locale } from "../app/i18n/locale";
@@ -44,7 +45,7 @@ async function boundedJson(request: Request): Promise<unknown> {
 }
 
 function html(title: string, content: string, status: number, locale: Locale, head = "") {
-  return new Response(`<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(title)}</title><meta name="robots" content="noindex">${head}</head><body><main>${content}</main></body></html>`, {
+  return new Response(`<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(title)}</title><meta name="robots" content="noindex">${head}${status >= 400 ? accountHeaderAssets : ""}</head><body>${status >= 400 ? publicHeaderHtml("/circle", locale) : ""}<main>${content}</main></body></html>`, {
     status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "private, no-store", "x-robots-tag": "noindex" },
   });
 }

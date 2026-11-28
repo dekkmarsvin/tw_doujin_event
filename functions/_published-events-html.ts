@@ -1,3 +1,4 @@
+import { publicHeaderHtml, accountHeaderAssets } from "../app/public-header";
 import { parseEventDefinition } from "../app/event-catalog";
 import { homepageSummary } from "../app/static-discovery";
 import { publishedEventDefinitions, readEventIndex } from "./_event-data";
@@ -8,7 +9,7 @@ export const PUBLISHED_EVENTS_ELEMENT_ID = "published-events";
 /** The page shown while the published event data cannot be read. */
 export function eventDataUnavailable(error: unknown) {
   console.error(JSON.stringify({ event: "event_index.unavailable", message: error instanceof Error ? error.message : String(error) }));
-  return new Response("<!doctype html><meta charset=\"utf-8\"><title>暫時無法使用</title><p>暫時無法載入活動資料，請稍後再試。</p>", {
+  return new Response(`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>暫時無法使用</title>${accountHeaderAssets}</head><body>${publicHeaderHtml("/circle")}<main><p>暫時無法載入活動資料，請稍後再試。</p></main></body></html>`, {
     status: 503,
     headers: { "content-type": "text/html; charset=utf-8", "retry-after": "60" },
   });
@@ -24,6 +25,7 @@ export function eventDataUnavailable(error: unknown) {
  */
 export async function withPublishedEvents(env: Pick<PortalEnv, "EVENT_DATA">, pathname: string, response: Response): Promise<Response> {
   if (response.status !== 200 || !(response.headers.get("content-type") ?? "").toLowerCase().startsWith("text/html")) return response;
+  if (pathname === "/privacy" || pathname.startsWith("/privacy/") || pathname === "/404.html") return response;
   let html = await response.text();
   // A page without scripts (the share redirect) has nothing to read the list.
   if (!html.includes("<script")) return new Response(html, { status: response.status, statusText: response.statusText, headers: response.headers });
