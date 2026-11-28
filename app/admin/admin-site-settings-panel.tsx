@@ -69,12 +69,14 @@ export function AdminSiteSettingsPanel() {
         <label className={settingsStyles.switch} htmlFor="site-review-mail" aria-label="全站寄送待審通知"><span><strong>全站寄送待審通知</strong><small>每有一筆活動申請、活動內容送審或社團認領等待審核，就寄一封信給每位網站管理者。</small></span>
           <input id="site-review-mail" type="checkbox" role="switch" checked={form.adminReviewNotificationsEnabled} onChange={event => patch({ adminReviewNotificationsEnabled: event.target.checked })} /></label>
         <ServiceStatus label="寄信服務" result={data.services?.mail ?? null} pending={checking} requested={!!data.services} />
+        <ServiceStatus label="通知寄送" result={data.services?.notifications ?? null} pending={false} />
       </section>
       <section className={`${styles.card} ${settingsStyles.card}`}><h3>發布作業</h3>
         <label className={settingsStyles.switch} htmlFor="site-publication" aria-label="處理發布作業"><span><strong>處理發布作業</strong><small>暫停後續發布處理，已公開活動不受影響。</small></span>
           <input id="site-publication" type="checkbox" role="switch" disabled={data.publicationMode === "disabled"} checked={form.publicationEnabled} onChange={event => patch({ publicationEnabled: event.target.checked })} /></label>
         {data.publicationMode === "disabled" && <p>此環境未啟用發布能力。</p>}
         <ServiceStatus label="發布服務" result={data.services?.publication ?? null} pending={checking} requested={!!data.services} />
+        <ServiceStatus label="讀取服務" result={data.services?.reader ?? null} pending={false} />
       </section>
     </fieldset>
     <div className={settingsStyles.actions}>

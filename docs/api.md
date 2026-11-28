@@ -88,7 +88,7 @@
 | GET | `/api/admin/accounts?email=` 或 `?circle=` | 管理者 | `readAdminAccountDetail`、`searchAdminAccountsByCircle` | 保留 |
 | POST | `/api/admin/accounts` | 管理者 | `disableAccount` | 保留 |
 | GET／PUT | `/api/admin/site-settings` | 管理者 | `readAdminSiteSettings`、`saveAdminSiteSettings` | 修改：`AdminSiteSettings` 移除 `publicationMode`、`publicationActivities`，設定移除 `publicationEnabled` 與兩個通知開關 |
-| POST | `/api/admin/service-check` | 管理者 | `requestAdminServiceCheck` | 修改：目前由排程 Worker 執行，改為請求內直接檢查寄信設定；`publication` 項目移除 |
+| POST | `/api/admin/service-check` | 管理者 | `requestAdminServiceCheck` | 修改：寫入請求後的背景工作檢查寄信與發布。`services` 另有 `reader`、`notifications`，由每小時檢查寫入（#580） |
 | GET／PUT | `/api/admin/notification-preferences` | 管理者 | `readNotificationPreferences`、`saveNotificationPreferences` | **已刪除**（階段 5c） |
 | GET／POST | `/api/admin/references` | 管理者 | 主辦 `readSharedReferences`、`saveSharedReference` | 保留 |
 | POST | `/api/admin/integrations/github/probe` | 管理者 | 前端未使用 | 已刪除（階段 4b） |

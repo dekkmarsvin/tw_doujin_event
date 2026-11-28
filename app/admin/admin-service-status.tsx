@@ -12,6 +12,8 @@ export function ServiceStatus({ label, result, pending, requested = false }: { l
 export function ServiceResults({ data, checking }: { data: AdminSiteSettings; checking: boolean }) {
   return <><ServiceStatus label="寄信服務" result={data.services?.mail ?? null} pending={checking} requested={!!data.services} />
     <ServiceStatus label="發布服務" result={data.services?.publication ?? null} pending={checking} requested={!!data.services} />
+    <ServiceStatus label="讀取服務" result={data.services?.reader ?? null} pending={false} />
+    <ServiceStatus label="通知寄送" result={data.services?.notifications ?? null} pending={false} />
     {data.services && <p className={styles.updated}>{data.services.checkedAt === null ? `已要求檢查 ${adminDate(data.services.requestedAt)}` : `服務檢查 ${adminDate(data.services.checkedAt)}`}</p>}
   </>;
 }

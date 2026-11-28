@@ -6,6 +6,9 @@ import { start, base, output } from "./support/journey.mjs";
 
 const journey = await start("portal-admin-entry");
 const now = Date.now();
+// The hourly check's items (#580). Not "可用", so the waits below for 最近檢查可用 still mean the manual check finished.
+const hourly = { reader: { status: "unavailable", source: "活動資料", reason: "公開網站回應 503。" },
+  notifications: { status: "unavailable", source: "通知佇列", reason: "有通知超過 1 小時仍未寄出。" } };
 async function open(role, entry = "/admin", pendingService = false, viewport, eventOverview = false) {
   const requests = [];
   const pending = [
@@ -30,6 +33,7 @@ async function open(role, entry = "/admin", pendingService = false, viewport, ev
   let serviceChecks = {
     requestedAt: now, checkedAt: pendingService ? null : now, mail: pendingService ? null : { status: "unavailable", source: "Mailgun", reason: "金鑰驗證失敗。" },
     publication: pendingService ? null : { status: "unavailable", source: "GitHub App", reason: "GitHub 拒絕發布授權。" },
+    ...hourly,
   };
   const siteState = () => ({ settings: siteSettings, publicationMode: eventOverview ? "disabled" : "r2", services: serviceChecks });
   let failure = 0, settingsFailure = false;
@@ -148,7 +152,7 @@ async function open(role, entry = "/admin", pendingService = false, viewport, ev
     failEvents: status => { candidateFailure = status; }, failQueue: status => { queueFailure = status; },
     failDetail: status => { detailFailure = status; }, partialCleanup: enabled => { partialTakedown = enabled; }, completeChecks: () => {
     serviceChecks = { requestedAt: now, checkedAt: now + 1, mail: { status: "available", source: "Mailgun", reason: "測試檢查已完成。" },
-      publication: { status: "available", source: "GitHub App", reason: "測試檢查已完成。" } };
+      publication: { status: "available", source: "GitHub App", reason: "測試檢查已完成。" }, ...hourly };
   } };
 }
 
@@ -369,6 +373,7 @@ try {
   // A background read that lands before the next poll still ends the wait.
   await refreshInBackground(pendingCheck.page);
   await services.getByText("最近檢查可用", { exact: true }).first().waitFor();
+  await services.screenshot({ path: `${output}/issue580-services.png` });
   assert.equal(await services.getByRole("button", { name: "檢查服務", exact: true }).isEnabled(), true);
   assert.ok(pendingCheck.requests.filter(x => x.path === "/api/admin/site-settings" && x.method === "GET").length >= 2);
   assert.equal(pendingCheck.requests.filter(x => x.path === "/api/admin/service-check").length, 0);
@@ -381,6 +386,7 @@ try {
   await timedOutCheck.page.getByRole("alert").getByText("尚未收到排程服務的檢查結果，請稍後重新檢查。", { exact: false }).waitFor();
   assert.equal(await timedOutServices.getByText("無法確認", { exact: true }).count(), 2);
   assert.equal(await timedOutServices.getByText("尚未檢查", { exact: true }).count(), 0);
+  assert.equal(await timedOutServices.getByText("最近檢查不可用", { exact: true }).count(), 2, "the hourly items stay while a manual check waits");
   assert.equal(timedOutCheck.requests.filter(x => x.path === "/api/admin/service-check").length, 0);
   await timedOutCheck.page.close();
 

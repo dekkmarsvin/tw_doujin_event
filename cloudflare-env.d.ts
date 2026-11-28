@@ -68,6 +68,14 @@ interface RetentionEnv {
   THUMBNAILS: R2Bucket;
   /** Private evidence bucket. It has no public domain and is only read through authenticated Functions. */
   MAP_CONTRIBUTIONS?: R2Bucket;
+  /** Hourly service check (#580). The domain and origins are variables; the key and recipient are secrets. */
+  MAILGUN_API_KEY?: string;
+  MAILGUN_DOMAIN?: string;
+  SITE_ORIGIN?: string;
+  ENVIRONMENT_NAME?: string;
+  /** A verified Email Routing destination address, kept out of this public repository. */
+  ALERT_RECIPIENT?: string;
+  ALERT_EMAIL?: { send(message: import("cloudflare:email").EmailMessage): Promise<unknown> };
 }
 
 /** The argument a Cron Trigger hands to `scheduled()`. */
@@ -75,6 +83,13 @@ interface ScheduledController {
   readonly scheduledTime: number;
   readonly cron: string;
   noRetry(): void;
+}
+
+declare module "cloudflare:email" {
+  /** Raw MIME for a `send_email` binding. */
+  export class EmailMessage {
+    constructor(from: string, to: string, raw: string);
+  }
 }
 
 declare module "cloudflare:workers" {
