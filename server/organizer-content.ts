@@ -6,7 +6,9 @@ import { parseMapContributionDraftContent, validateMapContributionDraft } from "
 import {
   describeEventImageBytes, eventImageKeyParts, eventImagePublicKey, organizerEventImageObjectKey, organizerEventImagePrefix, prepareEventImage, sameEventImage, type EventImage,
 } from "../app/event-image";
-import { parseOrganizerEventDraft, type OrganizerEventDraft } from "../app/organizer-event";
+import {
+  isOrganizerAreaId, parseOrganizerEventDraft, serializeOrganizerEventDraft, withOrganizerImportedAreaIds, type OrganizerEventDraft,
+} from "../app/organizer-event";
 import { getOrganizerWorkspacePrerequisiteIssues, validateOrganizerImportedRowsAgainstDraft } from "../app/organizer-workspace";
 import { resolveCandidateAuthoringScope } from "../app/event-authoring-scope";
 import {
@@ -303,12 +305,48 @@ export function createOrganizerContent(dependencies: PortalDependencies, auth: A
       return json({ error: "匯入來源資訊格式無效。" }, 400);
     }
 
+    const deriveAreas = body?.deriveAreas;
+    if (deriveAreas !== undefined && (!deriveAreas || typeof deriveAreas !== "object" || Array.isArray(deriveAreas))) {
+      return json({ error: "展區推導參數格式無效。" }, 400);
+    }
+    const deriveRecord = deriveAreas ? deriveAreas as Record<string, unknown> : null;
+
     const candidate = await repository.getOrganizerCandidate(candidateId);
     if (!candidate) return json({ error: "找不到活動。" }, 404);
     const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
     if (!draft) return json({ error: "活動資料格式無效，請聯絡網站管理者。" }, 500);
     const days = new Set(draft.event.days.map((day) => day.id));
     const spaces = new Map(draft.venue.assignments.map((assignment) => [assignment.venueSpaceId, assignment]));
+
+    const rawUndivided = deriveRecord?.undividedSpaces;
+    if (rawUndivided !== undefined && (!Array.isArray(rawUndivided) || rawUndivided.some((id) => typeof id !== "string"))) {
+      return json({ error: "無分區場地清單格式無效。" }, 400);
+    }
+    const parsedUndividedSpaces = (rawUndivided ?? []).map((id) => (id as string).normalize("NFKC").trim());
+    if (parsedUndividedSpaces.some((id) => !spaces.has(id))) {
+      return json({ error: "無分區場地未在活動設定中宣告。" }, 422);
+    }
+    const undividedSet = new Set(parsedUndividedSpaces);
+    const rawAreaLabels = deriveRecord?.areaLabels;
+    if (rawAreaLabels !== undefined && (!rawAreaLabels || typeof rawAreaLabels !== "object" || Array.isArray(rawAreaLabels))) {
+      return json({ error: "展區名稱格式無效。" }, 400);
+    }
+    const parsedAreaLabels: Record<string, Record<string, string>> = {};
+    if (rawAreaLabels) {
+      for (const [spaceId, labels] of Object.entries(rawAreaLabels as Record<string, unknown>)) {
+        if (!spaces.has(spaceId)) return json({ error: "展區名稱對應的場地未在活動設定中宣告。" }, 422);
+        if (!labels || typeof labels !== "object" || Array.isArray(labels)) return json({ error: "展區名稱格式無效。" }, 400);
+        const spaceLabels: Record<string, string> = {};
+        for (const [areaId, label] of Object.entries(labels as Record<string, unknown>)) {
+          if (typeof label !== "string") return json({ error: "展區名稱格式無效。" }, 400);
+          const trimmed = label.normalize("NFKC").trim().replace(/\s+/gu, " ");
+          if (trimmed.length > 60) return json({ error: "展區名稱不能超過 60 字。" }, 422);
+          if (trimmed) spaceLabels[areaId] = trimmed;
+        }
+        if (Object.keys(spaceLabels).length > 0) parsedAreaLabels[spaceId] = spaceLabels;
+      }
+    }
+
     const normalized: Array<{
       sourceRow: number; dayId: string; venueSpaceId: string; areaId: string; codes: string[];
       circleName: string; stableKey: string | null; identityGroup: string | null;
@@ -328,8 +366,11 @@ export function createOrganizerContent(dependencies: PortalDependencies, auth: A
       const stableKey = row.stableKey === null ? null : typeof row.stableKey === "string" ? row.stableKey.normalize("NFKC").trim() : undefined;
       const identityGroup = row.identityGroup === null ? null : typeof row.identityGroup === "string" ? row.identityGroup.normalize("NFKC").trim() : undefined;
       const assignment = spaces.get(venueSpaceId);
-      const areaId = assignment?.areaMode === "none" ? "ALL" : submittedAreaId;
-      const areaAllowed = assignment?.areaMode === "none" || assignment?.areaIds.includes(areaId);
+      const spaceUndivided = assignment?.areaMode === "none" || undividedSet.has(venueSpaceId);
+      const areaId = spaceUndivided ? "ALL" : submittedAreaId;
+      const areaAllowed = deriveRecord
+        ? (spaceUndivided ? (assignment?.areaMode === "none" || submittedAreaId === "ALL") : isOrganizerAreaId(areaId))
+        : (assignment?.areaMode === "none" || assignment?.areaIds.includes(areaId));
       if (!Number.isSafeInteger(sourceRow) || (sourceRow as number) < 0 || !days.has(dayId)
         || !assignment || !areaAllowed || codes.length === 0 || codes.some((code) => !code || code.length > 80)
         || !circleName || circleName.length > 200 || stableKey === undefined || identityGroup === undefined
@@ -350,9 +391,17 @@ export function createOrganizerContent(dependencies: PortalDependencies, auth: A
     if (new TextEncoder().encode(JSON.stringify(normalized)).byteLength > 8 * 1024 * 1024) {
       return json({ error: "匯入資料超過 8 MB，請縮短欄位內容或確認匯入範圍是同一場活動。" }, 413);
     }
+    let nextDraftJson: string | undefined;
+    if (deriveRecord) {
+      const nextDraft = withOrganizerImportedAreaIds(draft, normalized, parsedAreaLabels, [...undividedSet]);
+      const serialized = serializeOrganizerEventDraft(nextDraft);
+      if (!serialized) return json({ error: "推導出的場地展區設定無效。" }, 422);
+      if (serialized.json !== candidate.current_draft_json) nextDraftJson = serialized.json;
+    }
     const result = await repository.replaceOrganizerImport({
       candidateId, actorAccountId: access.current.accountId, expectedVersion: expectedVersion as number,
       source: { fileName, worksheet, sha256, sourceDescription, mappingJson }, rows: normalized,
+      ...(nextDraftJson !== undefined ? { draftJson: nextDraftJson } : {}),
       now: config.now(), admin: access.admin,
     });
     if (!result.ok) {

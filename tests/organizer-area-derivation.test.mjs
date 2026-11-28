@@ -168,3 +168,21 @@ test("20,000 stale import rows aggregate by cause and the issue response stays b
   assert.equal(bounded.at(-1).code, "stale_import_more");
   assert.match(bounded.at(-1).message, /19900 項/u);
 });
+
+test("undividedSpaces transitions imported-mode spaces without areas to areaMode none", () => {
+  const original = draft([
+    space("space-a", [], "imported"),
+    space("space-b", [], "imported"),
+  ]);
+  const updated = withOrganizerImportedAreaIds(
+    original,
+    [{ venueSpaceId: "space-a", areaId: "area-1-1" }, { venueSpaceId: "space-b", areaId: "ALL" }],
+    { "space-a": { "area-1-1": "東側" } },
+    ["space-b"],
+  );
+  assert.deepEqual(updated.venue.assignments.map(({ venueSpaceId, areaMode, areaIds }) => ({ venueSpaceId, areaMode, areaIds })), [
+    { venueSpaceId: "space-a", areaMode: "imported", areaIds: ["area-1-1"] },
+    { venueSpaceId: "space-b", areaMode: "none", areaIds: ["ALL"] },
+  ]);
+  assert.deepEqual(parseOrganizerEventDraft(updated), updated);
+});
