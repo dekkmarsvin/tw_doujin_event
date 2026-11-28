@@ -20,7 +20,7 @@ const env = { MAILGUN_API_KEY: "never-mail-this-key", MAILGUN_DOMAIN: "mail.exam
 // Each run reads the current "world": what Mailgun and the public index answer.
 let world;
 const fetch = async url => {
-  if (url.includes("api.mailgun.net")) return world.mail === "ok"
+  if (new URL(url).hostname === "api.mailgun.net") return world.mail === "ok"
     ? Response.json({ domain: { name: "mail.example.test", state: "active" } })
     : new Response("provider-secret-body", { status: world.mail === "unknown" ? 403 : 401 });
   if (world.index === "slow") throw new DOMException("The operation timed out.", "TimeoutError");
