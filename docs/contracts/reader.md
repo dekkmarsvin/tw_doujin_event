@@ -818,7 +818,7 @@ FF47 的舊資料沒有 Organizer 候選及身分分組檔。除原始固定 pin
 
 活動、社團與入口介紹頁的無 JS 內容維持繁中與官方原文；頁面腳本依共用語言優先序翻譯系統標籤、日期及瀏覽器標題，並同步靜態外層與 React 社團內容。明確切換只更新 URL 與瀏覽器偏好；收藏、行程及原始內容不變，分享與站內導覽延續語言。社團名稱、官方分類、作品／題材及自填標籤保持原文；站方固定選項只翻譯呈現 label。canonical／sitemap 維持單一網址，不新增三份活動／社團 SEO 頁面。
 
-隱私告知由同一 build 產生 `/privacy/`、`/privacy/en/`、`/privacy/ja/`，各自無 JS 可讀並互相連結；譯文對應同一份政策，不新增承諾。404 以三語靜態內容提供返回入口。
+隱私告知由同一 build 產生 `/privacy/`、`/privacy/en/`、`/privacy/ja/`，各自無 JS 可讀並互相連結；譯文對應同一份政策，不新增承諾。隱私頁、404、分享失效頁及活動資料暫時無法使用的 503 頁均沿用公開頂欄。未登入可前往登入頁；登入後可從頭像進入有權使用的工作區。隱私頁的登入與工作區連結沿用告知本文的語言。404 以三語靜態內容提供返回入口。
 
 介紹頁不加入地圖離線 precache，導覽仍 network-only；它們不得寫入 Reader 的離線 shell。社團介紹頁腳本自己的資產同樣不進 precache（`scripts/build-service-worker.mjs` 與 `tests/public-artifact.test.mjs` 把關），與 Reader 共用的 chunk 除外。原 query 地圖仍使用既有離線行為。介紹頁 HTML 為 `private, no-store`；sitemap 的公開 HTTP 快取最多 5 分鐘後重新驗證；這不新增輪詢。
 

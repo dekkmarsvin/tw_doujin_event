@@ -10,7 +10,7 @@
  * from that file rather than transcribed into a page, because a second copy is
  * a copy that drifts, and the one that drifts is always the published one.
  *
- * Plain HTML with no script or bundle. The existing HTML middleware adds a
+ * Static notice with an optional signed-in header. The existing HTML middleware adds a
  * per-request CSP nonce (ADR-0074); reading the notice needs no database call.
  *
  * The renderer covers exactly the Markdown the notice uses. It is deliberately
@@ -18,6 +18,7 @@
  * source grows a construct this cannot render, rather than letting a section
  * quietly vanish from the published page.
  */
+import { createServer } from "vite";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,8 +44,6 @@ export const PAGES = {
     updated: /最後更新日期：(\d{4}-\d{2}-\d{2})/,
     title: "隱私權與資料使用告知｜場刊 Map",
     description: "場刊 Map 如何蒐集、使用與保存資料，以及聯絡窗口。",
-    home: "/",
-    back: "← 回到場刊 Map",
     languages: "語言",
   },
   en: {
@@ -54,8 +53,6 @@ export const PAGES = {
     updated: /Last updated: (\d{4}-\d{2}-\d{2})/,
     title: "Privacy and data use notice | 場刊 Map",
     description: "How 場刊 Map collects, uses and keeps data, and who to contact.",
-    home: "/?lang=en",
-    back: "← Back to 場刊 Map",
     languages: "Language",
   },
   ja: {
@@ -65,8 +62,6 @@ export const PAGES = {
     updated: /最終更新日：(\d{4}-\d{2}-\d{2})/,
     title: "プライバシーとデータの利用について｜場刊 Map",
     description: "場刊 Map におけるデータの収集・利用・保存と、お問い合わせ先。",
-    home: "/?lang=ja",
-    back: "← 場刊 Map に戻る",
     languages: "言語",
   },
 };
@@ -204,7 +199,7 @@ function languageLinks(locale) {
 const JAPANESE_TYPE = `
       body { font-family: Geist, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "BIZ UDPGothic", "Yu Gothic UI", Meiryo, "Noto Sans JP", system-ui, sans-serif; line-break: strict; }`;
 
-export function buildPrivacyPage(markdown, locale = "zh-Hant") {
+export function buildPrivacyPage(markdown, locale, { publicHeaderHtml, accountHeaderAssets }) {
   const page = PAGES[locale];
   lastUpdatedFrom(markdown, locale);
   const body = renderMarkdown(markdown).split("\n").map((line) => `      ${line}`).join("\n");
@@ -219,24 +214,25 @@ export function buildPrivacyPage(markdown, locale = "zh-Hant") {
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/fonts/geist.css" />
     <title>${escapeHtml(page.title)}</title>
+    ${accountHeaderAssets}
     <style>
       :root { --ink: #202a35; --muted: #707a82; --line: #dfe3df; --paper: #f8f7f2; --accent: #a4563e; }
       * { box-sizing: border-box; }
       body {
         margin: 0;
-        padding: 32px 18px 72px;
         background: #f1f0ea;
         color: var(--ink);
         font-family: Geist, system-ui, "Noto Sans TC", sans-serif;
         font-size: 15px;
         line-height: 1.85;
       }
+      .notice { padding: 24px 18px 72px; }
       main { max-width: 46rem; margin: 0 auto; padding: 28px 26px 34px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
-      nav { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; max-width: 46rem; margin: 0 auto 14px; font-size: 13px; }
-      nav a, main a { color: var(--accent); }
-      nav ul { display: flex; gap: 14px; margin: 0; padding: 0; list-style: none; }
-      nav li { margin: 0; }
-      nav [aria-current] { color: var(--ink); font-weight: 600; text-decoration: none; }
+      .notice nav { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; max-width: 46rem; margin: 0 auto 14px; font-size: 13px; }
+      .notice nav a, main a { color: var(--accent); }
+      .notice nav ul { display: flex; gap: 14px; margin: 0; padding: 0; list-style: none; }
+      .notice nav li { margin: 0; }
+      .notice nav [aria-current] { color: var(--ink); font-weight: 600; text-decoration: none; }
       h1 { margin: 0 0 4px; font-size: 24px; line-height: 1.4; }
       h2 { margin: 34px 0 10px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 18px; }
       h3 { margin: 22px 0 8px; font-size: 15px; }
@@ -251,17 +247,19 @@ export function buildPrivacyPage(markdown, locale = "zh-Hant") {
       table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
       th, td { padding: 8px 10px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
       th { background: var(--paper); }
-      @media (max-width: 480px) { body { padding: 20px 12px 56px; } main { padding: 20px 16px 26px; } }${locale === "ja" ? JAPANESE_TYPE : ""}
+      @media (max-width: 480px) { .notice { padding: 20px 12px 56px; } main { padding: 20px 16px 26px; } }${locale === "ja" ? JAPANESE_TYPE : ""}
     </style>
   </head>
   <body>
+    ${publicHeaderHtml("/circle", locale)}
+    <div class="notice">
     <nav>
-      <a href="${page.home}">${page.back}</a>
 ${languageLinks(locale)}
     </nav>
     <main>
 ${body}
     </main>
+    </div>
   </body>
 </html>
 `;
@@ -269,11 +267,15 @@ ${body}
 
 const modulePath = fileURLToPath(import.meta.url);
 if (process.argv[1] && resolve(process.argv[1]) === resolve(modulePath)) {
-  for (const [locale, page] of Object.entries(PAGES)) {
-    const markdown = await readFile(resolve(POLICY_DIR, page.source), "utf8");
-    const directory = resolve(root, "dist", ...page.path.split("/").filter(Boolean));
-    await mkdir(directory, { recursive: true });
-    await writeFile(resolve(directory, "index.html"), buildPrivacyPage(markdown, locale), "utf8");
-    console.log(`Generated dist${page.path}index.html from docs/policy/${page.source} (updated ${lastUpdatedFrom(markdown, locale)}).`);
-  }
+  const vite = await createServer({ configFile: false, root, server: { middlewareMode: true }, environments: { ssr: {} }, logLevel: "silent" });
+  try {
+    const header = await vite.environments.ssr.runner.import("/app/public-header.ts");
+    for (const [locale, page] of Object.entries(PAGES)) {
+      const markdown = await readFile(resolve(POLICY_DIR, page.source), "utf8");
+      const directory = resolve(root, "dist", ...page.path.split("/").filter(Boolean));
+      await mkdir(directory, { recursive: true });
+      await writeFile(resolve(directory, "index.html"), buildPrivacyPage(markdown, locale, header), "utf8");
+      console.log(`Generated dist${page.path}index.html from docs/policy/${page.source} (updated ${lastUpdatedFrom(markdown, locale)}).`);
+    }
+  } finally { await vite.close(); }
 }

@@ -67,7 +67,9 @@ test("an expired share no longer opens, and is never cached past its expiry", as
 
   await expireAt(created.shareId, 0);
   assert.equal((await api.call("GET", `/api/shares/${created.shareId}`)).status, 410);
-  assert.equal((await page(created.shareId)).status, 410);
+  const expired = await page(created.shareId);
+  assert.equal(expired.status, 410);
+  assert.ok((await expired.text()).includes('class="site-header-login" href="/circle"'));
   assert.equal((await api.call("GET", `/api/shares/${"A".repeat(22)}`)).status, 404);
 });
 

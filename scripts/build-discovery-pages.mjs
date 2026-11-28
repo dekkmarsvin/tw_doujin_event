@@ -19,6 +19,9 @@ try {
   const environment = vite.environments.ssr;
   if (!isRunnableDevEnvironment(environment)) throw new Error("Vite discovery environment is not runnable.");
   const { metadataHtml, PORTAL_DEMO_FILES, portalIntroPage, websiteSchemaHtml } = await environment.runner.import("/app/static-discovery.ts");
+  const { accountHeaderAssets, publicHeaderHtml } = await environment.runner.import("/app/public-header.ts");
+  const notFound = await readFile(resolve(root, "public", "404.html"), "utf8");
+  await writeFile(resolve(dist, "404.html"), notFound.replace("</head>", accountHeaderAssets + "</head>").replace("<!-- public-header -->", publicHeaderHtml("/circle")));
   const { pageMetadata } = await environment.runner.import("/app/seo.ts");
   // Vite built the circle page's script from a template; its tags are all the
   // template is for. Every circle page carries them, and the template itself is

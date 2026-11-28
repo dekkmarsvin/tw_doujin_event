@@ -42,6 +42,38 @@ const authored = [{
 
 const journey = await start("circle-page");
 try {
+  for (const [path, locale, status] of [
+    ["/privacy/", "zh-Hant", 200], ["/privacy/en/", "en", 200], ["/privacy/ja/", "ja", 200],
+    ["/events/unknown/", "zh-Hant", 404], ["/s/no-such-share?lang=en", "en", 404],
+  ]) {
+    const labels = {
+      "zh-Hant": ["登入", "帳號", "社團資料"], en: ["Sign in", "Account", "Circle data"], ja: ["ログイン", "アカウント", "サークル情報"],
+    }[locale];
+    const url = new URL(path, base).href;
+    const visit = await journey.page({ url, locale: "en-US", routes: async target => {
+      await target.route("**/api/auth/session", route => route.fulfill({ json: { email: "reader@example.test" } }));
+    } });
+    const response = await visit.reload();
+    assert.equal(response.status(), status);
+    const header = visit.getByRole("banner");
+    const href = locale === "zh-Hant" ? "/circle" : "/circle?lang=" + locale;
+    assert.equal(await header.getByRole("link", { name: labels[0], exact: true }).getAttribute("href"), href);
+    if (path === "/privacy/en/") await journey.capture(visit, "privacy-guest");
+    await visit.evaluate(() => {
+      localStorage.setItem("tw-doujin:signed-in", "1");
+      window.dispatchEvent(new StorageEvent("storage", { key: "tw-doujin:signed-in", storageArea: localStorage }));
+    });
+    const avatar = header.getByRole("button", { name: labels[1] });
+    assert.equal(await avatar.innerText(), "R");
+    await avatar.click();
+    const menu = header.getByRole("navigation", { name: labels[1] });
+    assert.deepEqual(await menu.getByRole("link").allTextContents(), [labels[2]]);
+    assert.equal(await menu.getByRole("link").getAttribute("href"), href);
+    if (path === "/privacy/en/") await journey.capture(visit, "privacy-account");
+    await menu.getByRole("link").click();
+    await visit.waitForURL(new URL(href, base).href);
+    await visit.close();
+  }
   for (const [kind, url, circleHref, isAdmin] of [
     ["portal", new URL("/portal/", base).href, "/circle", true],
     ["event", new URL("/events/sample/", base).href, "/circle?event=sample", true],
