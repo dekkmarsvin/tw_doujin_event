@@ -487,6 +487,6 @@ selection 保存語意，不保存定位：
 
 所有 path 以 `references/` 開頭。selection 不含版本或 hash——那些由活動資料 bucket 的版本承擔。
 
-當單場館多場地活動送審時，若 `organizer_reference_records` 已存在對應且涵蓋該活動全部已指派 `venueSpaceId` 的 `venue-overview/1` 記錄，`resolveOrganizerReferences()` 自動將其帶入 `venues[0].overview` 並納入 `reference-records.json` 與 R2 公開檔案；已發布活動的修正候選（`AMEND`）補上或沿用有效 `venue-overview/1` 不視為基準變更。單筆 `venue-overview/1` 驗證同時在共用驗證器強制 `buildings[].id` 與非空 `buildings[].venueSpaceId` 唯一、座標位於 `viewBox` 內且不含任意 SVG／HTML／外部網址。Phase 1 不提供 `/admin` 或 `/organizer` 園區總覽圖形編輯介面，`/api/admin/references` 明確拒絕針對 `venue-overview` 的 `edit`／`delete` 請求。
+當單場館活動（單一場地或多場地皆可）送審時，若 `organizer_reference_records` 已存在對應且涵蓋該活動全部已指派 `venueSpaceId` 的 `venue-overview/1` 記錄，`resolveOrganizerReferences()` 自動將其帶入 `venues[0].overview` 並納入 `reference-records.json` 與 R2 公開檔案；已發布活動的修正候選（`AMEND`）補上或沿用有效 `venue-overview/1` 不視為基準變更。單筆 `venue-overview/1` 驗證同時在共用驗證器強制 `buildings[].id` 與非空 `buildings[].venueSpaceId` 唯一、座標位於 `viewBox` 內且不含任意 SVG／HTML／外部網址。Phase 1 不提供 `/admin` 或 `/organizer` 園區總覽圖形編輯介面，`/api/admin/references` 明確拒絕針對 `venue-overview` 的 `edit`／`delete` 請求。
 
 分類目錄 selection 同時保存 `id`、`organizerId`、`revision` 與 path，避免不同版本被誤認為同一份資料；organizers 與 venues 使用陣列，因此可完整表示 lead／co-organizer／partner 與多場館 assignment。

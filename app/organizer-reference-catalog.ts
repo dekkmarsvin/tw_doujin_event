@@ -183,7 +183,7 @@ export async function resolveOrganizerReferences(draft: OrganizerEventDraft, rec
   const category = draft.references.categoryCatalog;
   const venues = [...new Set(draft.venue.assignments.map((item) => item.venueId))].sort();
   const singleOverview = (() => {
-    if (venues.length !== 1 || draft.venue.assignments.length <= 1) return null;
+    if (venues.length !== 1) return null;
     const overviewPath = `references/venue-overviews/${venues[0]}.json`;
     const row = records.find((record) => record.kind === "venue-overview" && record.path === overviewPath);
     if (!row) return null;

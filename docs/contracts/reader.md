@@ -340,7 +340,7 @@ type AccessibleEventMapRendererProps = {
 
 ### 單一場館園區總覽
 
-當活動具備場地切換（`venueAssignments.length > 1`）、全部場地屬於同一個 `venueId`，且該場館在 `reference-records.json` 提供有效的 `venue-overview/1` 並涵蓋全部已分配 `venueSpaceId` 時，啟用單一場館園區總覽（跨場館活動與單一場地活動不啟用）：
+當活動屬於單一場館（`venueAssignments` 全部屬於同一個 `venueId`，單一場地或多場地活動皆可），且該場館在 `reference-records.json` 提供有效的 `venue-overview/1` 並涵蓋全部已分配 `venueSpaceId` 時，啟用單一場館園區總覽（跨場館活動不啟用）：
 
 - **首次開啟與查看全場維持停在室內配置圖 fit。** 只有在已達室內最小倍率（`zoom <= minimum + 0.006`）時，由使用者再執行新一段縮小操作（滾輪非手機單指平移模式累積超過 `120` px、停頓間隔以 `280ms` 切分新一段手勢；新一段雙指捏合至 `<= minimum * 0.86`；或按下控制列已呈現園區總覽圖示的縮小按鈕），才切換為園區總覽。從較高倍率連續滾輪／捏合的同段慣性停在 `fit`，不直接穿越進總覽。
 - **資料與繪圖邊界**：總覽由結構化 `venue-overview/1` 記錄交給 `VenueOverviewRenderer` 動態繪製 2.5D SVG（含矩形／多邊形展館、橢圓穹頂、`floor` 樓層按鈕卡、高架道路與多色捷運路線／站體標誌），不接受任意 SVG 字串或外部網址。只有出現在活動 `venueAssignments` 的 `venueSpaceId` 成為可聚焦、可點擊的場地按鈕並顯示 `venueSpaceName`；其餘未指派建築維持非互動裝飾背景。目前場地以高對比外框與文字標籤標示（不只靠顏色）。
@@ -349,7 +349,7 @@ type AccessibleEventMapRendererProps = {
 
 ### 目前不做
 
-- **minimap、跨場館總覽與總覽跨館統計。** 單一場館的縮放總覽只提供園區相對方位與場地切換；跨多個 `venueId` 的複合園區總覽、建物上顯示跨場地收藏／行程計數與主地圖 minimap 目前不做。各場地的社團、收藏與待前往數只出現在場地切換的選項上（見[使用者流程](#使用者流程)）。
+- **minimap、跨場館總覽與總覽跨館統計。** 單一場館的縮放總覽只提供園區／周邊方位導覽與場地切換（單一場地活動點擊場館或退出皆返回室內圖）；跨多個 `venueId` 的複合園區總覽、建物上顯示跨場地收藏／行程計數與主地圖 minimap 目前不做。各場地的社團、收藏與待前往數只出現在場地切換的選項上（見[使用者流程](#使用者流程)）。
 - 對非一般攤位文字做 OCR。
 - 將原始配置圖作為一般使用者地圖底圖。
 - 圖磚式地圖（Leaflet 等）。見 [ADR-0001](../adr/0001-adopt-webcatalog-patterns-selectively.md)。

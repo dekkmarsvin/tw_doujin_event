@@ -58,10 +58,9 @@ function referencesMatchBaseline(baseline: OrganizerReferenceSnapshot, current: 
   if (baseline.selection.venues.length !== current.selection.venues.length) return false;
   const addedOverviewPaths = new Set<string>();
   const stripIndices = new Set<number>();
-  const singleVenueMultiSpace = baseline.selection.venues.length === 1
-    && current.selection.venues.length === 1
-    && new Set(current.selection.venues[0].spaces.map((space) => space.id)).size > 1;
-  if (singleVenueMultiSpace) {
+  const singleVenue = baseline.selection.venues.length === 1
+    && current.selection.venues.length === 1;
+  if (singleVenue) {
     const beforeVenue = baseline.selection.venues[0];
     const afterVenue = current.selection.venues[0];
     if (!beforeVenue.overview && afterVenue.overview) {
