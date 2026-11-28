@@ -46,6 +46,8 @@ export type OverviewStation = {
   y: number;
   secondaryCode?: string;
   secondaryName?: string;
+  /** Line colour of the secondary code; green (light rail) when absent. */
+  secondaryColor?: OverviewRailColor;
 };
 
 export type OverviewRail = {
