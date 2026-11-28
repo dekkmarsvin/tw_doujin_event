@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test, { after } from "node:test";
 import { createServer, isRunnableDevEnvironment } from "vite";
 import { amendmentFixture, hash } from "./support/organizer-amendment-fixture.mjs";
-import { parseVenueOverviewRecord } from "../app/venue-overview.mjs";
+import { buildPolygon25dPolygons, parseVenueOverviewRecord } from "../app/venue-overview.mjs";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const environment = vite.environments.ssr;
@@ -23,18 +23,24 @@ after(() => vite.close());
 const multiEvent = JSON.parse(await readFile(new URL("../fixtures/events/sample-multi/event.json", import.meta.url), "utf8"));
 const multiRefs = JSON.parse(await readFile(new URL("../fixtures/events/sample-multi/reference-records.json", import.meta.url), "utf8"));
 
-test("single-venue overview eligibility requires multi-space, single venueId, and full assignment coverage", () => {
+test("single-venue overview eligibility requires single venueId and full assignment coverage", () => {
   const parsed = parseEventDefinition(multiEvent, multiRefs);
   assert.equal(parsed.venueOverview?.venueId, "sample-campus");
 
-  // Single-space event does not enable venueOverview even if overview record is omitted or would only match 1 space.
+  // Single-space single-venue event also enables venueOverview when overview covers the assigned space.
   const singleSpaceEvent = {
     ...multiEvent,
     areas: [multiEvent.areas[0]],
     venueAssignments: [multiEvent.venueAssignments[0]],
   };
   const singleParsed = parseEventDefinition(singleSpaceEvent, multiRefs);
-  assert.equal(singleParsed.venueOverview, undefined);
+  assert.equal(singleParsed.venueOverview?.venueId, "sample-campus");
+
+  // Even a single-space event fails closed when the attached overview does not cover its assigned space.
+  const uncoveredRefs = structuredClone(multiRefs);
+  const uncoveredOverview = uncoveredRefs.find((r) => r.schema === "venue-overview/1");
+  uncoveredOverview.buildings = uncoveredOverview.buildings.filter((b) => b.venueSpaceId !== "hall-a");
+  assert.throws(() => parseEventDefinition(singleSpaceEvent, uncoveredRefs), /does not cover every assigned venue space/);
 
   // Cross-venue event does not enable single-venue overview even when one venue has 2 spaces.
   const crossEvent = {
@@ -113,9 +119,36 @@ test("single-venue overview eligibility requires multi-space, single venueId, an
   assert.equal(parseVenueOverviewRecord(edgeBridgeCircle, "edge-bridge-circle").venueId, "sample-campus");
 });
 
-test("resolveOrganizerReferences attaches venue-overview for single-venue multi-space drafts and amendment baseline accepts newly attached overview", async () => {
+test("resolveOrganizerReferences attaches venue-overview for single-venue drafts (single-space and multi-space) and amendment baseline accepts newly attached overview", async () => {
   const fixture = await amendmentFixture(runner);
   const venueId = "taipei-expo-park-zhengyan-hall";
+  const singleOverview = {
+    schema: "venue-overview/1",
+    venueId,
+    viewBox: { width: 800, height: 500 },
+    buildings: [
+      { id: "main", venueSpaceId: "zhengyan-exhibition-area", label: "全館", rect: { x: 100, y: 150, width: 120, height: 60 }, orientation: "horizontal", roof: "gable", kind: "hall" },
+    ],
+    sources: [{ id: "official-source", kind: "venue-official", url: "https://venue.example.invalid/campus", retrievedAt: "2026-09-01T00:00:00.000Z" }],
+    provenance: { "/viewBox": ["official-source"], "/buildings": ["official-source"] },
+  };
+  const singleOverviewRecord = {
+    path: `references/venue-overviews/${venueId}.json`,
+    kind: "venue-overview",
+    id: venueId,
+    organizerId: null,
+    revision: null,
+    displayName: "花博公園爭艷館 總覽",
+    publicReferenceJson: `${JSON.stringify(singleOverview, null, 2)}\n`,
+    sourceCapturedAt: 1,
+  };
+  const singleWithOverview = await resolveOrganizerReferences(fixture.baseline.draft, [...fixture.referenceRecords, singleOverviewRecord]);
+  assert.equal(singleWithOverview.issues.length, 0);
+  assert.deepEqual(singleWithOverview.snapshot.selection.venues[0].overview, {
+    id: venueId,
+    path: `references/venue-overviews/${venueId}.json`,
+  });
+
   const secondSpaceId = "zhengyan-south";
   const secondSpace = {
     schema: "venue-space/1",
@@ -230,7 +263,7 @@ test("resolveOrganizerReferences attaches venue-overview for single-venue multi-
   assert.ok(artifacts.files.some((file) => file.path === "events/event-alpha/reference-selection.json"));
 });
 
-test("AMEND rejects newly attached venue-overview for single-space and cross-venue baselines", async () => {
+test("AMEND accepts newly attached venue-overview for single-space baseline and rejects cross-venue baseline", async () => {
   const fixture = await amendmentFixture(runner);
   const venueId = "taipei-expo-park-zhengyan-hall";
   const singleSpaceOverview = {
@@ -238,7 +271,7 @@ test("AMEND rejects newly attached venue-overview for single-space and cross-ven
     venueId,
     viewBox: { width: 800, height: 500 },
     buildings: [
-      { id: "main", venueSpaceId: "zhengyan-exhibition-area", label: "全館", rect: { x: 100, y: 150, width: 120, height: 60 }, orientation: "horizontal", roof: "gable", kind: "warehouse" },
+      { id: "main", venueSpaceId: "zhengyan-exhibition-area", label: "全館", rect: { x: 100, y: 150, width: 120, height: 60 }, orientation: "horizontal", roof: "gable", kind: "hall" },
     ],
     sources: [{ id: "official-source", kind: "venue-official", url: "https://venue.example.invalid/campus", retrievedAt: "2026-09-01T00:00:00.000Z" }],
     provenance: { "/viewBox": ["official-source"], "/buildings": ["official-source"] },
@@ -256,14 +289,6 @@ test("AMEND rejects newly attached venue-overview for single-space and cross-ven
     ].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0),
   };
   const singleBaselineJson = JSON.stringify(fixture.baseline);
-  const singleLayout = {
-    schema: "map-contribution-draft/1",
-    layout: {
-      version: 2, template: "SAMPLE", width: 200, height: 100, floor: { x: 0, y: 0, width: 200, height: 100 },
-      rows: [{ label: "A", orientation: "horizontal", confidence: 1, slots: [{ code: "A01", rect: { x: 20, y: 35, width: 50, height: 30 } }, { code: "B01", rect: { x: 90, y: 35, width: 50, height: 30 } }] }],
-      pillars: [], accessPoints: [], landmarks: [],
-    },
-  };
   const singleAmendSnapshotJson = JSON.stringify({
     schema: "organizer-submission-snapshot/4",
     operation: "AMEND",
@@ -274,19 +299,16 @@ test("AMEND rejects newly attached venue-overview for single-space and cross-ven
     contentUpdatedAt: "2026-09-16T00:00:00.000Z",
     references: singleAmendedRefs,
     amendment: { baselineJson: singleBaselineJson, baselineSha256: hash(singleBaselineJson), changes: [] },
-    import: {
-      source: { sourceDescription: "更正" },
-      rows: [
-        { sourceRow: 1, dayId: "1", venueSpaceId: "zhengyan-exhibition-area", areaId: "A", codes: ["A01"], circleName: "甲社", stableKey: null, identityGroup: null },
-        { sourceRow: 2, dayId: "1", venueSpaceId: "zhengyan-exhibition-area", areaId: "B", codes: ["B01"], circleName: "乙社", stableKey: null, identityGroup: null },
-      ],
-    },
-    maps: [{ id: "m1", periodKey: "1", venueSpaceId: "zhengyan-exhibition-area", mapRevision: 1, content: singleLayout }],
+    import: fixture.snapshot.import,
+    maps: fixture.baseline.maps,
   });
-  await assert.rejects(
-    buildApprovedPublicationArtifacts({ snapshotJson: singleAmendSnapshotJson, approvalHash: hash(singleAmendSnapshotJson) }),
-    (error) => error?.code === "snapshot_mismatch",
-  );
+  const singleArtifacts = await buildApprovedPublicationArtifacts({
+    snapshotJson: singleAmendSnapshotJson,
+    approvalHash: hash(singleAmendSnapshotJson),
+  });
+  const selectionFile = singleArtifacts.files.find((file) => file.path === "events/event-alpha/reference-selection.json");
+  assert.ok(selectionFile);
+  assert.deepEqual(JSON.parse(selectionFile.text).venues[0].overview, { id: venueId, path: singleOverviewPath });
 
   // Cross-venue baseline: adding an overview to venues[0] (even with 2 spaces) must also fail snapshot_mismatch.
   const secondSpaceId = "zhengyan-south";
@@ -446,4 +468,98 @@ test("event-map messages define complete zh-Hant, en, and ja translations for ov
   assert.deepEqual(missingMessageKeys(EVENT_MAP_MESSAGES, "zh-Hant"), []);
   assert.deepEqual(missingMessageKeys(EVENT_MAP_MESSAGES, "en"), []);
   assert.deepEqual(missingMessageKeys(EVENT_MAP_MESSAGES, "ja"), []);
+});
+
+test("venue-overview/1 supports rich modern halls, polygon footprints, domes, floor cards, elevated roads, and colored rail", () => {
+  const rich = {
+    schema: "venue-overview/1",
+    venueId: "sample-modern-venue",
+    viewBox: { width: 1200, height: 680 },
+    layers: {
+      areas: [
+        { id: "city-block", kind: "block", rect: { x: 40, y: 40, width: 180, height: 120 } },
+        { id: "track-oval", kind: "track", ellipse: { cx: 420, cy: 480, rx: 80, ry: 78 } },
+        { id: "edge-ellipse", kind: "park", ellipse: { cx: 100, cy: 580, rx: 100, ry: 100 } },
+        { id: "courtyard", kind: "courtyard", rect: { x: 540, y: 290, width: 80, height: 140 } },
+      ],
+      roads: [
+        { id: "viaduct", kind: "elevated", width: 22, points: [{ x: 0, y: 220 }, { x: 1200, y: 220 }], label: "建國高架道路", labelAt: { x: 600, y: 220 } },
+        { id: "lane", kind: "local", width: 8, points: [{ x: 40, y: 300 }, { x: 260, y: 300 }] },
+        { id: "park-walk", kind: "path", width: 7, points: [{ x: 500, y: 80 }, { x: 680, y: 140 }] },
+      ],
+      rail: [
+        {
+          id: "red-line",
+          color: "red",
+          points: [{ x: 320, y: 0 }, { x: 320, y: 680 }],
+          stations: [{ id: "r14", code: "R14", name: "捷運圓山站", color: "red", x: 260, y: 180 }],
+        },
+        {
+          id: "brown-line",
+          color: "brown",
+          points: [{ x: 580, y: 0 }, { x: 580, y: 420 }],
+          stations: [],
+        },
+      ],
+      landmarks: [
+        { id: "hw5", kind: "shield", x: 880, y: 470, label: "5" },
+        { id: "route109", kind: "shield", x: 530, y: 630, label: "109", subLabel: "city" },
+        { id: "ex1", kind: "exit", x: 600, y: 410, label: "1" },
+        { id: "bus-w", kind: "bus", x: 346, y: 376, label: "公車站牌區", subLabel: "vertical" },
+        { id: "park-p", kind: "parking", x: 420, y: 470, label: "停車場" },
+      ],
+    },
+    buildings: [
+      {
+        id: "hall1-shell",
+        label: "南港展覽館 1 館",
+        kind: "hall",
+        roof: "flat",
+        orientation: "horizontal",
+        rect: { x: 604, y: 190, width: 330, height: 198 },
+        points: [{ x: 604, y: 190 }, { x: 934, y: 190 }, { x: 846, y: 388 }, { x: 604, y: 388 }],
+      },
+      {
+        id: "hall1-4f",
+        venueSpaceId: "hall-1-4f",
+        label: "4F 展場",
+        kind: "hall",
+        roof: "floor",
+        orientation: "horizontal",
+        rect: { x: 646, y: 238, width: 184, height: 46 },
+      },
+      {
+        id: "dome-1f",
+        venueSpaceId: "dome-1f",
+        label: "巨蛋主館",
+        kind: "hall",
+        roof: "dome",
+        orientation: "horizontal",
+        rect: { x: 390, y: 260, width: 170, height: 96 },
+      },
+    ],
+    sources: [{ id: "official", kind: "venue-official", url: "https://venue.example.invalid/modern", retrievedAt: "2026-11-28T00:00:00.000Z" }],
+    provenance: { "/viewBox": ["official"], "/buildings": ["official"] },
+  };
+  const parsed = parseVenueOverviewRecord(rich, "rich");
+  assert.equal(parsed.buildings.length, 3);
+  const poly25d = buildPolygon25dPolygons(parsed.buildings[0].points, parsed.buildings[0].kind);
+  assert.equal(poly25d.walls.length, 4);
+  assert.ok(poly25d.roof.length > 0 && poly25d.shadow.length > 0);
+
+  const badEllipse = structuredClone(rich);
+  badEllipse.layers.areas[1].ellipse = { cx: 20, cy: 480, rx: 80, ry: 78 };
+  assert.throws(() => parseVenueOverviewRecord(badEllipse, "bad-ellipse"), /within viewBox/);
+
+  const badPoly = structuredClone(rich);
+  badPoly.buildings[0].points[1] = { x: 1250, y: 190 };
+  assert.throws(() => parseVenueOverviewRecord(badPoly, "bad-poly"), /finite number/);
+
+  const badRoadKind = structuredClone(rich);
+  badRoadKind.layers.roads[0].kind = "freeway";
+  assert.throws(() => parseVenueOverviewRecord(badRoadKind, "bad-road"), /kind is invalid/);
+
+  const badRailColor = structuredClone(rich);
+  badRailColor.layers.rail[0].color = "purple";
+  assert.throws(() => parseVenueOverviewRecord(badRailColor, "bad-rail"), /color is invalid/);
 });

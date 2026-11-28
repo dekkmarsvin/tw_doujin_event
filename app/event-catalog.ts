@@ -51,7 +51,7 @@ export type EventDefinition<TDay extends string | number = string | number, TAre
   officialData: OfficialDataDefinition;
   /** 活動圖片 (#396): already public when this definition is. Absent when none. */
   image?: { url: string; width: number; height: number };
-  /** 單一場館園區總覽 (#578): 僅在多場地且全屬同一場館並涵蓋全部分配場地時存在。 */
+  /** 單一場館園區總覽 (#578, #592): 單一場館活動（單一場地或多場地皆可）且涵蓋全部分配場地時存在。 */
   venueOverview?: VenueOverviewRecord;
 };
 
@@ -271,7 +271,7 @@ export function parseEventDefinition(value: unknown, references: unknown): Event
     }
     overviews.set(overview.venueId, overview);
   }
-  const singleVenueId = venueAssignments.length > 1 && assignedByVenue.size === 1 ? venueAssignments[0].venueId : null;
+  const singleVenueId = assignedByVenue.size === 1 ? venueAssignments[0].venueId : null;
   const venueOverview = singleVenueId ? overviews.get(singleVenueId) : undefined;
 
   return {
