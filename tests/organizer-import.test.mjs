@@ -575,6 +575,21 @@ test("listImportColumnValues lists every source value, pending choices first, wi
   assert.equal(prepared.rows[1].venueSpaceId, "space-bike");
 });
 
+test("suggestOrganizerImportValueTarget suggests the one space whose name starts with the source value", () => {
+  const spaces = [
+    { id: "p3", name: "P3倉庫" }, { id: "p30", name: "P30倉庫" }, { id: "b3", name: "B3倉庫" },
+    { id: "b4", name: "B4倉庫" }, { id: "bike", name: "自行車倉庫" }, { id: "1f", name: "1F 展場" },
+  ];
+  const suggest = (value) => imports.suggestOrganizerImportValueTarget(value, spaces);
+  assert.equal(suggest("P3"), "p3"); // not P30倉庫: the prefix has to end a token
+  assert.equal(suggest("ｐ３"), "p3");
+  assert.equal(suggest("自行車"), "bike");
+  assert.equal(suggest("1F"), "1f");
+  assert.equal(suggest("B"), null); // B3倉庫 and B4倉庫 both start with it
+  assert.equal(suggest("C5"), null);
+  assert.equal(suggest(" "), null);
+});
+
 test("previewOrganizerBoothSplits surfaces single vs delimited vs fixed-width booth counts", () => {
   const rows = [
     { sourceRow: 1, cells: ["攤位", "社團"] },

@@ -123,6 +123,21 @@ export function listImportColumnValues(input: {
       || b.count - a.count || a.value.localeCompare(b.value, "zh-Hant"));
 }
 
+/** The one option whose name starts with `value`, as 「P3」 starts 「P3倉庫」.
+ * Width, case and spaces are ignored. The prefix must end a token, so 「P3」
+ * never suggests 「P30倉庫」, and two candidates suggest nothing: a guess
+ * between them is the organizer's to make. */
+export function suggestOrganizerImportValueTarget(value: string, options: ReadonlyArray<{ id: string; name: string }>): string | null {
+  const key = (text: string) => compact(text).replace(/ /gu, "").toLocaleLowerCase("zh-Hant");
+  const wanted = key(value);
+  if (!wanted) return null;
+  const matches = options.filter(({ name }) => {
+    const candidate = key(name);
+    return candidate.startsWith(wanted) && !/^[a-z0-9]/u.test(candidate.slice(wanted.length));
+  });
+  return matches.length === 1 ? matches[0].id : null;
+}
+
 export type OrganizerBoothSplitSample = {
   sourceRow: number;
   circleName: string;
