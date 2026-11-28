@@ -498,7 +498,7 @@ test("venue-overview/1 supports rich modern halls, polygon footprints, domes, fl
           id: "brown-line",
           color: "brown",
           points: [{ x: 580, y: 0 }, { x: 580, y: 420 }],
-          stations: [],
+          stations: [{ id: "tainex", code: "BL23", name: "南港展覽館站", color: "blue", secondaryCode: "BR24", secondaryName: "南港展覽館站", secondaryColor: "brown", x: 600, y: 430 }],
         },
       ],
       landmarks: [
@@ -554,6 +554,10 @@ test("venue-overview/1 supports rich modern halls, polygon footprints, domes, fl
   const badPoly = structuredClone(rich);
   badPoly.buildings[0].points[1] = { x: 1250, y: 190 };
   assert.throws(() => parseVenueOverviewRecord(badPoly, "bad-poly"), /finite number/);
+
+  const badTransfer = structuredClone(rich);
+  badTransfer.layers.rail[1].stations[0].secondaryColor = "purple";
+  assert.throws(() => parseVenueOverviewRecord(badTransfer, "bad-transfer"), /secondaryColor is invalid/);
 
   const badRoadKind = structuredClone(rich);
   badRoadKind.layers.roads[0].kind = "freeway";

@@ -694,26 +694,32 @@ export default function VenueOverviewRenderer({
         {layers?.rail?.flatMap((rail) =>
           rail.stations.map((station) => {
             const pillColor = RAIL_COLORS[station.color];
+            // Code badges grow with the code so four-character codes (BL23) are not clipped.
             if (station.secondaryCode && station.secondaryName) {
+              const badgeWidth = Math.max(12, Math.max(station.code.length, station.secondaryCode.length) * 4.8 + 5);
+              const nameX = 8 + badgeWidth + 5;
+              const cardWidth = Math.max(132, nameX + Math.max(station.name.length, station.secondaryName.length) * 10.5 + 10);
               return (
                 <g key={station.id} transform={`translate(${station.x}, ${station.y})`}>
-                  <rect x={0} y={0} width={132} height={40} rx={8} fill="#FFFFFF" stroke="#CBD5E1" strokeWidth={1.2} />
-                  <circle cx={14} cy={12} r={6} fill={pillColor} />
-                  <text x={14} y={15} textAnchor="middle" fill="#FFFFFF" fontSize={7.5} fontWeight={700}>{station.code}</text>
-                  <text x={24} y={15} fontSize={10.5} fontWeight={700} fill="#1E293B">{station.name}</text>
-                  <circle cx={14} cy={28} r={6} fill="#34A853" />
-                  <text x={14} y={31} textAnchor="middle" fill="#FFFFFF" fontSize={7} fontWeight={700}>{station.secondaryCode}</text>
-                  <text x={24} y={31} fontSize={10.5} fontWeight={700} fill="#1E293B">{station.secondaryName}</text>
+                  <rect x={0} y={0} width={cardWidth} height={40} rx={8} fill="#FFFFFF" stroke="#CBD5E1" strokeWidth={1.2} />
+                  <rect x={8} y={6} width={badgeWidth} height={12} rx={6} fill={pillColor} />
+                  <text x={8 + badgeWidth / 2} y={15} textAnchor="middle" fill="#FFFFFF" fontSize={7.5} fontWeight={700}>{station.code}</text>
+                  <text x={nameX} y={15} fontSize={10.5} fontWeight={700} fill="#1E293B">{station.name}</text>
+                  <rect x={8} y={22} width={badgeWidth} height={12} rx={6} fill={RAIL_COLORS[station.secondaryColor ?? "green"]} />
+                  <text x={8 + badgeWidth / 2} y={31} textAnchor="middle" fill="#FFFFFF" fontSize={7.5} fontWeight={700}>{station.secondaryCode}</text>
+                  <text x={nameX} y={31} fontSize={10.5} fontWeight={700} fill="#1E293B">{station.secondaryName}</text>
                 </g>
               );
             }
-            const pillWidth = Math.max(96, 36 + station.name.length * 12);
+            const badgeWidth = Math.max(16, station.code.length * 5.4 + 6);
+            const nameX = 5 + badgeWidth + 7;
+            const pillWidth = Math.max(96, nameX + station.name.length * 12 + 10);
             return (
               <g key={station.id} transform={`translate(${station.x}, ${station.y})`}>
                 <rect x={0} y={0} width={pillWidth} height={26} rx={13} fill="#FFFFFF" stroke={pillColor} strokeWidth={1.5} />
-                <circle cx={14} cy={13} r={8} fill={pillColor} />
-                <text x={14} y={16.5} textAnchor="middle" fill="#FFFFFF" fontSize={8.5} fontWeight={700}>{station.code}</text>
-                <text x={26} y={17} fontSize={10.5} fontWeight={700} fill="#1E293B">{station.name}</text>
+                <rect x={5} y={5} width={badgeWidth} height={16} rx={8} fill={pillColor} />
+                <text x={5 + badgeWidth / 2} y={16.5} textAnchor="middle" fill="#FFFFFF" fontSize={8.5} fontWeight={700}>{station.code}</text>
+                <text x={nameX} y={17} fontSize={10.5} fontWeight={700} fill="#1E293B">{station.name}</text>
               </g>
             );
           }),

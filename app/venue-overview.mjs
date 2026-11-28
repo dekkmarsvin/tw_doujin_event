@@ -168,7 +168,7 @@ function validateLayers(value, label, viewBox) {
         requireKeys(
           station,
           ["id", "code", "name", "color", "x", "y"],
-          ["id", "code", "name", "color", "x", "y", "secondaryCode", "secondaryName"],
+          ["id", "code", "name", "color", "x", "y", "secondaryCode", "secondaryName", "secondaryColor"],
           `${label}.rail[${index}].stations[${stationIndex}]`,
         );
         requireText(station.id, `${label}.rail[${index}].stations[${stationIndex}].id`, 64);
@@ -179,6 +179,9 @@ function validateLayers(value, label, viewBox) {
         requireFinite(station.y, `${label}.rail[${index}].stations[${stationIndex}].y`, 0, viewBox.height);
         if (station.secondaryCode !== undefined) requireText(station.secondaryCode, `${label}.rail[${index}].stations[${stationIndex}].secondaryCode`, 12);
         if (station.secondaryName !== undefined) requireText(station.secondaryName, `${label}.rail[${index}].stations[${stationIndex}].secondaryName`, 40);
+        if (station.secondaryColor !== undefined && !STATION_COLORS.has(station.secondaryColor)) {
+          fail(`${label}.rail[${index}].stations[${stationIndex}].secondaryColor is invalid.`);
+        }
       }
     }
   }
