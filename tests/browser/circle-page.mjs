@@ -43,6 +43,7 @@ const authored = [{
 const journey = await start("circle-page");
 try {
   for (const [kind, url, circleHref, isAdmin] of [
+    ["portal", new URL("/portal/", base).href, "/circle", true],
     ["event", new URL("/events/sample/", base).href, "/circle?event=sample", true],
     ["circle", pageOf(TWO_DAYS), "/circle?event=sample&circle=" + TWO_DAYS, false],
   ]) {
@@ -64,16 +65,18 @@ try {
     await header.getByRole("combobox").selectOption("en");
     await header.getByRole("button", { name: "Account" }).click();
     const circle = header.getByRole("link", { name: "Circle data", exact: true });
-    assert.equal(await circle.getAttribute("href"), circleHref + "&lang=en");
+    const destination = new URL(circleHref, base);
+    destination.searchParams.set("lang", "en");
+    assert.equal(await circle.getAttribute("href"), destination.pathname + destination.search);
     await visit.evaluate(() => {
       localStorage.removeItem("tw-doujin:signed-in");
       window.dispatchEvent(new StorageEvent("storage", { key: "tw-doujin:signed-in", storageArea: localStorage }));
     });
     const login = header.getByRole("link", { name: "Sign in", exact: true });
     await login.waitFor();
-    assert.equal(await login.getAttribute("href"), circleHref + "&lang=en");
+    assert.equal(await login.getAttribute("href"), destination.pathname + destination.search);
     await login.click();
-    await visit.waitForURL(url => url.pathname === "/circle" && url.searchParams.get("event") === "sample");
+    await visit.waitForURL(destination.href);
     await visit.close();
   }
   // Language changes update static and React content without changing authored
