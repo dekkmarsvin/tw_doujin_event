@@ -98,13 +98,15 @@ export function splitOrganizerBoothCode(
   return codes;
 }
 
-/** Unique non-empty column values that do not yet match any declared option. */
-export function listUnmatchedImportColumnValues(input: {
+/** Every unique non-empty column value, with the option it already matches
+ * (`autoTarget`) or null when the organizer still has to choose one. Values
+ * still waiting on a choice come first. */
+export function listImportColumnValues(input: {
   rows: readonly OrganizerImportTableRow[];
   headerRow: number;
   column: number;
   knownValues: Readonly<Record<string, string>>;
-}): Array<{ value: string; count: number }> {
+}): Array<{ value: string; count: number; autoTarget: string | null }> {
   if (!Number.isSafeInteger(input.headerRow) || input.headerRow < 1 || input.headerRow >= input.rows.length
     || !Number.isSafeInteger(input.column) || input.column < 0) {
     return [];
@@ -112,12 +114,28 @@ export function listUnmatchedImportColumnValues(input: {
   const counts = new Map<string, number>();
   for (const row of input.rows.slice(input.headerRow)) {
     const value = compact(row.cells[input.column]);
-    if (!value || compact(ownValue(input.knownValues, value))) continue;
+    if (!value) continue;
     counts.set(value, (counts.get(value) ?? 0) + 1);
   }
   return [...counts.entries()]
-    .map(([value, count]) => ({ value, count }))
-    .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value, "zh-Hant"));
+    .map(([value, count]) => ({ value, count, autoTarget: compact(ownValue(input.knownValues, value)) || null }))
+    .sort((a, b) => Number(a.autoTarget !== null) - Number(b.autoTarget !== null)
+      || b.count - a.count || a.value.localeCompare(b.value, "zh-Hant"));
+}
+
+/** The one option whose name starts with `value`, as 「P3」 starts 「P3倉庫」.
+ * Width, case and spaces are ignored. The prefix must end a token, so 「P3」
+ * never suggests 「P30倉庫」, and two candidates suggest nothing: a guess
+ * between them is the organizer's to make. */
+export function suggestOrganizerImportValueTarget(value: string, options: ReadonlyArray<{ id: string; name: string }>): string | null {
+  const key = (text: string) => compact(text).replace(/ /gu, "").toLocaleLowerCase("zh-Hant");
+  const wanted = key(value);
+  if (!wanted) return null;
+  const matches = options.filter(({ name }) => {
+    const candidate = key(name);
+    return candidate.startsWith(wanted) && !/^[a-z0-9]/u.test(candidate.slice(wanted.length));
+  });
+  return matches.length === 1 ? matches[0].id : null;
 }
 
 export type OrganizerBoothSplitSample = {

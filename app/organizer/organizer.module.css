@@ -360,6 +360,8 @@
 .valueMappingGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 14px; }
 .valueMappingRow { display: grid; gap: 6px; font-size: 13px; font-weight: 700; }
 .valueMappingRow > span { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.autoMatch { margin-left: 6px; padding: 1px 6px; border-radius: 5px; background: #eef0ec; color: var(--muted); font-size: 11px; font-style: normal; font-weight: 700; }
+.suggestedMatch { background: #fff3d6; color: #795818; }
 .boothPreview { display: grid; gap: 10px; margin: 14px 0 20px; border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; background: var(--paper); font-size: 13px; }
 .boothCountMulti { font-weight: 700; color: var(--success); }
 .areaNamePreview { margin: 16px 0; font-size: 14px; }
