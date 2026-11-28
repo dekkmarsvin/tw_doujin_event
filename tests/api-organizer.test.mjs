@@ -282,3 +282,74 @@ test("an applicant's request reaches only admins, and deleting the account erase
   assert.doesNotMatch(JSON.stringify(after), /第二位|給申請人的拒絕理由|second@example/, "a reviewed request keeps no personal text");
   assert.equal((await decide(admin, pending.id)).status, 409);
 });
+
+test("a rejected replacement import leaves previous draft areas and rows intact, then commits atomically when valid", async () => {
+  const created = await ok(await api.call("POST", "/api/admin/organizer/events", {
+    cookie: admin,
+    body: { tentativeName: "原子匯入測試", ownerEmail: "owner@example.test" },
+  }), 201);
+  owner = await api.signIn("owner@example.test", { audience: "organizer" });
+  const path = (suffix) => `/api/organizer/events/${created.candidateId}${suffix}`;
+  const initialDraft = {
+    schema: "organizer-event-draft/1",
+    event: { id: "atomic-import-test", name: "原子匯入測試", days: [{ id: "1", label: "第一日", date: "2099-12-01" }] },
+    venue: {
+      assignments: [{
+        venueId: VENUE_ID,
+        venueSpaceId: VENUE_SPACE_ID,
+        areaIds: ["area-1-1"],
+        areaLabels: { "area-1-1": "東側" },
+        mapTemplate: "TAIWAN_GENERIC_V1",
+        areaMode: "imported",
+      }],
+    },
+    officialSource: { label: "主辦提供", url: "https://organizer.example/atomic" },
+  };
+  await ok(await api.call("PATCH", path(""), { cookie: owner, body: { expectedVersion: 1, draft: initialDraft } }));
+  await ok(await api.call("PUT", path("/imports"), {
+    cookie: owner,
+    body: {
+      expectedVersion: await version(created.candidateId),
+      source: { fileName: "first.csv", worksheet: null, sha256: "a".repeat(64), sourceDescription: "主辦提供", mapping: { day: { fixed: "1" } } },
+      rows: [{ sourceRow: 2, dayId: "1", venueSpaceId: VENUE_SPACE_ID, areaId: "area-1-1", codes: ["A01"], circleName: "原社團", stableKey: null, identityGroup: null }],
+    },
+  }));
+  const beforeVersion = await version(created.candidateId);
+
+  const rejected = await api.call("PUT", path("/imports"), {
+    cookie: owner,
+    body: {
+      expectedVersion: beforeVersion,
+      source: { fileName: "second.csv", worksheet: null, sha256: "b".repeat(64), sourceDescription: "主辦提供", mapping: { day: { fixed: "1" } } },
+      rows: [{ sourceRow: 2, dayId: "1", venueSpaceId: VENUE_SPACE_ID, areaId: "ALL", codes: ["B01"], circleName: "社".repeat(201), stableKey: null, identityGroup: null }],
+      deriveAreas: { areaLabels: {}, undividedSpaces: [VENUE_SPACE_ID] },
+    },
+  });
+  assert.equal(rejected.status, 422);
+
+  const afterFailed = await ok(await api.call("GET", path(""), { cookie: owner }));
+  assert.equal(afterFailed.event.version, beforeVersion);
+  assert.equal(afterFailed.draft.venue.assignments[0].areaMode, "imported");
+  assert.deepEqual(afterFailed.draft.venue.assignments[0].areaIds, ["area-1-1"]);
+  assert.deepEqual(afterFailed.draft.venue.assignments[0].areaLabels, { "area-1-1": "東側" });
+  assert.equal(afterFailed.import.rows[0].circleName, "原社團");
+  assert.equal(afterFailed.import.rows[0].areaId, "area-1-1");
+
+  const succeeded = await ok(await api.call("PUT", path("/imports"), {
+    cookie: owner,
+    body: {
+      expectedVersion: beforeVersion,
+      source: { fileName: "second.csv", worksheet: null, sha256: "b".repeat(64), sourceDescription: "主辦提供", mapping: { day: { fixed: "1" } } },
+      rows: [{ sourceRow: 2, dayId: "1", venueSpaceId: VENUE_SPACE_ID, areaId: "ALL", codes: ["B01"], circleName: "新社團", stableKey: null, identityGroup: null }],
+      deriveAreas: { areaLabels: {}, undividedSpaces: [VENUE_SPACE_ID] },
+    },
+  }));
+  assert.equal(succeeded.version, beforeVersion + 1);
+
+  const afterSuccess = await ok(await api.call("GET", path(""), { cookie: owner }));
+  assert.equal(afterSuccess.draft.venue.assignments[0].areaMode, "none");
+  assert.deepEqual(afterSuccess.draft.venue.assignments[0].areaIds, ["ALL"]);
+  assert.equal(afterSuccess.draft.venue.assignments[0].areaLabels, undefined);
+  assert.equal(afterSuccess.import.rows[0].circleName, "新社團");
+  assert.equal(afterSuccess.import.rows[0].areaId, "ALL");
+});

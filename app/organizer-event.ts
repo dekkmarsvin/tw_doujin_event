@@ -144,7 +144,9 @@ export function withOrganizerImportedAreaIds(
   draft: OrganizerEventDraft,
   rows: readonly { venueSpaceId: string; areaId: string }[],
   labels: Record<string, Record<string, string>> = {},
+  undividedSpaces: readonly string[] = [],
 ): OrganizerEventDraft {
+  const autoUndivided = new Set(undividedSpaces);
   const bySpace = new Map<string, Set<string>>();
   for (const row of rows) {
     const areas = bySpace.get(row.venueSpaceId) ?? new Set<string>();
@@ -155,10 +157,11 @@ export function withOrganizerImportedAreaIds(
     ...draft,
     venue: {
       assignments: draft.venue.assignments.map((assignment) => {
-        const areaIds = assignment.areaMode === "none"
+        const markUndivided = assignment.areaMode === "none" || autoUndivided.has(assignment.venueSpaceId);
+        const areaIds = markUndivided
           ? ["ALL"]
           : [...(bySpace.get(assignment.venueSpaceId) ?? [])].sort((a, b) => a.localeCompare(b, "en"));
-        const areaLabels = Object.fromEntries(areaIds.flatMap((id) => {
+        const areaLabels = markUndivided ? {} : Object.fromEntries(areaIds.flatMap((id) => {
           const supplied = Object.hasOwn(labels, assignment.venueSpaceId) ? labels[assignment.venueSpaceId] : undefined;
           const label = (supplied && Object.hasOwn(supplied, id) ? supplied[id]
             : assignment.areaLabels && Object.hasOwn(assignment.areaLabels, id) ? assignment.areaLabels[id] : "").trim();
@@ -166,7 +169,12 @@ export function withOrganizerImportedAreaIds(
         }));
         const rest = { ...assignment };
         delete rest.areaLabels;
-        return { ...rest, areaIds, ...(Object.keys(areaLabels).length ? { areaLabels } : {}) };
+        return {
+          ...rest,
+          ...(markUndivided ? { areaMode: "none" as const } : {}),
+          areaIds,
+          ...(Object.keys(areaLabels).length ? { areaLabels } : {}),
+        };
       }),
     },
   };

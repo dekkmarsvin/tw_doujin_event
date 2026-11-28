@@ -324,6 +324,26 @@ export function prepareOrganizerImport(input: {
   const placements = new Map<string, { sourceRow: number; boothCode: string }>();
   const excluded = new Set(input.excludedRows ?? []);
   const areaNames = createOrganizerAreaNames(input.areaAssignments ?? [], input.areaGeneration ?? 0, "import");
+  const areaMapping = input.mapping.area;
+  const hasExplicitAreaMapping = Boolean(
+    areaMapping && (!("fixed" in areaMapping) || compact(areaMapping.fixed) !== ""),
+  );
+  // Spaces without any area value in the mapped column are treated as undivided
+  // (`ALL`), while a space that already supplies areas still catches blank cells.
+  const spacesWithAreas = new Set<string>();
+  if (hasExplicitAreaMapping) {
+    for (const source of input.rows.slice(input.headerRow)) {
+      if (excluded.has(source.sourceRow)) continue;
+      const override = (source.sourceRow > input.headerRow && input.overrides?.[source.sourceRow]) || {};
+      const venueSpaceId = override.venueSpaceId === undefined
+        ? mapped(source, input.mapping.venueSpace)
+        : compact(override.venueSpaceId);
+      if (!venueSpaceId || input.areaModeByVenueSpace?.[venueSpaceId] === "none") continue;
+      const rawArea = override.areaId === undefined ? mapped(source, areaMapping) : compact(override.areaId);
+      if (rawArea) spacesWithAreas.add(venueSpaceId);
+    }
+  }
+  const undividedSpaces = new Set<string>();
 
   for (const source of input.rows.slice(input.headerRow)) {
     // A removed row leaves before it can claim a placement, so removing one of
@@ -339,12 +359,14 @@ export function prepareOrganizerImport(input: {
     // The area is decided after the venue space, because a corrected space can
     // be the one with no divisions — and a `none` space never reads an area
     // value from anywhere, corrected or mapped.
-    const areaId = input.areaModeByVenueSpace?.[venueSpaceId] === "none"
-      ? "ALL"
-      : corrected("areaId", mapped(source, input.mapping.area));
+    const explicitlyUndivided = input.areaModeByVenueSpace?.[venueSpaceId] === "none";
+    const implicitlyUndivided = Boolean(venueSpaceId) && (!hasExplicitAreaMapping || !spacesWithAreas.has(venueSpaceId));
+    const undivided = explicitlyUndivided || implicitlyUndivided || (!venueSpaceId && !hasExplicitAreaMapping);
+    const rawArea = explicitlyUndivided ? "ALL" : corrected("areaId", mapped(source, areaMapping));
+    const areaId = undivided ? "ALL" : rawArea;
     // Reserve names even for excluded/rejected rows so toggling a row does not
     // renumber the remaining preview. Only accepted rows are persisted below.
-    const normalizedAreaId = input.areaModeByVenueSpace?.[venueSpaceId] === "none" ? "ALL"
+    const normalizedAreaId = undivided ? "ALL"
       : areaId.length <= 60 ? areaNames.resolve(venueSpaceId, areaId) : "";
     if (excluded.has(source.sourceRow)) continue;
     const boothCode = corrected("boothCode", mapped(source, input.mapping.boothCode));
@@ -363,13 +385,19 @@ export function prepareOrganizerImport(input: {
       codes.push(code);
       issues.push({ severity: "error", step: "import", code, row: source.sourceRow, message: `找不到${label}，請確認欄位對應。` });
     }
-    if (areaId.length > 60) {
+    if (rawArea.length > 60) {
       codes.push("invalid_area_name");
       issues.push({ severity: "error", step: "import", code: "invalid_area_name", row: source.sourceRow,
         message: "展區名稱不能超過 60 字。" });
     }
+    if (circleName.length > 200) {
+      codes.push("invalid_circle_name");
+      issues.push({ severity: "error", step: "import", code: "invalid_circle_name", row: source.sourceRow,
+        message: "社團名稱不能超過 200 字。" });
+    }
+    const rejectedAreaId = explicitlyUndivided ? "ALL" : rawArea;
     if (codes.length > 0) {
-      rejected.push({ sourceRow: source.sourceRow, dayId, venueSpaceId, areaId, boothCode, circleName, stableKey, codes });
+      rejected.push({ sourceRow: source.sourceRow, dayId, venueSpaceId, areaId: rejectedAreaId, boothCode, circleName, stableKey, codes });
       continue;
     }
 
@@ -377,7 +405,7 @@ export function prepareOrganizerImport(input: {
     if (!boothCodes) {
       issues.push({ severity: "error", step: "import", code: "invalid_booth_width", row: source.sourceRow,
         message: `來源列 ${source.sourceRow} 的攤位代碼無法依目前格式拆分，請確認字元數與內容。` });
-      rejected.push({ sourceRow: source.sourceRow, dayId, venueSpaceId, areaId, boothCode, circleName, stableKey, codes: ["invalid_booth_width"] });
+      rejected.push({ sourceRow: source.sourceRow, dayId, venueSpaceId, areaId: rejectedAreaId, boothCode, circleName, stableKey, codes: ["invalid_booth_width"] });
       continue;
     }
     const keys = boothCodes.map((code) => `${dayId}\u0000${venueSpaceId}\u0000${code.toLocaleLowerCase("en-US")}`);
@@ -391,7 +419,7 @@ export function prepareOrganizerImport(input: {
       const previousRow = placements.get(keys[duplicateIndex])?.sourceRow ?? source.sourceRow;
       issues.push({ severity: "error", step: "import", code: "duplicate_booth", row: source.sourceRow,
         target: `${dayId}/${venueSpaceId}/${code}`, message: `攤位 ${code} 與來源列 ${previousRow} 重複。` });
-      rejected.push({ sourceRow: source.sourceRow, dayId, venueSpaceId, areaId, boothCode, circleName, stableKey, codes: ["duplicate_booth"] });
+      rejected.push({ sourceRow: source.sourceRow, dayId, venueSpaceId, areaId: rejectedAreaId, boothCode, circleName, stableKey, codes: ["duplicate_booth"] });
       continue;
     }
     keys.forEach((key, index) => placements.set(key, { sourceRow: source.sourceRow, boothCode: boothCodes[index] }));
@@ -399,6 +427,7 @@ export function prepareOrganizerImport(input: {
       issues.push({ severity: "warning", step: "import", code: "possibly_combined_booth", row: source.sourceRow,
         message: `來源列 ${source.sourceRow} 的 ${boothCode} 可能包含多個攤位，請確認攤位代碼格式。` });
     }
+    if (implicitlyUndivided && !explicitlyUndivided) undividedSpaces.add(venueSpaceId);
     rows.push({ sourceRow: source.sourceRow, dayId, venueSpaceId, areaId: normalizedAreaId, codes: boothCodes, circleName, stableKey,
       identityGroup: stableKey ? `stable:${stableKey}` : null });
   }
@@ -421,7 +450,15 @@ export function prepareOrganizerImport(input: {
         + "如果有，請把展區對應到名單裡真正的分區欄位。",
     });
   }
-  return { rows, issues, rejected, areaLabels, suggestedWidth, boothCount: rows.reduce((total, row) => total + row.codes.length, 0) };
+  return {
+    rows,
+    issues,
+    rejected,
+    areaLabels,
+    undividedSpaces: [...undividedSpaces].sort((a, b) => a.localeCompare(b, "en")),
+    suggestedWidth,
+    boothCount: rows.reduce((total, row) => total + row.codes.length, 0),
+  };
 }
 
 export async function buildOrganizerImportMetadata(input: {

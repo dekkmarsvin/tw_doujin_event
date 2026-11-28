@@ -689,3 +689,90 @@ test("mapping size check matches the 100,000-byte server boundary", () => {
   assert.equal(imports.organizerImportMappingBytes(overLimit), 100_001);
   assert.equal(imports.isOrganizerImportMappingTooLarge(overLimit), true);
 });
+
+test("omitted or blank area values per space automatically fall back to undivided ALL", () => {
+  const rows = [
+    { sourceRow: 1, cells: ["活動日", "場地", "攤位代碼", "社團名稱"] },
+    { sourceRow: 2, cells: ["1", "P3", "A01,A02", "甲社"] },
+    { sourceRow: 3, cells: ["1", "P2", "B01", "乙社"] },
+  ];
+  const noAreaResult = imports.prepareOrganizerImport({
+    rows, headerRow: 1,
+    mapping: {
+      day: { column: 0, values: { 1: "1" } },
+      venueSpace: { column: 1, values: { P3: "space-p3", P2: "space-p2" } },
+      boothCode: { column: 2 },
+      circleName: { column: 3 },
+      boothCodeMode: "delimited",
+    },
+    areaModeByVenueSpace: { "space-p3": "imported", "space-p2": "imported" },
+  });
+  assert.deepEqual(noAreaResult.issues, []);
+  assert.deepEqual(noAreaResult.rows.map((row) => [row.venueSpaceId, row.areaId]), [
+    ["space-p3", "ALL"],
+    ["space-p2", "ALL"],
+  ]);
+  assert.deepEqual(noAreaResult.undividedSpaces, ["space-p2", "space-p3"]);
+
+  const partialRows = [
+    { sourceRow: 1, cells: ["活動日", "場地", "展區", "攤位代碼", "社團名稱"] },
+    { sourceRow: 2, cells: ["1", "divided", "東側", "A01", "甲社"] },
+    { sourceRow: 3, cells: ["1", "divided", "", "A02", "乙社"] },
+    { sourceRow: 4, cells: ["1", "blank-hall", "", "B01", "丙社"] },
+  ];
+  const partialResult = imports.prepareOrganizerImport({
+    rows: partialRows, headerRow: 1,
+    mapping: {
+      day: { column: 0 },
+      venueSpace: { column: 1 },
+      area: { column: 2 },
+      boothCode: { column: 3 },
+      circleName: { column: 4 },
+    },
+    areaModeByVenueSpace: { divided: "imported", "blank-hall": "imported" },
+  });
+  assert.deepEqual(partialResult.undividedSpaces, ["blank-hall"]);
+  assert.deepEqual(partialResult.rows.map((row) => [row.venueSpaceId, row.areaId]), [
+    ["divided", "area-0-1"],
+    ["blank-hall", "ALL"],
+  ]);
+  assert.deepEqual(partialResult.rejected.map((row) => [row.sourceRow, row.codes]), [[3, ["missing_area"]]]);
+
+  // A rejected row in an implicitly undivided space keeps its raw blank area
+  // rather than pre-filling "ALL", so tabbing past the input cannot fabricate an
+  // area named "ALL". Typing a real area name via overrides switches it to divided.
+  const rejectedUndivided = imports.prepareOrganizerImport({
+    rows: [
+      { sourceRow: 1, cells: ["活動日", "場地", "展區", "攤位代碼", "社團名稱"] },
+      { sourceRow: 2, cells: ["1", "blank-hall", "", "A01", ""] },
+      { sourceRow: 3, cells: ["1", "blank-hall", "", "A02", "正常社團"] },
+    ],
+    headerRow: 1,
+    mapping: {
+      day: { column: 0 },
+      venueSpace: { column: 1 },
+      area: { column: 2 },
+      boothCode: { column: 3 },
+      circleName: { column: 4 },
+    },
+    areaModeByVenueSpace: { "blank-hall": "imported" },
+  });
+  assert.equal(rejectedUndivided.rejected[0].areaId, "");
+  assert.equal(rejectedUndivided.rows[0].areaId, "ALL");
+
+  const overlongCircle = imports.prepareOrganizerImport({
+    rows: [
+      { sourceRow: 1, cells: ["活動日", "場地", "攤位代碼", "社團名稱"] },
+      { sourceRow: 2, cells: ["1", "blank-hall", "A01", "社".repeat(201)] },
+    ],
+    headerRow: 1,
+    mapping: {
+      day: { column: 0 },
+      venueSpace: { column: 1 },
+      boothCode: { column: 2 },
+      circleName: { column: 3 },
+    },
+    areaModeByVenueSpace: { "blank-hall": "imported" },
+  });
+  assert.deepEqual(overlongCircle.rejected.map((row) => [row.sourceRow, row.codes]), [[2, ["invalid_circle_name"]]]);
+});

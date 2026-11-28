@@ -2020,6 +2020,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       stableKey: string | null;
       identityGroup: string | null;
     }[];
+    draftJson?: string;
     now: number;
     admin?: boolean;
   }) {
@@ -2046,14 +2047,17 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     const statements = [
       database.prepare(
         `UPDATE organizer_event_candidates SET current_version = ?1, updated_at = ?2,
-           last_updated_by = ?3, last_updated_role = ?4
+           last_updated_by = ?3, last_updated_role = ?4${input.draftJson !== undefined ? ", current_draft_json = ?7" : ""}
          WHERE id = ?5 AND current_version = ?6 AND status IN ('draft', 'changes_requested')
            ${input.admin ? "" : `AND EXISTS (
              SELECT 1 FROM organizer_event_grants g
              WHERE g.candidate_id = organizer_event_candidates.id
                AND g.account_id = ?3 AND g.revoked_at IS NULL
            )`}`,
-      ).bind(nextVersion, input.now, input.actorAccountId, actorRole, input.candidateId, input.expectedVersion),
+      ).bind(
+        nextVersion, input.now, input.actorAccountId, actorRole, input.candidateId, input.expectedVersion,
+        ...(input.draftJson !== undefined ? [input.draftJson] : []),
+      ),
       database.prepare(
         `INSERT INTO organizer_event_revisions (
            id, candidate_id, version, event_id, draft_json, created_by, created_by_role, created_at

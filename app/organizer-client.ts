@@ -241,6 +241,7 @@ export function putOrganizerImport(candidateId: string, input: {
   expectedVersion: number;
   source: { fileName: string; worksheet: string | null; sha256: string; sourceDescription: string; mapping: OrganizerImportMapping };
   rows: readonly OrganizerNormalizedImportRow[];
+  deriveAreas?: { areaLabels?: Record<string, Record<string, string>>; undividedSpaces?: readonly string[] };
 }) {
   return organizerCall<{ ok: true; candidateId: string; version: number; importedRows: number }>(`/api/organizer/events/${encodeURIComponent(candidateId)}/imports`, {
     method: "PUT",
