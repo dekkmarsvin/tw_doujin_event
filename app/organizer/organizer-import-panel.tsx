@@ -7,7 +7,7 @@ import { useEditorSaveStatus } from "../workspace-save-status";
 import { RequiredMark } from "./organizer-field-guidance";
 import { createOrganizerVenue, createOrganizerVenueSpace, putOrganizerImport, type OrganizerEventDetail, type OrganizerMapLocation } from "../organizer-client";
 import { organizerSourceLabel } from "../organizer-event";
-import { buildOrganizerImportMetadata, buildOrganizerImportSample, findOrganizerListedBoothCodes, isOrganizerImportMappingTooLarge, isValidOrganizerBoothCodeWidth, listUnmatchedImportColumnValues, prepareOrganizerImport, previewOrganizerBoothSplits, suggestOrganizerBoothCodeWidth, toOrganizerCsv, type OrganizerImportFieldMapping, type OrganizerImportMapping, type OrganizerImportOverrideField, type OrganizerImportOverrides, type OrganizerRejectedImportRow } from "../organizer-import";
+import { buildOrganizerImportMetadata, buildOrganizerImportSample, findOrganizerListedBoothCodes, isOrganizerImportMappingTooLarge, isValidOrganizerBoothCodeWidth, listImportColumnValues, prepareOrganizerImport, previewOrganizerBoothSplits, suggestOrganizerBoothCodeWidth, toOrganizerCsv, type OrganizerImportFieldMapping, type OrganizerImportMapping, type OrganizerImportOverrideField, type OrganizerImportOverrides, type OrganizerRejectedImportRow } from "../organizer-import";
 import { normalizeOrganizerVenueSourceUrl, type OrganizerVenueCatalogSpace, type OrganizerVenueCatalogVenue, type OrganizerVenueSpaceAreaMode } from "../organizer-venue-catalog";
 import { readOrganizerWorkbook, type OrganizerWorkbookSheet } from "../organizer-workbook";
 import { IDLE, message, organizerVenueSpaceLabel, type Notice } from "./organizer-shared";
@@ -160,12 +160,21 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
   }, [spaceValueMap, assignedSpaces]);
   const effectiveDayValues = useMemo(() => ({ ...dayValues, ...validDayValueMap }), [dayValues, validDayValueMap]);
   const effectiveSpaceValues = useMemo(() => ({ ...venueSpaceValues, ...validSpaceValueMap }), [venueSpaceValues, validSpaceValueMap]);
-  const unmatchedDays = useMemo(() => sheet && day.column !== null
-    ? listUnmatchedImportColumnValues({ rows: sheet.rows, headerRow, column: day.column, knownValues: dayValues })
+  const dayColumnValues = useMemo(() => sheet && day.column !== null
+    ? listImportColumnValues({ rows: sheet.rows, headerRow, column: day.column, knownValues: dayValues })
     : [], [sheet, headerRow, day.column, dayValues]);
-  const unmatchedSpaces = useMemo(() => sheet && venueSpace.column !== null
-    ? listUnmatchedImportColumnValues({ rows: sheet.rows, headerRow, column: venueSpace.column, knownValues: venueSpaceValues })
+  const spaceColumnValues = useMemo(() => sheet && venueSpace.column !== null
+    ? listImportColumnValues({ rows: sheet.rows, headerRow, column: venueSpace.column, knownValues: venueSpaceValues })
     : [], [sheet, headerRow, venueSpace.column, venueSpaceValues]);
+  /* A configured space no source value points at gets no booths, and that
+   * blocks submission. Said once every value has a target: while some are
+   * still open, the space may simply be the one they are about to pick. */
+  const spacesWithoutValues = useMemo(() => {
+    if (venueSpace.column === null) return [];
+    const targets = spaceColumnValues.map((item) => (Object.hasOwn(validSpaceValueMap, item.value) ? validSpaceValueMap[item.value] : item.autoTarget));
+    if (targets.some((target) => !target)) return [];
+    return assignedSpaces.filter((space) => !targets.includes(space.id));
+  }, [venueSpace.column, spaceColumnValues, validSpaceValueMap, assignedSpaces]);
 
   const areaColumnOutOfRange = requiresAreaMapping && area.mode === "column"
     && (area.column === null || area.column < 0 || area.column >= header.length);
@@ -303,39 +312,50 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
   const valueMappingBlock = (
     title: string,
     fieldLabel: string,
-    unmatched: Array<{ value: string; count: number }>,
+    values: Array<{ value: string; count: number; autoTarget: string | null }>,
     valueMap: Record<string, string>,
     setValueMap: Dispatch<SetStateAction<Record<string, string>>>,
     options: Array<{ value: string; label: string }>,
     footer?: ReactNode,
   ) => {
-    if (unmatched.length === 0) return null;
-    const selectedTarget = (key: string) => (Object.hasOwn(valueMap, key) ? valueMap[key] : "");
-    const remaining = unmatched.filter((item) => !selectedTarget(item.value)).length;
+    if (values.length === 0) return null;
+    /* Values that already match are listed too, preselected and marked 自動.
+     * Listing only the ones left to choose made an exact match look like a
+     * space the dropdown had forgotten. Choosing the automatic target again,
+     * or clearing an override, falls back to the automatic match. */
+    const selectedTarget = (item: { value: string; autoTarget: string | null }) =>
+      (Object.hasOwn(valueMap, item.value) ? valueMap[item.value] : item.autoTarget ?? "");
+    const remaining = values.filter((item) => !selectedTarget(item)).length;
+    const automatic = values.filter((item) => item.autoTarget && !Object.hasOwn(valueMap, item.value)).length;
     return <div className={styles.valueMapping}>
       <div className={styles.valueMappingHead}>
         <strong>{title}</strong>
-        <span className={remaining > 0 ? styles.fieldError : undefined}>{remaining > 0 ? `${remaining} 個來源值尚未對應` : "已全數對應"}</span>
+        <span className={remaining > 0 ? styles.fieldError : undefined}>
+          {remaining > 0 ? `${remaining} 個來源值尚未對應` : "已全數對應"}{automatic > 0 ? `・${automatic} 個自動對應` : ""}
+        </span>
       </div>
       <div className={styles.valueMappingGrid}>
-        {unmatched.map((item) => <label key={item.value} className={styles.valueMappingRow}>
-          <span><strong>{item.value}</strong><small>{item.count} 列</small></span>
-          <select aria-label={`來源${fieldLabel}「${item.value}」對應`} value={selectedTarget(item.value)}
-            onChange={(event) => {
-              const target = event.target.value;
-              setValueMap((current) => {
-                if (!target) {
-                  const next = { ...current };
-                  delete next[item.value];
-                  return next;
-                }
-                return { ...current, [item.value]: target };
-              });
-            }}>
-            <option value="">尚未對應</option>
-            {options.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
-          </select>
-        </label>)}
+        {values.map((item) => {
+          const isAutomatic = !!item.autoTarget && !Object.hasOwn(valueMap, item.value);
+          return <label key={item.value} className={styles.valueMappingRow}>
+            <span><strong>{item.value}{isAutomatic && <em className={styles.autoMatch}>自動</em>}</strong><small>{item.count} 列</small></span>
+            <select aria-label={`來源${fieldLabel}「${item.value}」對應`} value={selectedTarget(item)}
+              onChange={(event) => {
+                const target = event.target.value;
+                setValueMap((current) => {
+                  if (!target || target === item.autoTarget) {
+                    const next = { ...current };
+                    delete next[item.value];
+                    return next;
+                  }
+                  return { ...current, [item.value]: target };
+                });
+              }}>
+              {!item.autoTarget && <option value="">尚未對應</option>}
+              {options.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
+            </select>
+          </label>;
+        })}
       </div>
       {footer}
     </div>;
@@ -435,9 +455,11 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
           <legend>展區</legend>
           <div><div className={styles.subLabel}>固定值<strong>無分區</strong></div></div>
         </fieldset>}
-        {valueMappingBlock("活動日對應", "活動日", unmatchedDays, validDayValueMap, setDayValueMap, dayOptions)}
-        {valueMappingBlock("場地對應", "場地", unmatchedSpaces, validSpaceValueMap, setSpaceValueMap, spaceOptions,
-          <p className={styles.mappingEscape}>選項裡沒有這個場地？<button type="button" className={styles.textButton} onClick={() => onSection("venue")}>前往場館與場地</button></p>)}
+        {valueMappingBlock("活動日對應", "活動日", dayColumnValues, validDayValueMap, setDayValueMap, dayOptions)}
+        {valueMappingBlock("場地對應", "場地", spaceColumnValues, validSpaceValueMap, setSpaceValueMap, spaceOptions, <>
+          {spacesWithoutValues.length > 0 && <p className={styles.issueWarning}>{spacesWithoutValues.map((space) => space.label).join("、")} 沒有對應的來源值，匯入後沒有攤位，也無法送審。這次沒用到的場地，請到場館與場地移除。</p>}
+          <p className={styles.mappingEscape}>選項裡沒有這個場地，或要移除沒用到的場地？<button type="button" className={styles.textButton} onClick={() => onSection("venue")}>前往場館與場地</button></p>
+        </>)}
         <ColumnSelect label="攤位代碼" value={boothColumn} header={header} required onChange={setBoothColumn} />
         <ColumnSelect label="社團名稱" value={circleColumn} header={header} required onChange={setCircleColumn} />
         <ColumnSelect label="主辦內部編號（選填）" value={stableColumn} header={header} onChange={setStableColumn} />

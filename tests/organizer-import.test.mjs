@@ -527,8 +527,8 @@ test("a real area column is left alone", () => {
   assert.equal(real.issues.some(({ code }) => code === "area_looks_like_booth_row"), false);
 });
 
-test("listUnmatchedImportColumnValues aggregates and orders values missing from declared mappings", () => {
-  const unmatched = imports.listUnmatchedImportColumnValues({
+test("listImportColumnValues lists every source value, pending choices first, with its automatic match", () => {
+  const values = imports.listImportColumnValues({
     rows: [
       { sourceRow: 1, cells: ["活動日", "場地", "攤位代碼", "社團名稱"] },
       { sourceRow: 2, cells: ["1", "P3", "A01,A02", "甲社"] },
@@ -543,11 +543,14 @@ test("listUnmatchedImportColumnValues aggregates and orders values missing from 
     column: 1,
     knownValues: { 已存在場地: "space-known" },
   });
-  assert.deepEqual(unmatched, [
-    { value: "P3", count: 2 },
-    { value: "自行車倉庫", count: 1 },
-    { value: "B4", count: 1 },
-    { value: "P2", count: 1 },
+  // An exact match is still listed, so the organizer sees it was handled
+  // instead of wondering why it is missing from the list.
+  assert.deepEqual(values, [
+    { value: "P3", count: 2, autoTarget: null },
+    { value: "自行車倉庫", count: 1, autoTarget: null },
+    { value: "B4", count: 1, autoTarget: null },
+    { value: "P2", count: 1, autoTarget: null },
+    { value: "已存在場地", count: 1, autoTarget: "space-known" },
   ]);
 
   const prepared = imports.prepareOrganizerImport({
@@ -632,9 +635,9 @@ test("value lookup ignores Object.prototype keys like constructor and toString",
     { sourceRow: 1, cells: ["活動日", "場地", "攤位代碼", "社團名稱"] },
     { sourceRow: 2, cells: ["constructor", "toString", "A01", "甲社"] },
   ];
-  assert.deepEqual(imports.listUnmatchedImportColumnValues({
+  assert.deepEqual(imports.listImportColumnValues({
     rows, headerRow: 1, column: 0, knownValues: { 1: "1" },
-  }), [{ value: "constructor", count: 1 }]);
+  }), [{ value: "constructor", count: 1, autoTarget: null }]);
 
   const unmapped = imports.prepareOrganizerImport({
     rows, headerRow: 1,
