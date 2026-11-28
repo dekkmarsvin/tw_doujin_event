@@ -191,6 +191,13 @@ function OrganizerWorkspace({ session, eventSlot, onEvent }: { onEvent: (event: 
   const [navigationSaving, setNavigationSaving] = useState(false);
   const [navigationSaveRefused, setNavigationSaveRefused] = useState(false);
   const draftSave = useRef<(() => Promise<boolean>) | null>(null);
+  // Mirrored in state so the open dialog follows a panel that gains or drops
+  // its save, e.g. an import that finishes while the dialog is up.
+  const [draftSaveAvailable, setDraftSaveAvailable] = useState(false);
+  const onDraftSaveReady = useCallback((save: (() => Promise<boolean>) | null) => {
+    draftSave.current = save;
+    setDraftSaveAvailable(save !== null);
+  }, []);
   const navigationDialog = useRef<HTMLElement | null>(null);
   const selectionInitialized = useRef(false);
   useModalFocus(Boolean(pendingNavigation), navigationDialog, () => setPendingNavigation(null));
@@ -316,7 +323,7 @@ function OrganizerWorkspace({ session, eventSlot, onEvent }: { onEvent: (event: 
     setHandoff(null);
     setPendingNavigation(null);
     setDirty(false);
-    draftSave.current = null;
+    onDraftSaveReady(null);
     request.run();
   };
   const requestNavigation = (description: string, run: () => void) => {
@@ -513,18 +520,26 @@ function OrganizerWorkspace({ session, eventSlot, onEvent }: { onEvent: (event: 
           onHandoffDone={() => setHandoff(null)}
           onChanged={refresh}
           onDirtyChange={setDirty}
-          onDraftSaveReady={(save) => { draftSave.current = save; }}
+          onDraftSaveReady={onDraftSaveReady}
           persistLocation={persistLocation}
         />}
       {pendingNavigation && <div className={styles.dialogBackdrop}>
         <section ref={navigationDialog} className={styles.navigationDialog} role="dialog" aria-modal="true" aria-labelledby="unsaved-title" aria-describedby="unsaved-description" tabIndex={-1}>
           <h3 id="unsaved-title">尚有未儲存變更</h3>
-          <p id="unsaved-description">要先儲存目前的修改，再{pendingNavigation.description}嗎？</p>
-          <div className={styles.dialogActions}>
+          {/* Only an unfinished import offers no save here: it is written by its
+              own final step, so a save button would always be refused. 取消 then
+              comes first, so the focused button keeps the file instead of discarding it. */}
+          <p id="unsaved-description">{draftSaveAvailable
+            ? `要先儲存目前的修改，再${pendingNavigation.description}嗎？`
+            : "名單還沒匯入。要保留，請按「取消」回到第 3 步完成匯入；不需要就按「放棄」。"}</p>
+          {draftSaveAvailable ? <div className={styles.dialogActions}>
             <button type="button" disabled={navigationSaving} onClick={() => { void saveAndNavigate(); }}>{navigationSaving ? "儲存中…" : "儲存並切換"}</button>
             <button type="button" className={styles.secondary} disabled={navigationSaving} onClick={() => finishNavigation(pendingNavigation)}>放棄</button>
             <button type="button" className={styles.ghost} disabled={navigationSaving} onClick={() => setPendingNavigation(null)}>取消</button>
-          </div>
+          </div> : <div className={styles.dialogActions}>
+            <button type="button" className={styles.secondary} onClick={() => setPendingNavigation(null)}>取消</button>
+            <button type="button" className={styles.ghost} onClick={() => finishNavigation(pendingNavigation)}>放棄</button>
+          </div>}
           {navigationSaveRefused && <p role="alert" className={styles.error}>沒有儲存成功。請按「取消」回到表單，照上面列出的說明處理後再試一次。</p>}
         </section>
       </div>}

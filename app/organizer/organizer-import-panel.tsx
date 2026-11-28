@@ -99,8 +99,9 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
   useEffect(() => {
     const dirty = !!bytes;
     onDirtyChange(dirty);
-    // Import requires the explicit final confirmation, never an implicit navigation save.
-    onSaveReady(async () => !dirty);
+    // Import requires the explicit final confirmation, never an implicit navigation
+    // save, so an unfinished import offers no save; the dialog then says how to finish it.
+    onSaveReady(dirty ? null : async () => true);
     const warn = (event: BeforeUnloadEvent) => { if (dirty) event.preventDefault(); };
     window.addEventListener("beforeunload", warn);
     return () => { onDirtyChange(false); onSaveReady(null); window.removeEventListener("beforeunload", warn); };
