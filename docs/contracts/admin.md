@@ -45,8 +45,8 @@
 
 ## 網站營運設定
 
-**實作**：`app/site-settings.ts`、`app/site-service-check.ts`、`app/admin/admin-site-settings-panel.tsx`、`app/workspace-nav.tsx`、`db/site-settings-repository.ts`、`server/admin.ts`、`functions/_after-write.ts`
-**測試**：`tests/site-settings.test.mjs`、`tests/api-organizer.test.mjs`、`tests/notification-delivery.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/browser/portal-admin-entry.mjs`
+**實作**：`app/site-settings.ts`、`app/site-service-check.ts`、`app/admin/admin-site-settings-panel.tsx`、`app/workspace-nav.tsx`、`db/site-settings-repository.ts`、`db/scheduled-service-check.ts`、`server/admin.ts`、`functions/_after-write.ts`、`workers/retention-purge/index.ts`
+**測試**：`tests/site-settings.test.mjs`、`tests/scheduled-service-check.test.mjs`、`tests/api-organizer.test.mjs`、`tests/notification-delivery.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/browser/portal-admin-entry.mjs`
 **實作**：`app/admin/use-admin-site-status.ts`、`app/admin/admin-service-status.tsx`
 
 `/admin?section=settings` 沿用網站管理入口、登入與管理者授權，管理活動申請、聯絡方式、通知、發布四項營運設定。首頁沿用既有登入入口，不新增另一個申請按鈕，也不為開關加入 Reader API。公開申請由維護者在 Admin 手動啟用；這是 #477 的已接受決策，取代 #163 原以零人工補救旅程作為公開申請開關的前置；該旅程仍是 Organizer 里程碑驗收。
@@ -74,7 +74,14 @@ Repository／isolate 只快取初始化，不快取可變設定。申請及通�
 
 發布模式 disabled 時停用發布控制；連線或診斷失敗仍可暫停處理。
 
-「檢查服務」在原 D1 `site_service_check` 保存一筆可覆寫的請求／結果，由下一次寫入請求之後的背景工作以 Pages 的實際憑證檢查。沒有排程、診斷歷史或郵件寄送。Admin 僅在這一次請求等待結果，最多 90 秒；逾時顯示尚未收到結果，不宣稱服務故障。較早結果不能覆寫較新請求。
+服務檢查結果存在 D1 `site_service_check` 一筆可覆寫的紀錄，沒有診斷歷史。結果有兩個來源，寫回同一筆紀錄並更新檢查時間：
+
+- **每小時檢查**（#580）：`tw-catalog-retention-purge` Worker 每小時第 47 分檢查寄信服務、讀取服務與通知寄送，詳見[排程清除 Worker](../runbooks/retention-purge-worker.md#每小時服務檢查)。發布服務沿用上次手動檢查的結果。
+- **「檢查服務」**：由下一次寫入請求之後的背景工作以 Pages 的實際憑證檢查寄信與發布。Admin 僅在這一次請求等待結果，最多 90 秒；逾時顯示尚未收到結果，不宣稱服務故障。等待期間寄信與發布不顯示舊結果，讀取服務與通知寄送照常顯示。較早結果不能覆寫較新請求；每小時檢查照常更新讀取服務與通知寄送，但不代替手動請求回答寄信與發布。
+
+讀取服務以公開網站讀取 `/data/events/index.json`，非 2xx、不是有效 JSON 或沒有回應即不可用，逾時記為無法確認，只讀不寫。通知寄送查待寄通知與永久失敗筆數：有通知到期超過 1 小時仍未寄出，或永久失敗筆數比上次檢查多，即不可用。
+
+每小時檢查只在項目於正常與不可用之間改變時，以 Cloudflare Email Routing 寄一封告警或恢復信給維護者驗證過的信箱；持續不可用不重寄，「無法確認」不觸發也不解除告警。信中只有檢查項目、狀態、來源、原因與時間。寄送失敗時，下一次檢查重寄。
 
 寄信只讀 Mailgun 網域資料：檢查設定、連線、金鑰與 active 網域。發送專用金鑰沒有網域讀取權時顯示「無法確認」，不推定無法寄信；此檢查不證明收件匣投遞，也不寄測試信。發布只檢查此環境是否啟用核准即寫入活動資料（`ORGANIZER_PUBLICATION_MODE=r2`），不寫入任何資料。回傳僅包含明確分類、來源與原因，不含金鑰或 provider 回應內文。未檢查／暫時連線失敗與已確認不可用分開呈現。
 

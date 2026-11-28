@@ -25,12 +25,29 @@
       "persist": true
     }
   },
-  // Daily, at an off-peak minute that is not the top of an hour — cron
+  // Daily purge, at an off-peak minute that is not the top of an hour — cron
   // triggers cluster there, and nothing here needs a particular time of day.
-  // UTC, like every Cloudflare cron.
+  // The second cron is the hourly service check (#580); `scheduled()` tells
+  // them apart by `controller.cron`, so the string must match
+  // SERVICE_CHECK_CRON in db/scheduled-service-check.ts. UTC, like every
+  // Cloudflare cron.
   "triggers": {
-    "crons": ["17 3 * * *"]
+    "crons": ["17 3 * * *", "47 * * * *"]
   },
+  // Public values only. `vars` replaces dashboard variables on every deploy,
+  // so the Mailgun domain lives here; MAILGUN_API_KEY and ALERT_RECIPIENT are
+  // Worker secrets (`wrangler secret put`), the recipient because this
+  // repository is public.
+  "vars": {
+    "MAILGUN_DOMAIN": "verify.kotoban.top",
+    "SITE_ORIGIN": "https://map.kotoban.top",
+    "ENVIRONMENT_NAME": "正式站"
+  },
+  // Email Routing's binding. Without `destination_address` it can still only
+  // reach addresses verified under Email Routing, which ALERT_RECIPIENT must be.
+  "send_email": [
+    { "name": "ALERT_EMAIL" }
+  ],
   // The same database the Pages Functions write, under the same binding name.
   // This Worker only deletes: the schema is still created by the repository on
   // first use, because Pages has no migration step (ADR-0009).
@@ -57,12 +74,20 @@
   // preview database. `triggers` is inheritable but repeated here on purpose:
   // preview is the only place `preview_mail_sink` is written, and that table
   // holds the text of real login mails, so its purge is the one that must not
-  // silently fail to be scheduled.
+  // silently fail to be scheduled. Preview has no stable public origin, so
+  // it leaves SITE_ORIGIN unset and records its reader check as unknown.
   "env": {
     "preview": {
       "triggers": {
-        "crons": ["17 3 * * *"]
+        "crons": ["17 3 * * *", "47 * * * *"]
       },
+      "vars": {
+        "MAILGUN_DOMAIN": "verify.kotoban.top",
+        "ENVIRONMENT_NAME": "預覽站"
+      },
+      "send_email": [
+        { "name": "ALERT_EMAIL" }
+      ],
       "d1_databases": [
         {
           "binding": "DB",

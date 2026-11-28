@@ -18,7 +18,11 @@ export type SiteSettings = SiteSettingsInput & {
   updatedBy: string;
 };
 export type ServiceCheck = { status: "available" | "unavailable" | "unknown"; source: string; reason: string };
-export type ServiceChecks = { requestedAt: number; checkedAt: number | null; mail: ServiceCheck | null; publication: ServiceCheck | null };
+/** `reader` and `notifications` come only from the hourly check (#580); a manual check refreshes `mail` and `publication`. */
+export type ServiceChecks = {
+  requestedAt: number; checkedAt: number | null;
+  mail: ServiceCheck | null; publication: ServiceCheck | null; reader: ServiceCheck | null; notifications: ServiceCheck | null;
+};
 export type AdminSiteSettings = {
   settings: SiteSettings;
   publicationMode: "disabled" | "r2";

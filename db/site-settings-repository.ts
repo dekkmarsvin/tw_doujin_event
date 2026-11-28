@@ -63,19 +63,26 @@ export function createSiteSettingsRepository(database: D1Database, ensureTables:
     await ensureTables();
     const row = await database.prepare("SELECT requested_at, checked_at, result_json FROM site_service_check WHERE id = 'global'")
       .first<{ requested_at: number; checked_at: number | null; result_json: string | null }>();
-    return row ? { requestedAt: row.requested_at, checkedAt: row.checked_at, mail: null, publication: null,
-      ...(row.result_json ? JSON.parse(row.result_json) : {}) } : null;
+    if (!row) return null;
+    const stored = row.result_json ? JSON.parse(row.result_json) as Partial<ServiceChecks> : {};
+    // A waiting manual request answers only mail and publication, so their
+    // earlier results are not shown as its answer; the hourly items stay.
+    const answered = row.checked_at !== null;
+    return { requestedAt: row.requested_at, checkedAt: row.checked_at,
+      mail: answered ? stored.mail ?? null : null, publication: answered ? stored.publication ?? null : null,
+      reader: stored.reader ?? null, notifications: stored.notifications ?? null };
   }
   async function requestServiceCheck(now: number) {
     await ensureTables();
     await database.prepare(`INSERT INTO site_service_check (id, requested_at) VALUES ('global', ?1)
-      ON CONFLICT(id) DO UPDATE SET requested_at = MAX(requested_at + 1, ?1), checked_at = NULL, result_json = NULL`)
+      ON CONFLICT(id) DO UPDATE SET requested_at = MAX(requested_at + 1, ?1), checked_at = NULL`)
       .bind(now).run();
     return getServiceChecks();
   }
   async function completeServiceCheck(requestedAt: number, now: number, result: Pick<ServiceChecks, "mail" | "publication">) {
     await ensureTables();
-    await database.prepare(`UPDATE site_service_check SET checked_at = ?2, result_json = ?3
+    // Merged, so the hourly check's items and alert state survive a manual check.
+    await database.prepare(`UPDATE site_service_check SET checked_at = ?2, result_json = json_patch(COALESCE(result_json, '{}'), ?3)
       WHERE id = 'global' AND requested_at = ?1 AND checked_at IS NULL`).bind(requestedAt, now, JSON.stringify(result)).run();
   }
   return { getSiteSettings, updateSiteSettings, getServiceChecks, requestServiceCheck, completeServiceCheck };

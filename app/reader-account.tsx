@@ -93,7 +93,7 @@ type ServiceLight = "ok" | "unknown" | "stale" | "never" | "down";
 function serviceLight(services: ServiceChecks | null, now: number): ServiceLight {
   if (!services || services.checkedAt === null) return "never";
   if (now - services.checkedAt > SERVICE_CHECK_FRESH_MS) return "stale";
-  const checks = [services.mail, services.publication];
+  const checks = [services.mail, services.publication, services.reader, services.notifications];
   if (checks.some((check) => check?.status === "unavailable")) return "down";
   if (checks.every((check) => check?.status === "available")) return "ok";
   return "unknown";
