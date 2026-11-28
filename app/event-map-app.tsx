@@ -248,7 +248,12 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     pendingOverviewFocusRestoreRef.current = true;
   }, []);
   useEffect(() => {
-    if (venueOverviewOpen || !pendingOverviewFocusRestoreRef.current) return;
+    // Entering: focus the current space once the overview is committed (a rAF can run before the commit).
+    if (venueOverviewOpen) {
+      currentOverviewSpaceRef.current?.focus({ preventScroll: true });
+      return;
+    }
+    if (!pendingOverviewFocusRestoreRef.current) return;
     pendingOverviewFocusRestoreRef.current = false;
     const candidates = [
       zoomOutButtonRef.current,
@@ -283,7 +288,6 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     setMapGestureActive(false);
     setFacilityListOpen(false);
     setVenueOverviewOpen(true);
-    requestAnimationFrame(() => currentOverviewSpaceRef.current?.focus({ preventScroll: true }));
   }, [fitInVisibleRect, interruptPosition, venueOverview, venueOverviewOpen]);
   const exitVenueOverview = useCallback((restoreFocus = false) => {
     fitInVisibleRect();
