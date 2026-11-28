@@ -5,11 +5,13 @@ export const VENUE_OVERVIEW_SCHEMA = "venue-overview/1";
 const ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const BUILDING_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 const ORIENTATIONS = new Set(["horizontal", "vertical"]);
-const ROOFS = new Set(["gable", "flat"]);
-const BUILDING_KINDS = new Set(["warehouse", "service", "context"]);
-const AREA_KINDS = new Set(["plaza", "park", "corridor"]);
-const STATION_COLORS = new Set(["green", "blue"]);
-const LANDMARK_KINDS = new Set(["arch", "pier2-logo", "label", "compass", "water-label"]);
+const ROOFS = new Set(["gable", "flat", "dome", "floor"]);
+const BUILDING_KINDS = new Set(["warehouse", "hall", "service", "context"]);
+const AREA_KINDS = new Set(["plaza", "park", "corridor", "block", "track", "courtyard"]);
+const ROAD_KINDS = new Set(["arterial", "local", "elevated", "path"]);
+const RAIL_COLORS = new Set(["green", "blue", "red", "brown"]);
+const STATION_COLORS = new Set(["green", "blue", "red", "brown"]);
+const LANDMARK_KINDS = new Set(["arch", "pier2-logo", "label", "compass", "water-label", "shield", "exit", "bus", "parking"]);
 
 function isRecord(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -90,11 +92,22 @@ function validateLayers(value, label, viewBox) {
     if (!Array.isArray(layers.areas) || layers.areas.length > 60) fail(`${label}.areas is invalid.`);
     for (const [index, entry] of layers.areas.entries()) {
       const area = requireRecord(entry, `${label}.areas[${index}]`);
-      requireKeys(area, ["id", "kind"], ["id", "kind", "points", "rect", "strokeWidth"], `${label}.areas[${index}]`);
+      requireKeys(area, ["id", "kind"], ["id", "kind", "points", "rect", "ellipse", "strokeWidth"], `${label}.areas[${index}]`);
       requireText(area.id, `${label}.areas[${index}].id`, 64);
       if (!AREA_KINDS.has(area.kind)) fail(`${label}.areas[${index}].kind is invalid.`);
       if (area.points !== undefined) validatePointList(area.points, `${label}.areas[${index}].points`, viewBox, 2, 200);
       if (area.rect !== undefined) validateRect(area.rect, `${label}.areas[${index}].rect`, viewBox);
+      if (area.ellipse !== undefined) {
+        const ellipse = requireRecord(area.ellipse, `${label}.areas[${index}].ellipse`);
+        requireKeys(ellipse, ["cx", "cy", "rx", "ry"], ["cx", "cy", "rx", "ry"], `${label}.areas[${index}].ellipse`);
+        const cx = requireFinite(ellipse.cx, `${label}.areas[${index}].ellipse.cx`, 0, viewBox.width);
+        const cy = requireFinite(ellipse.cy, `${label}.areas[${index}].ellipse.cy`, 0, viewBox.height);
+        const rx = requireFinite(ellipse.rx, `${label}.areas[${index}].ellipse.rx`, 1, viewBox.width);
+        const ry = requireFinite(ellipse.ry, `${label}.areas[${index}].ellipse.ry`, 1, viewBox.height);
+        if (cx - rx < 0 || cx + rx > viewBox.width || cy - ry < 0 || cy + ry > viewBox.height) {
+          fail(`${label}.areas[${index}].ellipse must stay within viewBox.`);
+        }
+      }
       if (area.strokeWidth !== undefined) requireFinite(area.strokeWidth, `${label}.areas[${index}].strokeWidth`, 1, 200);
     }
   }
@@ -130,10 +143,11 @@ function validateLayers(value, label, viewBox) {
     if (!Array.isArray(layers.roads) || layers.roads.length > 80) fail(`${label}.roads is invalid.`);
     for (const [index, entry] of layers.roads.entries()) {
       const road = requireRecord(entry, `${label}.roads[${index}]`);
-      requireKeys(road, ["id", "width", "points"], ["id", "width", "points", "label", "labelAt", "labelAngle"], `${label}.roads[${index}]`);
+      requireKeys(road, ["id", "width", "points"], ["id", "width", "points", "kind", "label", "labelAt", "labelAngle"], `${label}.roads[${index}]`);
       requireText(road.id, `${label}.roads[${index}].id`, 64);
       requireFinite(road.width, `${label}.roads[${index}].width`, 1, 100);
       validatePointList(road.points, `${label}.roads[${index}].points`, viewBox, 2, 100);
+      if (road.kind !== undefined && !ROAD_KINDS.has(road.kind)) fail(`${label}.roads[${index}].kind is invalid.`);
       if (road.label !== undefined) requireText(road.label, `${label}.roads[${index}].label`, 40);
       if (road.labelAt !== undefined) validatePoint(road.labelAt, `${label}.roads[${index}].labelAt`, viewBox);
       if (road.labelAngle !== undefined) requireFinite(road.labelAngle, `${label}.roads[${index}].labelAngle`, -360, 360);
@@ -144,9 +158,10 @@ function validateLayers(value, label, viewBox) {
     if (!Array.isArray(layers.rail) || layers.rail.length > 20) fail(`${label}.rail is invalid.`);
     for (const [index, entry] of layers.rail.entries()) {
       const rail = requireRecord(entry, `${label}.rail[${index}]`);
-      requireKeys(rail, ["id", "points", "stations"], ["id", "points", "stations"], `${label}.rail[${index}]`);
+      requireKeys(rail, ["id", "points", "stations"], ["id", "points", "color", "stations"], `${label}.rail[${index}]`);
       requireText(rail.id, `${label}.rail[${index}].id`, 64);
       validatePointList(rail.points, `${label}.rail[${index}].points`, viewBox, 2, 200);
+      if (rail.color !== undefined && !RAIL_COLORS.has(rail.color)) fail(`${label}.rail[${index}].color is invalid.`);
       if (!Array.isArray(rail.stations) || rail.stations.length > 40) fail(`${label}.rail[${index}].stations is invalid.`);
       for (const [stationIndex, stationValue] of rail.stations.entries()) {
         const station = requireRecord(stationValue, `${label}.rail[${index}].stations[${stationIndex}]`);
@@ -214,7 +229,7 @@ export function parseVenueOverviewRecord(value, label = "venue-overview") {
     requireKeys(
       building,
       ["id", "label", "rect", "orientation", "roof", "kind"],
-      ["id", "venueSpaceId", "label", "rect", "orientation", "roof", "kind", "calloutAbove"],
+      ["id", "venueSpaceId", "label", "rect", "points", "orientation", "roof", "kind", "calloutAbove"],
       itemLabel,
     );
     if (typeof building.id !== "string" || !BUILDING_ID.test(building.id)) fail(`${itemLabel}.id is invalid.`);
@@ -232,6 +247,7 @@ export function parseVenueOverviewRecord(value, label = "venue-overview") {
     if (!BUILDING_KINDS.has(building.kind)) fail(`${itemLabel}.kind is invalid.`);
     requireText(building.label, `${itemLabel}.label`, 40, building.kind === "context");
     validateRect(building.rect, `${itemLabel}.rect`, parsedViewBox);
+    if (building.points !== undefined) validatePointList(building.points, `${itemLabel}.points`, parsedViewBox, 3, 32);
     if (building.calloutAbove !== undefined && typeof building.calloutAbove !== "boolean") {
       fail(`${itemLabel}.calloutAbove must be boolean.`);
     }
@@ -261,7 +277,7 @@ function fmtPoints(points) {
  */
 export function buildBuilding25dPolygons(building) {
   const { x, y, width: w, height: h } = building.rect;
-  const large = building.kind === "warehouse";
+  const large = building.kind === "warehouse" || building.kind === "hall";
   const edx = large ? -4 : -3;
   const edy = large ? -10 : -8;
   const rdx = large ? -7 : -5;
@@ -315,5 +331,40 @@ export function buildBuilding25dPolygons(building) {
     ridgeLine: { x1: rLeft[0], y1: rLeft[1], x2: rRight[0], y2: rRight[1] },
     outline: fmtPoints([nw, ne, [x + w, y], [x + w, y + h], [x, y + h], sw, rLeft]),
     labelAnchor: { x: x + w / 2 + (edx + rdx) / 2, y: midY + (edy + rdy) / 2 + 4 },
+  };
+}
+
+/**
+ * Pure 2.5D oblique extrusion helper for polygonal building footprints
+ * (e.g. chamfered exhibition halls and stepped stadiums).
+ */
+export function buildPolygon25dPolygons(points, kind) {
+  const large = kind === "warehouse" || kind === "hall";
+  const edx = large ? -4 : -3;
+  const edy = large ? -10 : -8;
+  const shadow = fmtPoints(points.map((point) => [point.x + 5, point.y + 4]));
+  const roofCoords = points.map((point) => [point.x + edx, point.y + edy]);
+  const roof = fmtPoints(roofCoords);
+  const walls = points.map((point, index) => {
+    const next = points[(index + 1) % points.length];
+    const nextRoof = roofCoords[(index + 1) % roofCoords.length];
+    const eastFacing = Math.abs(next.y - point.y) > Math.abs(next.x - point.x);
+    return {
+      points: fmtPoints([[point.x, point.y], [next.x, next.y], nextRoof, roofCoords[index]]),
+      shade: eastFacing ? "east" : "south",
+    };
+  });
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const [rx, ry] of roofCoords) {
+    if (rx < minX) minX = rx;
+    if (rx > maxX) maxX = rx;
+    if (ry < minY) minY = ry;
+    if (ry > maxY) maxY = ry;
+  }
+  return {
+    shadow,
+    walls,
+    roof,
+    labelAnchor: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 },
   };
 }

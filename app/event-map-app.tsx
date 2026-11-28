@@ -243,21 +243,26 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   } = viewport;
   const { zoom, offset } = mapView;
   const interruptPosition = useCallback(() => { restoreInterrupted.current = true; cancelPosition(); setLocatedFacility(null); }, [cancelPosition, setLocatedFacility]);
+  const pendingOverviewFocusRestoreRef = useRef(false);
   const restoreFocusAfterOverviewExit = useCallback(() => {
-    requestAnimationFrame(() => {
-      const candidates = [
-        zoomOutButtonRef.current,
-        zoomInButtonRef.current,
-        fitButtonRef.current,
-        mobileDockRef.current?.querySelector<HTMLButtonElement>(`button.${styles.mobileSheetHandle}`) ?? null,
-        desktopTabRef.current,
-      ];
-      const target = candidates.find((element) => element && !element.disabled && element.getClientRects().length > 0);
-      target?.focus({ preventScroll: true });
-    });
+    pendingOverviewFocusRestoreRef.current = true;
   }, []);
+  useEffect(() => {
+    if (venueOverviewOpen || !pendingOverviewFocusRestoreRef.current) return;
+    pendingOverviewFocusRestoreRef.current = false;
+    const candidates = [
+      zoomOutButtonRef.current,
+      zoomInButtonRef.current,
+      fitButtonRef.current,
+      mobileDockRef.current?.querySelector<HTMLButtonElement>(`button.${styles.mobileSheetHandle}`) ?? null,
+      desktopTabRef.current,
+    ];
+    const target = candidates.find((element) => element && !element.disabled && element.getClientRects().length > 0);
+    target?.focus({ preventScroll: true });
+  }, [venueOverviewOpen]);
   const enterVenueOverview = useCallback(() => {
     if (!venueOverview || venueOverviewOpen) return;
+    pendingOverviewFocusRestoreRef.current = false;
     interruptPosition();
     fitInVisibleRect();
     if (mapGestureFrame.current !== null) {
@@ -283,9 +288,9 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   const exitVenueOverview = useCallback((restoreFocus = false) => {
     fitInVisibleRect();
     wheelOverviewRef.current = INITIAL_WHEEL_OVERVIEW_STATE;
+    pendingOverviewFocusRestoreRef.current = restoreFocus;
     setVenueOverviewOpen(false);
-    if (restoreFocus) restoreFocusAfterOverviewExit();
-  }, [fitInVisibleRect, restoreFocusAfterOverviewExit]);
+  }, [fitInVisibleRect]);
   const facilityDirectory = useMemo(() => publishedMap ? mapFacilityDirectory(publishedMap.layout) : null, [publishedMap]);
   const previousDesktop = useRef<boolean | null>(null);
   useEffect(() => {

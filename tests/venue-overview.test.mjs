@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test, { after } from "node:test";
 import { createServer, isRunnableDevEnvironment } from "vite";
 import { amendmentFixture, hash } from "./support/organizer-amendment-fixture.mjs";
-import { parseVenueOverviewRecord } from "../app/venue-overview.mjs";
+import { buildPolygon25dPolygons, parseVenueOverviewRecord } from "../app/venue-overview.mjs";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const environment = vite.environments.ssr;
@@ -446,4 +446,98 @@ test("event-map messages define complete zh-Hant, en, and ja translations for ov
   assert.deepEqual(missingMessageKeys(EVENT_MAP_MESSAGES, "zh-Hant"), []);
   assert.deepEqual(missingMessageKeys(EVENT_MAP_MESSAGES, "en"), []);
   assert.deepEqual(missingMessageKeys(EVENT_MAP_MESSAGES, "ja"), []);
+});
+
+test("venue-overview/1 supports rich modern halls, polygon footprints, domes, floor cards, elevated roads, and colored rail", () => {
+  const rich = {
+    schema: "venue-overview/1",
+    venueId: "sample-modern-venue",
+    viewBox: { width: 1200, height: 680 },
+    layers: {
+      areas: [
+        { id: "city-block", kind: "block", rect: { x: 40, y: 40, width: 180, height: 120 } },
+        { id: "track-oval", kind: "track", ellipse: { cx: 420, cy: 480, rx: 80, ry: 78 } },
+        { id: "edge-ellipse", kind: "park", ellipse: { cx: 100, cy: 580, rx: 100, ry: 100 } },
+        { id: "courtyard", kind: "courtyard", rect: { x: 540, y: 290, width: 80, height: 140 } },
+      ],
+      roads: [
+        { id: "viaduct", kind: "elevated", width: 22, points: [{ x: 0, y: 220 }, { x: 1200, y: 220 }], label: "建國高架道路", labelAt: { x: 600, y: 220 } },
+        { id: "lane", kind: "local", width: 8, points: [{ x: 40, y: 300 }, { x: 260, y: 300 }] },
+        { id: "park-walk", kind: "path", width: 7, points: [{ x: 500, y: 80 }, { x: 680, y: 140 }] },
+      ],
+      rail: [
+        {
+          id: "red-line",
+          color: "red",
+          points: [{ x: 320, y: 0 }, { x: 320, y: 680 }],
+          stations: [{ id: "r14", code: "R14", name: "捷運圓山站", color: "red", x: 260, y: 180 }],
+        },
+        {
+          id: "brown-line",
+          color: "brown",
+          points: [{ x: 580, y: 0 }, { x: 580, y: 420 }],
+          stations: [],
+        },
+      ],
+      landmarks: [
+        { id: "hw5", kind: "shield", x: 880, y: 470, label: "5" },
+        { id: "route109", kind: "shield", x: 530, y: 630, label: "109", subLabel: "city" },
+        { id: "ex1", kind: "exit", x: 600, y: 410, label: "1" },
+        { id: "bus-w", kind: "bus", x: 346, y: 376, label: "公車站牌區", subLabel: "vertical" },
+        { id: "park-p", kind: "parking", x: 420, y: 470, label: "停車場" },
+      ],
+    },
+    buildings: [
+      {
+        id: "hall1-shell",
+        label: "南港展覽館 1 館",
+        kind: "hall",
+        roof: "flat",
+        orientation: "horizontal",
+        rect: { x: 604, y: 190, width: 330, height: 198 },
+        points: [{ x: 604, y: 190 }, { x: 934, y: 190 }, { x: 846, y: 388 }, { x: 604, y: 388 }],
+      },
+      {
+        id: "hall1-4f",
+        venueSpaceId: "hall-1-4f",
+        label: "4F 展場",
+        kind: "hall",
+        roof: "floor",
+        orientation: "horizontal",
+        rect: { x: 646, y: 238, width: 184, height: 46 },
+      },
+      {
+        id: "dome-1f",
+        venueSpaceId: "dome-1f",
+        label: "巨蛋主館",
+        kind: "hall",
+        roof: "dome",
+        orientation: "horizontal",
+        rect: { x: 390, y: 260, width: 170, height: 96 },
+      },
+    ],
+    sources: [{ id: "official", kind: "venue-official", url: "https://venue.example.invalid/modern", retrievedAt: "2026-11-28T00:00:00.000Z" }],
+    provenance: { "/viewBox": ["official"], "/buildings": ["official"] },
+  };
+  const parsed = parseVenueOverviewRecord(rich, "rich");
+  assert.equal(parsed.buildings.length, 3);
+  const poly25d = buildPolygon25dPolygons(parsed.buildings[0].points, parsed.buildings[0].kind);
+  assert.equal(poly25d.walls.length, 4);
+  assert.ok(poly25d.roof.length > 0 && poly25d.shadow.length > 0);
+
+  const badEllipse = structuredClone(rich);
+  badEllipse.layers.areas[1].ellipse = { cx: 20, cy: 480, rx: 80, ry: 78 };
+  assert.throws(() => parseVenueOverviewRecord(badEllipse, "bad-ellipse"), /within viewBox/);
+
+  const badPoly = structuredClone(rich);
+  badPoly.buildings[0].points[1] = { x: 1250, y: 190 };
+  assert.throws(() => parseVenueOverviewRecord(badPoly, "bad-poly"), /finite number/);
+
+  const badRoadKind = structuredClone(rich);
+  badRoadKind.layers.roads[0].kind = "freeway";
+  assert.throws(() => parseVenueOverviewRecord(badRoadKind, "bad-road"), /kind is invalid/);
+
+  const badRailColor = structuredClone(rich);
+  badRailColor.layers.rail[0].color = "purple";
+  assert.throws(() => parseVenueOverviewRecord(badRailColor, "bad-rail"), /color is invalid/);
 });
