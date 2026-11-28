@@ -355,6 +355,13 @@
 .importFileFields label:nth-child(3) { width: 90px; }
 .importWizard .mappingGrid { grid-template-columns: repeat(auto-fit, minmax(220px, 320px)); }
 .importWizard .importGrid { grid-template-columns: repeat(auto-fit, minmax(220px, 320px)); }
+.valueMapping { grid-column: 1 / -1; display: grid; gap: 10px; border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; background: var(--paper); }
+.valueMappingHead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 14px; }
+.valueMappingGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 14px; }
+.valueMappingRow { display: grid; gap: 6px; font-size: 13px; font-weight: 700; }
+.valueMappingRow > span { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.boothPreview { display: grid; gap: 10px; margin: 14px 0 20px; border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; background: var(--paper); font-size: 13px; }
+.boothCountMulti { font-weight: 700; color: var(--success); }
 .areaNamePreview { margin: 16px 0; font-size: 14px; }
 .areaNamePreview summary { cursor: pointer; }
 .previewTabs { display: flex; gap: 8px; margin: 12px 0; }

@@ -7,7 +7,7 @@ import { useEditorSaveStatus } from "../workspace-save-status";
 import { RequiredMark } from "./organizer-field-guidance";
 import { createOrganizerVenue, createOrganizerVenueSpace, putOrganizerImport, saveOrganizerEvent, type OrganizerEventDetail, type OrganizerMapLocation } from "../organizer-client";
 import { organizerSourceLabel, withOrganizerImportedAreaIds } from "../organizer-event";
-import { buildOrganizerImportMetadata, buildOrganizerImportSample, findOrganizerListedBoothCodes, prepareOrganizerImport, suggestOrganizerBoothCodeWidth, toOrganizerCsv, type OrganizerImportFieldMapping, type OrganizerImportMapping, type OrganizerImportOverrideField, type OrganizerImportOverrides, type OrganizerRejectedImportRow } from "../organizer-import";
+import { buildOrganizerImportMetadata, buildOrganizerImportSample, findOrganizerListedBoothCodes, isOrganizerImportMappingTooLarge, isValidOrganizerBoothCodeWidth, listUnmatchedImportColumnValues, prepareOrganizerImport, previewOrganizerBoothSplits, suggestOrganizerBoothCodeWidth, toOrganizerCsv, type OrganizerImportFieldMapping, type OrganizerImportMapping, type OrganizerImportOverrideField, type OrganizerImportOverrides, type OrganizerRejectedImportRow } from "../organizer-import";
 import { normalizeOrganizerVenueSourceUrl, type OrganizerVenueCatalogSpace, type OrganizerVenueCatalogVenue, type OrganizerVenueSpaceAreaMode } from "../organizer-venue-catalog";
 import { readOrganizerWorkbook, type OrganizerWorkbookSheet } from "../organizer-workbook";
 import { IDLE, message, organizerVenueSpaceLabel, type Notice } from "./organizer-shared";
@@ -17,7 +17,7 @@ import { RosterDialog } from "./organizer-roster-dialog";
 import { PortalError } from "../circle-editor-client";
 import { VenueLayerGuide } from "./organizer-venue-layers";
 import styles from "./organizer.module.css";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { ActionNotice, useActionFeedback } from "./organizer-feedback";
 
 type MappingChoice = { column: number | null; fixed: string };
@@ -89,6 +89,8 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
   const [boothCodeMode, setBoothCodeMode] = useState<"single" | "delimited" | "fixed-width">("single");
   const [boothCodeWidth, setBoothCodeWidth] = useState("");
   const [stableColumn, setStableColumn] = useState<number | null>(null);
+  const [dayValueMap, setDayValueMap] = useState<Record<string, string>>({});
+  const [spaceValueMap, setSpaceValueMap] = useState<Record<string, string>>({});
   const [previewRequested, setPreviewRequested] = useState(false);
   const [areaGeneration] = useState(detail.event.version);
   const [overrides, setOverrides] = useState<OrganizerImportOverrides>({});
@@ -106,7 +108,14 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
   // A source row is a physical line in a CSV but a filtered index in a
   // worksheet, so another file, sheet or header row changes what every row
   // number means. Corrections keyed by those numbers cannot survive that.
-  const forgetPreview = () => { setPreviewRequested(false); setOverrides({}); setExcluded([]); setPreviewPage(0); };
+  const forgetPreview = () => {
+    setPreviewRequested(false);
+    setOverrides({});
+    setExcluded([]);
+    setPreviewPage(0);
+    setDayValueMap({});
+    setSpaceValueMap({});
+  };
 
   const sourceLabel = organizerSourceLabel(detail.draft.officialSource);
   useEffect(() => {
@@ -141,20 +150,52 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
     ]));
   }, [assignedSpaces]);
   const dayValues = useMemo(() => Object.fromEntries(days.flatMap((item) => [[item.id, item.id], [item.label, item.id]])), [days]);
+  const validDayValueMap = useMemo(() => {
+    const validIds = new Set(days.map((item) => item.id));
+    return Object.fromEntries(Object.entries(dayValueMap).filter(([, target]) => validIds.has(target)));
+  }, [dayValueMap, days]);
+  const validSpaceValueMap = useMemo(() => {
+    const validIds = new Set(assignedSpaces.map((space) => space.id));
+    return Object.fromEntries(Object.entries(spaceValueMap).filter(([, target]) => validIds.has(target)));
+  }, [spaceValueMap, assignedSpaces]);
+  const effectiveDayValues = useMemo(() => ({ ...dayValues, ...validDayValueMap }), [dayValues, validDayValueMap]);
+  const effectiveSpaceValues = useMemo(() => ({ ...venueSpaceValues, ...validSpaceValueMap }), [venueSpaceValues, validSpaceValueMap]);
+  const unmatchedDays = useMemo(() => sheet && day.column !== null
+    ? listUnmatchedImportColumnValues({ rows: sheet.rows, headerRow, column: day.column, knownValues: dayValues })
+    : [], [sheet, headerRow, day.column, dayValues]);
+  const unmatchedSpaces = useMemo(() => sheet && venueSpace.column !== null
+    ? listUnmatchedImportColumnValues({ rows: sheet.rows, headerRow, column: venueSpace.column, knownValues: venueSpaceValues })
+    : [], [sheet, headerRow, venueSpace.column, venueSpaceValues]);
+
+  const fixedWidthText = boothCodeWidth.trim();
+  const parsedBoothCodeWidth = fixedWidthText === "" ? undefined : Number(fixedWidthText);
+  const fixedWidthInvalid = boothCodeMode === "fixed-width" && fixedWidthText !== "" && !isValidOrganizerBoothCodeWidth(parsedBoothCodeWidth);
 
   const mapping = useMemo<OrganizerImportMapping | null>(() => {
     if (boothColumn === null || circleColumn === null) return null;
     const fieldMapping = (choice: MappingChoice, values?: Record<string, string>): OrganizerImportFieldMapping =>
       choice.column === null ? { fixed: choice.fixed } : { column: choice.column, ...(values ? { values } : {}) };
     return {
-      day: fieldMapping(day, day.column === null ? undefined : dayValues),
-      venueSpace: fieldMapping(venueSpace, venueSpace.column === null ? undefined : venueSpaceValues),
+      day: fieldMapping(day, day.column === null ? undefined : effectiveDayValues),
+      venueSpace: fieldMapping(venueSpace, venueSpace.column === null ? undefined : effectiveSpaceValues),
       ...(requiresAreaMapping ? { area: fieldMapping(area) } : {}),
       boothCode: { column: boothColumn }, circleName: { column: circleColumn },
-      boothCodeMode, ...(boothCodeMode === "fixed-width" ? { boothCodeWidth: Number(boothCodeWidth) } : {}),
+      boothCodeMode, ...(boothCodeMode === "fixed-width" && parsedBoothCodeWidth !== undefined ? { boothCodeWidth: parsedBoothCodeWidth } : {}),
       ...(stableColumn === null ? {} : { stableKey: { column: stableColumn } }),
     };
-  }, [day, venueSpace, area, boothColumn, circleColumn, stableColumn, requiresAreaMapping, dayValues, venueSpaceValues, boothCodeMode, boothCodeWidth]);
+  }, [day, venueSpace, area, boothColumn, circleColumn, stableColumn, requiresAreaMapping, effectiveDayValues, effectiveSpaceValues, boothCodeMode, parsedBoothCodeWidth]);
+  const mappingTooLarge = useMemo(() => (mapping ? isOrganizerImportMappingTooLarge(mapping) : false), [mapping]);
+
+  const boothPreview = useMemo(() => sheet && boothColumn !== null
+    ? previewOrganizerBoothSplits({
+      rows: sheet.rows,
+      headerRow,
+      boothColumn,
+      circleColumn,
+      mode: boothCodeMode,
+      width: boothCodeMode === "fixed-width" ? parsedBoothCodeWidth : undefined,
+    })
+    : null, [sheet, headerRow, boothColumn, circleColumn, boothCodeMode, parsedBoothCodeWidth]);
 
   const suggestedWidth = useMemo(() => sheet && boothColumn !== null
     ? suggestOrganizerBoothCodeWidth(sheet.rows.slice(headerRow).map((row) => String(row.cells[boothColumn] ?? ""))) : null,
@@ -240,7 +281,55 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
 
   const dayOptions = days.map((item) => ({ value: item.id, label: `${item.id}・${item.label}` }));
   const spaceOptions = assignedSpaces.map((space) => ({ value: space.id, label: space.label }));
-  const columns = requiresAreaMapping ? 8 : 7;
+  const columns = requiresAreaMapping ? 9 : 8;
+  const chooseDay = (next: MappingChoice) => {
+    if (next.column !== day.column) setDayValueMap({});
+    setDay(next);
+  };
+  const chooseVenueSpace = (next: MappingChoice) => {
+    if (next.column !== venueSpace.column) setSpaceValueMap({});
+    setVenueSpace(next);
+  };
+  const valueMappingBlock = (
+    title: string,
+    fieldLabel: string,
+    unmatched: Array<{ value: string; count: number }>,
+    valueMap: Record<string, string>,
+    setValueMap: Dispatch<SetStateAction<Record<string, string>>>,
+    options: Array<{ value: string; label: string }>,
+    footer?: ReactNode,
+  ) => {
+    if (unmatched.length === 0) return null;
+    const selectedTarget = (key: string) => (Object.hasOwn(valueMap, key) ? valueMap[key] : "");
+    const remaining = unmatched.filter((item) => !selectedTarget(item.value)).length;
+    return <div className={styles.valueMapping}>
+      <div className={styles.valueMappingHead}>
+        <strong>{title}</strong>
+        <span className={remaining > 0 ? styles.fieldError : undefined}>{remaining > 0 ? `${remaining} 個來源值尚未對應` : "已全數對應"}</span>
+      </div>
+      <div className={styles.valueMappingGrid}>
+        {unmatched.map((item) => <label key={item.value} className={styles.valueMappingRow}>
+          <span><strong>{item.value}</strong><small>{item.count} 列</small></span>
+          <select aria-label={`來源${fieldLabel}「${item.value}」對應`} value={selectedTarget(item.value)}
+            onChange={(event) => {
+              const target = event.target.value;
+              setValueMap((current) => {
+                if (!target) {
+                  const next = { ...current };
+                  delete next[item.value];
+                  return next;
+                }
+                return { ...current, [item.value]: target };
+              });
+            }}>
+            <option value="">尚未對應</option>
+            {options.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
+          </select>
+        </label>)}
+      </div>
+      {footer}
+    </div>;
+  };
   /* 移除 exists to break a tie: the contract gives it one use, which is that a
    * duplicated booth can be resolved by taking the other row out. A row with
    * nothing wrong with it has no use for it, and 170 destructive buttons beside
@@ -255,7 +344,7 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
     void onChanged().then(onBack).catch(error => loadFailed(message(error)));
   };
   const submit = async () => {
-    if (!result || !metadata || !mapping || conflict || committed) return;
+    if (!result || !metadata || !mapping || mappingTooLarge || conflict || committed) return;
     const work = async () => {
       try {
         const withAreas = withOrganizerImportedAreaIds(detail.draft, result.rows, result.areaLabels);
@@ -299,8 +388,8 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
     {step === 2 && sheet && <>
       <details className={styles.sample} open><summary>來源資料 · {fileName}</summary><div className={styles.sampleTable}><table><thead><tr>{header.map((name, index) => <th key={index}>{String(name)}</th>)}</tr></thead><tbody>{sheet.rows.slice(headerRow, headerRow + 5).map(row => <tr key={row.sourceRow}>{row.cells.map((cell, index) => <td key={index}>{String(cell ?? "")}</td>)}</tr>)}</tbody></table></div></details>
       <div className={styles.mappingGrid}>
-        {select("活動日", day, setDay, "活動日代碼", dayOptions)}
-        {select("場地", venueSpace, setVenueSpace, "場地", spaceOptions)}
+        {select("活動日", day, chooseDay, "活動日代碼", dayOptions)}
+        {select("場地", venueSpace, chooseVenueSpace, "場地", spaceOptions)}
         {/* The read-only card carries the same title, sub-label and value line
             as the pickers beside it, so the row reads as one row. */}
         {requiresAreaMapping ? <>{select("展區", area, setArea, "展區名稱")}
@@ -316,6 +405,9 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
           <legend>展區</legend>
           <div><div className={styles.subLabel}>固定值<strong>無分區</strong></div></div>
         </fieldset>}
+        {valueMappingBlock("活動日對應", "活動日", unmatchedDays, validDayValueMap, setDayValueMap, dayOptions)}
+        {valueMappingBlock("場地對應", "場地", unmatchedSpaces, validSpaceValueMap, setSpaceValueMap, spaceOptions,
+          <p className={styles.mappingEscape}>選項裡沒有這個場地？<button type="button" className={styles.textButton} onClick={() => onSection("venue")}>前往場館與場地</button></p>)}
         <ColumnSelect label="攤位代碼" value={boothColumn} header={header} required onChange={setBoothColumn} />
         <ColumnSelect label="社團名稱" value={circleColumn} header={header} required onChange={setCircleColumn} />
         <ColumnSelect label="主辦內部編號（選填）" value={stableColumn} header={header} onChange={setStableColumn} />
@@ -333,15 +425,31 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
           <button type="button" className={styles.ghost} onClick={() => { setBoothCodeMode("delimited"); setBoothCodeWidth(""); }}>改用分隔符號分開</button></>}
         {boothCodeMode === "single" && !listedCodes && suggestedWidth !== null && <small role="status">名單可能含合併攤位；例如每 {suggestedWidth} 個字元為一碼。請核對格式再儲存。</small>}
         </label>
-        {boothCodeMode === "fixed-width" && <label>每個代碼的字元數<input type="number" min={1} max={80} value={boothCodeWidth} onChange={(event) => setBoothCodeWidth(event.target.value)} />
+        {boothCodeMode === "fixed-width" && <label>每個代碼的字元數<input type="number" min={1} max={80} aria-invalid={fixedWidthInvalid || undefined} value={boothCodeWidth} onChange={(event) => setBoothCodeWidth(event.target.value)} />
+          {fixedWidthInvalid && <small role="alert" className={styles.fieldError}>請輸入 1–80 的整數。</small>}
           <small>請核對原始名單後填入；不會自動套用。</small>
           {suggestedWidth !== null && <button type="button" className={styles.ghost} onClick={() => setBoothCodeWidth(String(suggestedWidth))}>確認使用建議的 {suggestedWidth} 個字元</button>}
         </label>}
       </div>
+      {boothPreview && boothPreview.rowCount > 0 && <div className={styles.boothPreview}>
+        <strong role="status">拆碼結果：{boothPreview.rowCount} 列 → {boothPreview.boothCount} 攤（{boothPreview.multiRowCount} 列多攤位{boothPreview.invalidRowCount > 0 ? `，${boothPreview.invalidRowCount} 列無法拆分` : ""}）</strong>
+        <div className={styles.sampleTable}><table>
+          <thead><tr><th>來源列</th>{circleColumn !== null && <th>社團</th>}<th>來源內容</th><th>拆出攤位</th><th>當日攤數</th></tr></thead>
+          <tbody>{boothPreview.samples.map((row) => <tr key={row.sourceRow} className={row.codes === null ? styles.issueRow : undefined}>
+            <td>{row.sourceRow}</td>
+            {circleColumn !== null && <td>{row.circleName || "—"}</td>}
+            <td>{row.raw}</td>
+            <td>{row.codes ? row.codes.join("、") : "無法拆分"}</td>
+            <td className={row.count !== null && row.count > 1 ? styles.boothCountMulti : undefined}>{row.count !== null ? `${row.count} 攤` : "—"}</td>
+          </tr>)}</tbody>
+        </table></div>
+      </div>}
+      {mappingTooLarge && <p role="alert" className={styles.issueError}>欄位對應內容過大，請縮短或減少來源檔中的場地／活動日別名。</p>}
 
-      <div className={styles.row}><button type="button" className={styles.secondary} onClick={() => setStep(1)}>上一步</button><button type="button" disabled={!mapping} onClick={() => { setPreviewRequested(true); setPreviewGroup(prepared?.ok && !prepared.rejected.length ? "ready" : "rejected"); setPreviewPage(0); setStep(3); }}>預覽對應結果</button></div>
+      <div className={styles.row}><button type="button" className={styles.secondary} onClick={() => setStep(1)}>上一步</button><button type="button" disabled={!mapping || mappingTooLarge} onClick={() => { setPreviewRequested(true); setPreviewGroup(prepared?.ok && !prepared.rejected.length ? "ready" : "rejected"); setPreviewPage(0); setStep(3); }}>預覽對應結果</button></div>
     </>}
     {step === 3 && <>
+      {mappingTooLarge && <p role="alert" className={styles.issueError}>欄位對應內容過大，請縮短或減少來源檔中的場地／活動日別名。</p>}
       {prepared && !prepared.ok && <p role="alert">{prepared.message}</p>}
       {result && <>
         <div className={styles.validationSummary}><b>{result.rows.length} 筆可匯入 · {result.boothCount} 個攤位代碼</b><span>{result.rejected.length} 筆待修正</span><span>{excluded.length} 筆已排除</span></div>
@@ -349,11 +457,11 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
         {derived.filter(space => !space.declared).map(space => <p role="alert" key={space.venueSpaceId}>請先在「場館與場地」加入 {space.venueSpaceId}，或修正來源欄位。</p>)}
         {result.issues.filter(issue => issue.severity === "warning").slice(0, 10).map(issue => <p key={`${issue.code}-${issue.row}`} role="status">{issue.message}</p>)}
         <div className={styles.previewTabs} role="group" aria-label="預覽資料"><button type="button" aria-pressed={previewGroup === "ready"} onClick={() => { setPreviewGroup("ready"); setPreviewPage(0); }}>可匯入 {result.rows.length}</button><button type="button" aria-pressed={previewGroup === "rejected"} onClick={() => { setPreviewGroup("rejected"); setPreviewPage(0); }}>待修正 {result.rejected.length}</button><button type="button" aria-pressed={previewGroup === "excluded"} onClick={() => { setPreviewGroup("excluded"); setPreviewPage(0); }}>已排除 {excluded.length}</button></div>
-        <div className={`${styles.importPreview} ${styles.previewTable}`}><table><thead><tr><th>來源列</th><th>活動日</th><th>場地</th>{requiresAreaMapping && <th>展區</th>}<th>攤位</th><th>社團</th><th>主辦內部編號</th><th /></tr></thead>
+        <div className={`${styles.importPreview} ${styles.previewTable}`}><table><thead><tr><th>來源列</th><th>活動日</th><th>場地</th>{requiresAreaMapping && <th>展區</th>}<th>攤位</th><th>攤數</th><th>社團</th><th>主辦內部編號</th><th /></tr></thead>
           <tbody>{previewGroup === "rejected" && result.rejected.slice(start, start + 100).map(row => <RejectedImportRow key={row.sourceRow} row={row} columns={columns} dayOptions={dayOptions} spaceOptions={spaceOptions} requiresArea={requiresAreaMapping} areaModeByVenueSpace={areaModeByVenueSpace} overrides={overrides[row.sourceRow]}
             duplicate={result.issues.find(issue => issue.severity === "error" && issue.row === row.sourceRow)?.message ?? null} onCorrect={(field, value) => correct(row.sourceRow, field, value)} onRemove={() => remove(row)} />)}
-          {previewGroup === "ready" && result.rows.slice(start, start + 100).map(row => <tr key={row.sourceRow}><td>{row.sourceRow}</td><td>{days.find(day => day.id === row.dayId)?.label ?? row.dayId}</td><td>{organizerVenueSpaceLabel(catalog, row.venueSpaceId)}</td>{requiresAreaMapping && <td>{areaModeByVenueSpace[row.venueSpaceId] === "none" ? "無分區" : result.areaLabels[row.venueSpaceId]?.[row.areaId] ?? row.areaId}</td>}<td>{row.codes.join("、")}</td><td>{row.circleName}</td><td>{row.stableKey ?? "—"}</td><td>{flagged.has(row.sourceRow) && <button type="button" className={styles.ghost} onClick={() => remove({ ...row, boothCode: row.codes.join("、") })}>排除</button>}</td></tr>)}
-          {previewGroup === "excluded" && excluded.slice(start, start + 100).map(row => <tr key={row.sourceRow}><td>{row.sourceRow}</td><td colSpan={requiresAreaMapping ? 3 : 2} /><td>{row.boothCode}</td><td>{row.circleName}</td><td /><td><button type="button" className={styles.ghost} onClick={() => restore(row.sourceRow)}>恢復</button></td></tr>)}
+          {previewGroup === "ready" && result.rows.slice(start, start + 100).map(row => <tr key={row.sourceRow}><td>{row.sourceRow}</td><td>{days.find(day => day.id === row.dayId)?.label ?? row.dayId}</td><td>{organizerVenueSpaceLabel(catalog, row.venueSpaceId)}</td>{requiresAreaMapping && <td>{areaModeByVenueSpace[row.venueSpaceId] === "none" ? "無分區" : result.areaLabels[row.venueSpaceId]?.[row.areaId] ?? row.areaId}</td>}<td>{row.codes.join("、")}</td><td>{row.codes.length}</td><td>{row.circleName}</td><td>{row.stableKey ?? "—"}</td><td>{flagged.has(row.sourceRow) && <button type="button" className={styles.ghost} onClick={() => remove({ ...row, boothCode: row.codes.join("、") })}>排除</button>}</td></tr>)}
+          {previewGroup === "excluded" && excluded.slice(start, start + 100).map(row => <tr key={row.sourceRow}><td>{row.sourceRow}</td><td colSpan={requiresAreaMapping ? 3 : 2} /><td>{row.boothCode}</td><td /><td>{row.circleName}</td><td /><td><button type="button" className={styles.ghost} onClick={() => restore(row.sourceRow)}>恢復</button></td></tr>)}
           </tbody></table>{count === 0 && <p>沒有{previewGroup === "rejected" ? "待修正" : previewGroup === "excluded" ? "已排除" : "可匯入"}的資料。</p>}</div>
         <div className={styles.rosterTools}><span>第 {currentPage + 1} / {previewPages} 頁</span><button type="button" className={styles.ghost} disabled={currentPage === 0} onClick={() => setPreviewPage(currentPage - 1)}>上一頁</button><button type="button" className={styles.ghost} disabled={currentPage + 1 >= previewPages} onClick={() => setPreviewPage(currentPage + 1)}>下一頁</button>
           {previewGroup === "rejected" && result.rejected.length > 0 && <button type="button" className={styles.textButton} onClick={() => setExcluded(current => [...current, ...result.rejected.map(row => ({ sourceRow: row.sourceRow, boothCode: row.boothCode, circleName: row.circleName }))])}>排除全部待修正資料</button>}
@@ -362,7 +470,7 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
         {detail.import && <p className={styles.issueWarning}>將以 {result.rows.length} 筆取代目前的 {detail.import.rows.length} 筆名單。</p>}
         {uncovered.length > 0 && <p className={styles.issueWarning}>{uncovered.join("、")} 未包含在這份檔案中；匯入後將沒有攤位。</p>}
       </>}
-      <div className={styles.row}><button type="button" className={styles.secondary} onClick={() => setStep(2)}>上一步</button><button type="button" disabled={!result || !metadata || !mapping || result.rows.length === 0 || derivedBlocked || result.rejected.length > 0} onClick={() => void submit()}>{saveFeedback.pending ? "匯入中…" : detail.import ? "取代名單" : "匯入名單"}</button></div>
+      <div className={styles.row}><button type="button" className={styles.secondary} onClick={() => setStep(2)}>上一步</button><button type="button" disabled={!result || !metadata || !mapping || mappingTooLarge || result.rows.length === 0 || derivedBlocked || result.rejected.length > 0} onClick={() => void submit()}>{saveFeedback.pending ? "匯入中…" : detail.import ? "取代名單" : "匯入名單"}</button></div>
     </>}
     </fieldset>
     <ActionNotice notice={saveFeedback.notice} />
@@ -411,6 +519,7 @@ function RejectedImportRow({ row, columns, dayOptions, spaceOptions, requiresAre
       {choice("venueSpaceId", row.venueSpaceId, "場地", spaceOptions)}
       {requiresArea && (areaModeByVenueSpace[row.venueSpaceId] === "none" ? <td>無分區</td> : cell("areaId", row.areaId, "展區"))}
       {cell("boothCode", row.boothCode, "攤位代碼")}
+      <td>—</td>
       {cell("circleName", row.circleName, "社團名稱")}
       <td>{row.stableKey ?? "—"}</td>
       <td className={styles.rowAction}><button type="button" className={styles.ghost} onClick={onRemove}>排除</button></td>

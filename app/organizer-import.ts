@@ -53,6 +53,159 @@ function compact(value: unknown) {
 /** What the delimited format splits a booth cell on. */
 const BOOTH_CODE_SEPARATORS = /[\s,，、;；/]+/u;
 
+/** Matches `server/organizer-content.ts` JSON byte limit on `source.mapping`. */
+export const ORGANIZER_IMPORT_MAPPING_MAX_BYTES = 100_000;
+
+export function organizerImportMappingBytes(mapping: OrganizerImportMapping): number {
+  try {
+    return new TextEncoder().encode(JSON.stringify(mapping)).byteLength;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+export function isOrganizerImportMappingTooLarge(mapping: OrganizerImportMapping): boolean {
+  return organizerImportMappingBytes(mapping) > ORGANIZER_IMPORT_MAPPING_MAX_BYTES;
+}
+
+export function isValidOrganizerBoothCodeWidth(width: unknown): width is number {
+  return typeof width === "number" && Number.isSafeInteger(width) && width >= 1 && width <= 80;
+}
+
+const ownValue = (record: Readonly<Record<string, string>>, key: string) =>
+  Object.hasOwn(record, key) ? record[key] : "";
+
+export function splitOrganizerBoothCode(
+  boothCode: string,
+  mode: "single" | "delimited" | "fixed-width",
+  width?: number,
+): string[] | null {
+  const trimmed = compact(boothCode);
+  if (!trimmed) return [];
+  let codes: string[];
+  if (mode === "delimited") {
+    codes = trimmed.split(BOOTH_CODE_SEPARATORS).filter(Boolean);
+  } else if (mode === "fixed-width") {
+    if (!isValidOrganizerBoothCodeWidth(width)) return null;
+    const characters = [...trimmed];
+    if (characters.length % width !== 0 || BOOTH_CODE_SEPARATORS.test(trimmed)) return null;
+    codes = Array.from({ length: characters.length / width }, (_, index) =>
+      characters.slice(index * width, (index + 1) * width).join(""));
+  } else {
+    codes = [trimmed];
+  }
+  if (!codes.length || codes.some((code) => code.length > 80)) return null;
+  return codes;
+}
+
+/** Unique non-empty column values that do not yet match any declared option. */
+export function listUnmatchedImportColumnValues(input: {
+  rows: readonly OrganizerImportTableRow[];
+  headerRow: number;
+  column: number;
+  knownValues: Readonly<Record<string, string>>;
+}): Array<{ value: string; count: number }> {
+  if (!Number.isSafeInteger(input.headerRow) || input.headerRow < 1 || input.headerRow >= input.rows.length
+    || !Number.isSafeInteger(input.column) || input.column < 0) {
+    return [];
+  }
+  const counts = new Map<string, number>();
+  for (const row of input.rows.slice(input.headerRow)) {
+    const value = compact(row.cells[input.column]);
+    if (!value || compact(ownValue(input.knownValues, value))) continue;
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value, "zh-Hant"));
+}
+
+export type OrganizerBoothSplitSample = {
+  sourceRow: number;
+  circleName: string;
+  raw: string;
+  codes: string[] | null;
+  count: number | null;
+};
+
+export type OrganizerBoothSplitPreview = {
+  rowCount: number;
+  boothCount: number;
+  multiRowCount: number;
+  invalidRowCount: number;
+  samples: OrganizerBoothSplitSample[];
+};
+
+export function previewOrganizerBoothSplits(input: {
+  rows: readonly OrganizerImportTableRow[];
+  headerRow: number;
+  boothColumn: number;
+  circleColumn: number | null;
+  mode: "single" | "delimited" | "fixed-width";
+  width?: number;
+  limit?: number;
+}): OrganizerBoothSplitPreview | null {
+  if (!Number.isSafeInteger(input.headerRow) || input.headerRow < 1 || input.headerRow >= input.rows.length
+    || !Number.isSafeInteger(input.boothColumn) || input.boothColumn < 0) {
+    return { rowCount: 0, boothCount: 0, multiRowCount: 0, invalidRowCount: 0, samples: [] };
+  }
+  if (input.mode === "fixed-width" && !isValidOrganizerBoothCodeWidth(input.width)) {
+    return null;
+  }
+  const circleColumn = input.circleColumn !== null && Number.isSafeInteger(input.circleColumn) && input.circleColumn >= 0
+    ? input.circleColumn : null;
+  const nonEmpty: Array<{ sourceRow: number; circleName: string; raw: string }> = [];
+  for (const row of input.rows.slice(input.headerRow)) {
+    const raw = compact(row.cells[input.boothColumn]);
+    if (!raw) continue;
+    const circleName = circleColumn !== null ? compact(row.cells[circleColumn]) : "";
+    nonEmpty.push({ sourceRow: row.sourceRow, circleName, raw });
+  }
+  const suggestedWidth = input.mode === "single"
+    ? suggestOrganizerBoothCodeWidth(nonEmpty.map((item) => item.raw))
+    : null;
+  let boothCount = 0;
+  let multiRowCount = 0;
+  let invalidRowCount = 0;
+  const evaluated: Array<OrganizerBoothSplitSample & { interesting: boolean }> = nonEmpty.map((item) => {
+    const codes = splitOrganizerBoothCode(item.raw, input.mode, input.width);
+    if (codes === null) invalidRowCount += 1;
+    else {
+      boothCount += codes.length;
+      if (codes.length > 1) multiRowCount += 1;
+    }
+    const looksCombined = input.mode === "single" && (
+      findOrganizerListedBoothCodes([item.raw]) !== null
+      || (suggestedWidth !== null && [...item.raw].length > suggestedWidth && [...item.raw].length % suggestedWidth === 0)
+    );
+    return {
+      ...item,
+      codes,
+      count: codes ? codes.length : null,
+      interesting: (codes !== null && codes.length > 1) || looksCombined,
+    };
+  });
+  const limit = input.limit ?? 6;
+  const selected = new Set<number>();
+  const pick = (items: typeof evaluated, max: number) => {
+    let added = 0;
+    for (const item of items) {
+      if (selected.size >= limit || added >= max) break;
+      if (selected.has(item.sourceRow)) continue;
+      selected.add(item.sourceRow);
+      added += 1;
+    }
+  };
+  pick(evaluated.filter((item) => item.codes === null), 2);
+  pick(evaluated.filter((item) => item.interesting), 3);
+  pick(evaluated, limit);
+  const samples = evaluated
+    .filter((item) => selected.has(item.sourceRow))
+    .map(({ sourceRow, circleName, raw, codes, count }) => ({ sourceRow, circleName, raw, codes, count }))
+    .sort((a, b) => a.sourceRow - b.sourceRow);
+  return { rowCount: nonEmpty.length, boothCount, multiRowCount, invalidRowCount, samples };
+}
+
 /** Suggest only: choosing a width is an explicit organizer decision. */
 export function suggestOrganizerBoothCodeWidth(values: readonly string[]): number | null {
   const lengths = values.map((value) => [...compact(value)].length).filter((length) => length > 0);
@@ -137,7 +290,7 @@ function mapped(row: OrganizerImportTableRow, mapping: OrganizerImportFieldMappi
   if ("fixed" in mapping) return compact(mapping.fixed);
   if (!Number.isSafeInteger(mapping.column) || mapping.column < 0) return "";
   const value = compact(row.cells[mapping.column]);
-  return mapping.values ? compact(mapping.values[value]) : value;
+  return mapping.values ? compact(ownValue(mapping.values, value)) : value;
 }
 
 export function prepareOrganizerImport(input: {
@@ -162,7 +315,7 @@ export function prepareOrganizerImport(input: {
   const mode = input.mapping.boothCodeMode ?? "single";
   const width = input.mapping.boothCodeWidth;
   if (!["single", "delimited", "fixed-width"].includes(mode)) throw new Error("請選擇攤位代碼格式。");
-  if (mode === "fixed-width" && (!Number.isSafeInteger(width) || width! < 1 || width! > 80)) {
+  if (mode === "fixed-width" && !isValidOrganizerBoothCodeWidth(width)) {
     throw new Error("請確認每個攤位代碼的字元數（1–80）。");
   }
   const suggestedWidth = suggestOrganizerBoothCodeWidth(input.rows.slice(input.headerRow)
@@ -220,13 +373,8 @@ export function prepareOrganizerImport(input: {
       continue;
     }
 
-    const characters = [...boothCode];
-    const boothCodes = mode === "delimited"
-      ? boothCode.split(BOOTH_CODE_SEPARATORS).filter(Boolean)
-      : mode === "fixed-width"
-        ? Array.from({ length: Math.ceil(characters.length / width!) }, (_, index) => characters.slice(index * width!, (index + 1) * width!).join(""))
-        : [boothCode];
-    if (!boothCodes.length || boothCodes.some((code) => code.length > 80) || (mode === "fixed-width" && (characters.length % width! !== 0 || /[\s,，、;；/]/u.test(boothCode)))) {
+    const boothCodes = splitOrganizerBoothCode(boothCode, mode, width);
+    if (!boothCodes) {
       issues.push({ severity: "error", step: "import", code: "invalid_booth_width", row: source.sourceRow,
         message: `來源列 ${source.sourceRow} 的攤位代碼無法依目前格式拆分，請確認字元數與內容。` });
       rejected.push({ sourceRow: source.sourceRow, dayId, venueSpaceId, areaId, boothCode, circleName, stableKey, codes: ["invalid_booth_width"] });

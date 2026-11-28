@@ -526,3 +526,166 @@ test("a real area column is left alone", () => {
   });
   assert.equal(real.issues.some(({ code }) => code === "area_looks_like_booth_row"), false);
 });
+
+test("listUnmatchedImportColumnValues aggregates and orders values missing from declared mappings", () => {
+  const unmatched = imports.listUnmatchedImportColumnValues({
+    rows: [
+      { sourceRow: 1, cells: ["活動日", "場地", "攤位代碼", "社團名稱"] },
+      { sourceRow: 2, cells: ["1", "P3", "A01,A02", "甲社"] },
+      { sourceRow: 3, cells: ["1", "P3 ", "A03", "乙社"] },
+      { sourceRow: 4, cells: ["1", "P2", "B01", "丙社"] },
+      { sourceRow: 5, cells: ["1", "Ｂ４", "C01", "丁社"] },
+      { sourceRow: 6, cells: ["2", "自行車倉庫", "D01", "戊社"] },
+      { sourceRow: 7, cells: ["2", "已存在場地", "E01", "己社"] },
+      { sourceRow: 8, cells: ["2", "  ", "F01", "庚社"] },
+    ],
+    headerRow: 1,
+    column: 1,
+    knownValues: { 已存在場地: "space-known" },
+  });
+  assert.deepEqual(unmatched, [
+    { value: "P3", count: 2 },
+    { value: "自行車倉庫", count: 1 },
+    { value: "B4", count: 1 },
+    { value: "P2", count: 1 },
+  ]);
+
+  const prepared = imports.prepareOrganizerImport({
+    rows: [
+      { sourceRow: 1, cells: ["活動日", "場地", "攤位代碼", "社團名稱"] },
+      { sourceRow: 2, cells: ["1", "P3", "A01,A02", "甲社"] },
+      { sourceRow: 3, cells: ["2", "自行車倉庫", "D01", "戊社"] },
+    ],
+    headerRow: 1,
+    mapping: {
+      day: { column: 0, values: { 1: "1", 2: "2" } },
+      venueSpace: { column: 1, values: { P3: "space-p3", 自行車倉庫: "space-bike" } },
+      boothCode: { column: 2 },
+      circleName: { column: 3 },
+      boothCodeMode: "delimited",
+    },
+    areaModeByVenueSpace: { "space-p3": "none", "space-bike": "none" },
+  });
+  assert.deepEqual(prepared.issues, []);
+  assert.equal(prepared.rows[0].venueSpaceId, "space-p3");
+  assert.deepEqual(prepared.rows[0].codes, ["A01", "A02"]);
+  assert.equal(prepared.rows[1].venueSpaceId, "space-bike");
+});
+
+test("previewOrganizerBoothSplits surfaces single vs delimited vs fixed-width booth counts", () => {
+  const rows = [
+    { sourceRow: 1, cells: ["攤位", "社團"] },
+    { sourceRow: 2, cells: ["A01", "單攤社團"] },
+    { sourceRow: 3, cells: ["A02,A03", "逗號雙攤"] },
+    { sourceRow: 4, cells: ["B01B02", "連寫雙攤"] },
+    { sourceRow: 5, cells: ["C01", "另一單攤"] },
+  ];
+  const singleDelim = imports.previewOrganizerBoothSplits({
+    rows, headerRow: 1, boothColumn: 0, circleColumn: 1, mode: "single",
+  });
+  assert.equal(singleDelim.rowCount, 4);
+  assert.equal(singleDelim.boothCount, 4);
+  assert.equal(singleDelim.multiRowCount, 0);
+  assert.equal(singleDelim.invalidRowCount, 0);
+  assert.ok(singleDelim.samples.some((sample) => sample.sourceRow === 3 && sample.count === 1));
+  assert.ok(singleDelim.samples.some((sample) => sample.sourceRow === 4 && sample.count === 1));
+
+  const delimited = imports.previewOrganizerBoothSplits({
+    rows, headerRow: 1, boothColumn: 0, circleColumn: 1, mode: "delimited",
+  });
+  assert.equal(delimited.boothCount, 5);
+  assert.equal(delimited.multiRowCount, 1);
+  assert.deepEqual(delimited.samples.find((sample) => sample.sourceRow === 3), {
+    sourceRow: 3, circleName: "逗號雙攤", raw: "A02,A03", codes: ["A02", "A03"], count: 2,
+  });
+
+  const fixed = imports.previewOrganizerBoothSplits({
+    rows: [
+      { sourceRow: 1, cells: ["攤位", "社團"] },
+      { sourceRow: 2, cells: ["A01", "單攤"] },
+      { sourceRow: 3, cells: ["B01B02", "連寫雙攤"] },
+      { sourceRow: 4, cells: ["C01C0", "無法整除"] },
+    ],
+    headerRow: 1, boothColumn: 0, circleColumn: 1, mode: "fixed-width", width: 3,
+  });
+  assert.equal(fixed.rowCount, 3);
+  assert.equal(fixed.boothCount, 3);
+  assert.equal(fixed.multiRowCount, 1);
+  assert.equal(fixed.invalidRowCount, 1);
+  assert.deepEqual(fixed.samples.find((sample) => sample.sourceRow === 3), {
+    sourceRow: 3, circleName: "連寫雙攤", raw: "B01B02", codes: ["B01", "B02"], count: 2,
+  });
+  assert.deepEqual(fixed.samples.find((sample) => sample.sourceRow === 4), {
+    sourceRow: 4, circleName: "無法整除", raw: "C01C0", codes: null, count: null,
+  });
+
+  for (const badWidth of [undefined, 0, -3, 2.5, 81]) {
+    assert.equal(imports.previewOrganizerBoothSplits({
+      rows: [{ sourceRow: 1, cells: ["攤位", "社團"] }, { sourceRow: 2, cells: ["B01B02", "社團"] }],
+      headerRow: 1, boothColumn: 0, circleColumn: 1, mode: "fixed-width", width: badWidth,
+    }), null);
+  }
+});
+
+test("value lookup ignores Object.prototype keys like constructor and toString", () => {
+  const rows = [
+    { sourceRow: 1, cells: ["活動日", "場地", "攤位代碼", "社團名稱"] },
+    { sourceRow: 2, cells: ["constructor", "toString", "A01", "甲社"] },
+  ];
+  assert.deepEqual(imports.listUnmatchedImportColumnValues({
+    rows, headerRow: 1, column: 0, knownValues: { 1: "1" },
+  }), [{ value: "constructor", count: 1 }]);
+
+  const unmapped = imports.prepareOrganizerImport({
+    rows, headerRow: 1,
+    mapping: {
+      day: { column: 0, values: { 1: "1" } },
+      venueSpace: { column: 1, values: { hall: "hall-a" } },
+      area: { fixed: "A" },
+      boothCode: { column: 2 },
+      circleName: { column: 3 },
+    },
+    areaModeByVenueSpace: { "hall-a": "none" },
+  });
+  assert.equal(unmapped.rows.length, 0);
+  assert.deepEqual(unmapped.rejected[0].codes, ["missing_day", "missing_venue_space"]);
+
+  const mapped = imports.prepareOrganizerImport({
+    rows, headerRow: 1,
+    mapping: {
+      day: { column: 0, values: { 1: "1", constructor: "1" } },
+      venueSpace: { column: 1, values: { hall: "hall-a", toString: "hall-a" } },
+      area: { fixed: "A" },
+      boothCode: { column: 2 },
+      circleName: { column: 3 },
+    },
+    areaModeByVenueSpace: { "hall-a": "none" },
+  });
+  assert.deepEqual(mapped.issues, []);
+  assert.equal(mapped.rows[0].dayId, "1");
+  assert.equal(mapped.rows[0].venueSpaceId, "hall-a");
+});
+
+test("mapping size check matches the 100,000-byte server boundary", () => {
+  const baseMapping = {
+    day: { column: 0, values: {} },
+    venueSpace: { column: 1, values: {} },
+    boothCode: { column: 2 },
+    circleName: { column: 3 },
+    boothCodeMode: "single",
+  };
+  const emptyBytes = imports.organizerImportMappingBytes(baseMapping);
+  const sample = {
+    ...baseMapping,
+    venueSpace: { column: 1, values: { x: "s" } },
+  };
+  const overhead = imports.organizerImportMappingBytes(sample) - emptyBytes - 1;
+  const exactKey = "a".repeat(imports.ORGANIZER_IMPORT_MAPPING_MAX_BYTES - emptyBytes - overhead);
+  const atLimit = { ...baseMapping, venueSpace: { column: 1, values: { [exactKey]: "s" } } };
+  assert.equal(imports.organizerImportMappingBytes(atLimit), 100_000);
+  assert.equal(imports.isOrganizerImportMappingTooLarge(atLimit), false);
+
+  const overLimit = { ...baseMapping, venueSpace: { column: 1, values: { [`${exactKey}b`]: "s" } } };
+  assert.equal(imports.organizerImportMappingBytes(overLimit), 100_001);
+  assert.equal(imports.isOrganizerImportMappingTooLarge(overLimit), true);
+});
