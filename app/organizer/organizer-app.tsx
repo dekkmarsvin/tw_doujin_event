@@ -519,9 +519,13 @@ function OrganizerWorkspace({ session, eventSlot, onEvent }: { onEvent: (event: 
       {pendingNavigation && <div className={styles.dialogBackdrop}>
         <section ref={navigationDialog} className={styles.navigationDialog} role="dialog" aria-modal="true" aria-labelledby="unsaved-title" aria-describedby="unsaved-description" tabIndex={-1}>
           <h3 id="unsaved-title">尚有未儲存變更</h3>
-          <p id="unsaved-description">要先儲存目前的修改，再{pendingNavigation.description}嗎？</p>
+          {/* Only an unfinished import offers no save here: it is written by its
+              own final step, so a save button would always be refused. */}
+          <p id="unsaved-description">{draftSave.current
+            ? `要先儲存目前的修改，再${pendingNavigation.description}嗎？`
+            : "名單還沒匯入。要保留，請按「取消」回到第 3 步按「匯入名單」；不需要就按「放棄」。"}</p>
           <div className={styles.dialogActions}>
-            <button type="button" disabled={navigationSaving} onClick={() => { void saveAndNavigate(); }}>{navigationSaving ? "儲存中…" : "儲存並切換"}</button>
+            {draftSave.current && <button type="button" disabled={navigationSaving} onClick={() => { void saveAndNavigate(); }}>{navigationSaving ? "儲存中…" : "儲存並切換"}</button>}
             <button type="button" className={styles.secondary} disabled={navigationSaving} onClick={() => finishNavigation(pendingNavigation)}>放棄</button>
             <button type="button" className={styles.ghost} disabled={navigationSaving} onClick={() => setPendingNavigation(null)}>取消</button>
           </div>
