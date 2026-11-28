@@ -184,13 +184,19 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
     [venueSpaceValues, spaceSuggestions, validSpaceValueMap]);
   /* A configured space no source value points at gets no booths, and that
    * blocks submission. Said once every value has a target: while some are
-   * still open, the space may simply be the one they are about to pick. */
+   * still open, the space may simply be the one they are about to pick. A row
+   * moved to a space in step 3 gives that space booths too, so it counts. */
   const spacesWithoutValues = useMemo(() => {
     if (venueSpace.column === null) return [];
     const targets = spaceColumnValues.map((item) => (Object.hasOwn(validSpaceValueMap, item.value) ? validSpaceValueMap[item.value] : item.autoTarget));
     if (targets.some((target) => !target)) return [];
-    return assignedSpaces.filter((space) => !targets.includes(space.id));
-  }, [venueSpace.column, spaceColumnValues, validSpaceValueMap, assignedSpaces]);
+    const removed = new Set(excluded.map((row) => row.sourceRow));
+    const corrected = Object.entries(overrides)
+      .filter(([sourceRow]) => !removed.has(Number(sourceRow)))
+      .flatMap(([, fields]) => (fields?.venueSpaceId ? [fields.venueSpaceId] : []));
+    const covered = new Set([...targets, ...corrected]);
+    return assignedSpaces.filter((space) => !covered.has(space.id));
+  }, [venueSpace.column, spaceColumnValues, validSpaceValueMap, assignedSpaces, overrides, excluded]);
 
   const areaColumnOutOfRange = requiresAreaMapping && area.mode === "column"
     && (area.column === null || area.column < 0 || area.column >= header.length);
